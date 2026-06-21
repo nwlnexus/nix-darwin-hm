@@ -7,6 +7,8 @@
 
 {
   config = lib.mkIf config.d.profiles.dev.enable {
+    d.apps.claudeMem.enable = true;
+
     environment.systemPackages = with pkgs; [
       github-cli
       lazygit

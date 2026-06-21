@@ -1,3 +1,6 @@
 {
-  imports = [ ./1password.nix ];
+  imports = [
+    ./1password.nix
+    ./claude-mem.nix
+  ];
 }
