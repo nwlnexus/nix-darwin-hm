@@ -48,42 +48,45 @@ in {
     # Skips gracefully if the API key file hasn't been written yet by op-secrets
     # (will apply on next `darwin-rebuild switch`).
     home.activation.claudeMemServerBeta = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      SETTINGS="${homeDir}/.claude-mem/settings.json"
-      API_KEY_FILE="${cfg.apiKeyFile}"
+      _claudeMemPatch() {
+        SETTINGS="${homeDir}/.claude-mem/settings.json"
+        API_KEY_FILE="${cfg.apiKeyFile}"
 
-      if [ ! -f "$API_KEY_FILE" ]; then
-        echo "claude-mem: API key not yet present at $API_KEY_FILE — skipping patch (run darwin-rebuild switch again after op-secrets writes the key)"
-        exit 0
-      fi
+        if [ ! -f "$API_KEY_FILE" ]; then
+          echo "claude-mem: API key not yet present at $API_KEY_FILE — skipping patch (run darwin-rebuild switch again after op-secrets writes the key)"
+          return 0
+        fi
 
-      API_KEY=$(cat "$API_KEY_FILE")
+        API_KEY=$(cat "$API_KEY_FILE")
 
-      if [ -z "$API_KEY" ]; then
-        echo "claude-mem: API key file is empty — skipping patch"
-        exit 0
-      fi
+        if [ -z "$API_KEY" ]; then
+          echo "claude-mem: API key file is empty — skipping patch"
+          return 0
+        fi
 
-      if [ ! -f "$SETTINGS" ]; then
-        mkdir -p "$(dirname "$SETTINGS")"
-        printf '{}' > "$SETTINGS"
-      fi
+        if [ ! -f "$SETTINGS" ]; then
+          mkdir -p "$(dirname "$SETTINGS")"
+          printf '{}' > "$SETTINGS"
+        fi
 
-      PATCHED=$(${pkgs.jq}/bin/jq \
-        --arg url "${cfg.serverUrl}" \
-        --arg key "$API_KEY" \
-        --arg project "${cfg.projectId}" \
-        '. + {
-          "CLAUDE_MEM_RUNTIME": "server-beta",
-          "CLAUDE_MEM_SERVER_BETA_URL": $url,
-          "CLAUDE_MEM_SERVER_BETA_API_KEY": $key,
-          "CLAUDE_MEM_SERVER_BETA_PROJECT_ID": $project
-        }' "$SETTINGS")
+        PATCHED=$(${pkgs.jq}/bin/jq \
+          --arg url "${cfg.serverUrl}" \
+          --arg key "$API_KEY" \
+          --arg project "${cfg.projectId}" \
+          '. + {
+            "CLAUDE_MEM_RUNTIME": "server-beta",
+            "CLAUDE_MEM_SERVER_BETA_URL": $url,
+            "CLAUDE_MEM_SERVER_BETA_API_KEY": $key,
+            "CLAUDE_MEM_SERVER_BETA_PROJECT_ID": $project
+          }' "$SETTINGS")
 
-      CURRENT=$(cat "$SETTINGS")
-      if [ "$PATCHED" != "$CURRENT" ]; then
-        printf '%s' "$PATCHED" > "$SETTINGS"
-        echo "claude-mem: patched settings.json with server-beta configuration"
-      fi
+        CURRENT=$(cat "$SETTINGS")
+        if [ "$PATCHED" != "$CURRENT" ]; then
+          printf '%s' "$PATCHED" > "$SETTINGS"
+          echo "claude-mem: patched settings.json with server-beta configuration"
+        fi
+      }
+      _claudeMemPatch
     '';
   };
 }
