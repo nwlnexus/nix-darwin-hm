@@ -67,6 +67,7 @@ in {
         if [ ! -f "$SETTINGS" ]; then
           mkdir -p "$(dirname "$SETTINGS")"
           printf '{}' > "$SETTINGS"
+          chmod 0600 "$SETTINGS"
         fi
 
         PATCHED=$(${pkgs.jq}/bin/jq \
@@ -83,6 +84,7 @@ in {
         CURRENT=$(cat "$SETTINGS")
         if [ "$PATCHED" != "$CURRENT" ]; then
           printf '%s' "$PATCHED" > "$SETTINGS"
+          chmod 0600 "$SETTINGS"
           echo "claude-mem: patched settings.json with server-beta configuration"
         fi
       }
