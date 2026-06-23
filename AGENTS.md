@@ -6,7 +6,7 @@ This provides guidance to AI assistants when working with this nix-darwin + Home
 
 ## Quick Reference
 
-**Primary user:** `nwilliams-lucas` | **Version:** `25.05` | **Theme:** `catppuccin`
+**Primary user:** `nwilliams-lucas` | **Version:** `26.05` | **Theme:** `catppuccin`
 
 ### Essential Commands
 
@@ -138,7 +138,7 @@ To add a new host configuration:
 # hosts/nixos/new-server.nix
 {
   # Set the state version for NixOS
-  system.stateVersion = "25.05";
+  system.stateVersion = "26.05";
 
   # Host-specific configuration
   networking.hostName = "new-server";
@@ -178,7 +178,7 @@ For in-depth architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
 **Key technical points:**
 
 - Uses `flake-utils-plus.mkFlake` for declarative host generation
-- Supports stable (25.05) and unstable nixpkgs channels
+- Supports stable (26.05) and unstable nixpkgs channels
 - Includes overlays for VSCode extensions and Rust toolchain
 - Custom CA certificates from `files/certs/` for corporate environments
 - PATH includes `~/.local/bin` for custom scripts (via Home Manager)
