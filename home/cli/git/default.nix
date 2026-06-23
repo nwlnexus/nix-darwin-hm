@@ -71,7 +71,7 @@ in
     git = {
       enable = true;
 
-      aliases = {
+      settings.alias = {
         g = "!git log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative";
         l = "!f() { git log $* | grep '^commit ' | cut -f 2 -d ' '; }; f";
         r = "!git ls-files -z --deleted | xargs -0 git rm";
@@ -97,8 +97,8 @@ in
         unstage = "reset HEAD --";
       };
 
-      userName = "Nigel Williams-Lucas";
-      userEmail = "4689066+nwlucas@users.noreply.github.com";
+      settings.user.name = "Nigel Williams-Lucas";
+      settings.user.email = "4689066+nwlucas@users.noreply.github.com";
       ignores = [ ".DS_Store" ];
 
       #Signing is done via the 1Password app
@@ -131,31 +131,27 @@ in
           ]
         );
 
-      extraConfig = {
-        init.defaultBranch = "main";
+      settings.init.defaultBranch = "main";
 
-        gpg = {
-          format = "ssh";
-          ssh.program = "/Applications/1Password.app/Contents/MacOS/op-ssh-sign";
-        };
-
-        log = {
-          decorate = true;
-          abbrevCommit = true;
-        };
-
-        pull.rebase = false;
-
-        # Autostash on "git pull ..."
-        merge.autoStash = true;
-        rebase.autoStash = true;
-
-        push.autoSetupRemote = true;
-
-        # http = {
-        #   sslCAInfo = "~/Cloudflare_CA.pem";
-        # };
+      settings.gpg = {
+        format = "ssh";
+        ssh.program = "/Applications/1Password.app/Contents/MacOS/op-ssh-sign";
       };
+
+      settings.log = {
+        decorate = true;
+        abbrevCommit = true;
+      };
+
+      settings.pull.rebase = false;
+
+      # Autostash on "git pull ..."
+      settings.merge.autoStash = true;
+      settings.rebase.autoStash = true;
+
+      settings.push.autoSetupRemote = true;
+
+      # settings.http.sslCAInfo = "~/Cloudflare_CA.pem";
     };
   };
 }
