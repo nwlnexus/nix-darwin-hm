@@ -48,10 +48,15 @@
       casks = [
         "temurin@20"
       ];
-      taps = [
-        "derailed/k9s"
-        "Azure/kubelogin"
-      ];
+
+      # Trust non-official taps for Homebrew 6.0 (see base.nix for rationale).
+      # `fluxcd/tap` is auto-tapped by the qualified `fluxcd/tap/flux` brew, but
+      # still needs to be trusted to avoid the "not trusted" warning/skip.
+      extraConfig = ''
+        tap "derailed/k9s", trusted: true
+        tap "Azure/kubelogin", trusted: true
+        tap "fluxcd/tap", trusted: true
+      '';
     };
   };
 }
