@@ -11,7 +11,8 @@ with lib;
 let
   cfg = config.d.apps.claudeMem;
   homeDir = config.home.homeDirectory;
-in {
+in
+{
   options.d.apps.claudeMem = {
     enable = mkEnableOption "claude-mem server-beta client configuration";
 

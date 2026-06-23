@@ -38,8 +38,7 @@ in
 
 lib.mkIf pkgs.stdenv.isDarwin {
   # iTerm2 watches this directory and loads any JSON profiles it finds.
-  home.file."Library/Application Support/iTerm2/DynamicProfiles/nix-tmux.json".text =
-    dynamicProfiles;
+  home.file."Library/Application Support/iTerm2/DynamicProfiles/nix-tmux.json".text = dynamicProfiles;
 
   # Register iTerm2 as the default terminal handler. macOS has no single
   # "default terminal" setting, so we use `duti` (installed via Homebrew in

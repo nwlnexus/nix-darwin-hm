@@ -7,7 +7,12 @@
 
 {
   config = lib.mkIf config.d.profiles.dev.enable {
-    d.apps.claudeMem.enable = true;
+    # claudeMem is a home-manager option (declared in home/apps/claude-mem.nix),
+    # so it must be set inside the home-manager scope via d.hm, not at the
+    # nix-darwin system level.
+    d.hm = [
+      { d.apps.claudeMem.enable = true; }
+    ];
 
     environment.systemPackages = with pkgs; [
       github-cli
