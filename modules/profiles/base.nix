@@ -20,7 +20,7 @@
         httpie
         killall
         lsof
-        neofetch
+        fastfetch
         ripgrep
         unzip
         bat
