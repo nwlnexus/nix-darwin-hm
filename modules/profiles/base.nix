@@ -41,7 +41,7 @@
         age
         ssh-to-age
         tree
-        nixfmt-rfc-style
+        nixfmt
         gnupg
       ]
       ++ builtins.filter lib.attrsets.isDerivation (builtins.attrValues pkgs.nerd-fonts);

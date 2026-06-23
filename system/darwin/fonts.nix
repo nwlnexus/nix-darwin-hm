@@ -6,7 +6,7 @@
     packages =
       with pkgs;
       [
-        vistafonts
+        vista-fonts
         corefonts
       ]
       ++ builtins.filter lib.attrsets.isDerivation (builtins.attrValues pkgs.nerd-fonts);

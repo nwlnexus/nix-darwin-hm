@@ -164,7 +164,7 @@
           projectRootFile = "flake.nix";
           programs.nixfmt = {
             enable = true;
-            package = channels.nixpkgs-stable.nixfmt-rfc-style;
+            package = channels.nixpkgs-stable.nixfmt;
           };
         };
       };
