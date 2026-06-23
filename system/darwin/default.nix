@@ -8,6 +8,7 @@ in
     # ./yabai
     ./general.nix
     ./dock.nix
+    ./iterm2.nix
     ./finder.nix
     ./keyboard.nix
     ./login.nix

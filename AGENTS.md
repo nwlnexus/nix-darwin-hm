@@ -32,7 +32,7 @@ just                                   # List available tasks
 - **NixOS:** Linux distribution for declarative system configuration
 - **nix-darwin:** Declarative macOS system configuration
 - **home-manager:** User-specific dotfiles, packages, and services
-- **Languages:** Primarily Nix, with Lua for WezTerm configuration
+- **Languages:** Primarily Nix
 
 ### Directory Structure
 
@@ -48,7 +48,7 @@ just                                   # List available tasks
 │   └── nixos/           # NixOS: boot, users, hardware
 ├── home/                # Home Manager user configs
 │   ├── cli/             # CLI tools: git, starship, bat, etc.
-│   └── apps/            # Applications: wezterm, 1password
+│   └── apps/            # Applications: iterm2, 1password
 ├── modules/             # Shared Nix modules
 │   └── profiles/        # Profile modules (base, dev, gui-full, etc.)
 └── users/               # User configuration schema
@@ -149,6 +149,13 @@ To add a new host configuration:
 - **NixOS:** `system/nixos/`
 - **Cross-platform:** `system/default.nix`
 - **User environment:** `home/`
+
+### Terminal & tmux
+
+- **tmux** is managed by home-manager (`home/cli/tmux.nix`, `programs.tmux`) on all hosts — not Homebrew. It carries the Claude Code integration settings (`allow-passthrough`, `extended-keys` + `xterm*:extkeys`, `focus-events`).
+- **iTerm2** is the default terminal on all macOS hosts (`system/darwin/iterm2.nix` installs the cask + sets it as default handler via `duti`).
+- The default iTerm2 profile is a **Dynamic Profile** (`home/apps/iterm2/`) that auto-launches `tmux -CC` (control mode). The gateway window is hidden via `AutoHideTmuxClientSession`. The profile is made default by matching `Default Bookmark Guid` (system) to the profile `Guid` (home) — keep these two in sync.
+- To refresh the profile template from a host's live settings: `just export-iterm-profile`, then commit `home/apps/iterm2/profile.json`.
 
 ### Updating Dependencies
 

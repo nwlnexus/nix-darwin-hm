@@ -15,7 +15,7 @@ This is a pure Nix flake configuration repository that manages NixOS and macOS (
 - **Home Manager:** User-specific dotfiles, packages, and services
 - **flake-utils-plus:** Declarative host generation from directory structure
 - **NixOS:** Linux distribution (for non-macOS hosts)
-- **Languages:** Primarily Nix, with some Lua for WezTerm configuration
+- **Languages:** Primarily Nix
 
 ### Key Components
 
@@ -94,7 +94,7 @@ Home Manager configurations for user-specific settings.
 
 **`home/apps/`** - Application configurations:
 
-- `wezterm/` - WezTerm terminal emulator (Lua config)
+- `iterm2/` - iTerm2 Dynamic Profile that launches tmux in control mode (`-CC`); seeded from `profile.json` (regenerable via `scripts/export-iterm-profile.sh`)
 - `1password.nix` - 1Password configuration
 - Other GUI applications
 

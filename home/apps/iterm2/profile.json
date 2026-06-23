@@ -1,0 +1,19 @@
+{
+  "Dynamic Profile Parent Name": "Default",
+  "Normal Font": "MesloLGSNF-Regular 13",
+  "Non Ascii Font": "MesloLGSNF-Regular 13",
+  "Use Non-ASCII Font": false,
+  "Horizontal Spacing": 1,
+  "Vertical Spacing": 1,
+  "Minimum Contrast": 0,
+  "Cursor Type": 2,
+  "Blinking Cursor": false,
+  "Scrollback Lines": 50000,
+  "Unlimited Scrollback": false,
+  "Mouse Reporting": true,
+  "Silence Bell": true,
+  "Visual Bell": false,
+  "Flashing Bell": false,
+  "Option Key Sends": 2,
+  "Right Option Key Sends": 2
+}

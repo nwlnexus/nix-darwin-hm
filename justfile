@@ -4,6 +4,11 @@ default:
 fmt:
     treefmt
 
+# Capture this host's live iTerm2 default profile into the repo template
+# (home/apps/iterm2/profile.json). Quit iTerm2 first so prefs are flushed.
+export-iterm-profile:
+    ./scripts/export-iterm-profile.sh
+
 # Manual SSH key fetch — normally op-secrets (via home-manager activation)
 # handles this declaratively. Use these recipes only as an escape hatch
 # (e.g. fresh machine, op-secrets failed, or you want a quick re-fetch
