@@ -21,6 +21,11 @@
       # Properly pass extended keys (fixes Shift+Enter for newlines)
       set -s extended-keys on
       set -as terminal-features 'xterm*:extkeys'
+      set -as terminal-features 'tmux-256color:extkeys'
+      # Re-emit the CSI u sequence for Shift+Enter so Claude Code inserts a
+      # newline instead of submitting. Requires the iTerm2 profile to send
+      # \e[13;2u for Shift+Enter (configured in home/apps/iterm2).
+      bind-key -n S-Enter send-keys Escape "[13;2u"
       # Enable focus events (required for Neovim/Vim auto-read)
       set -g focus-events on
 

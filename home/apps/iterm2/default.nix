@@ -39,6 +39,18 @@ let
     "BM Growl" = false;
     "Visual Bell" = false;
     "Flashing Bell" = false;
+
+    # Send the CSI u sequence (ESC [13;2u) for Shift+Enter so Claude Code
+    # inserts a newline instead of submitting. Key "0xd-0x20000" = Return
+    # (0xd) + Shift (0x20000); Action 10 = "Send Escape Sequence" with Text
+    # appended after ESC. Mirrors what Claude Code's /terminal-setup does, but
+    # declaratively. This replaces the inherited (empty) keymap.
+    "Keyboard Map" = {
+      "0xd-0x20000" = {
+        "Action" = 10;
+        "Text" = "[13;2u";
+      };
+    };
   };
 
   dynamicProfiles = builtins.toJSON { Profiles = [ tmuxProfile ]; };

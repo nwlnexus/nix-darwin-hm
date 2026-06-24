@@ -38,7 +38,9 @@ in
       #   source "${pkgs.asdf-vm}/share/asdf-vm/completions/asdf.bash"
       # '';
       initContent = ''
-        source "${pkgs.asdf-vm}/share/asdf-vm/asdf.sh"
+        # asdf 0.16+ (Go rewrite, no asdf.sh) is configured by putting its
+        # shims dir on PATH; the `asdf` binary comes from the asdf-vm package.
+        export PATH="''${ASDF_DATA_DIR:-$HOME/.asdf}/shims:$PATH"
         export PATH="$(brew --prefix python)/libexec/bin:$PATH"
       '';
       shellAliases = {

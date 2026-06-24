@@ -56,7 +56,11 @@ if profile is None:
 
 # Strip the keys that Nix injects / that shouldn't be inherited.
 drop = {"Guid", "Name", "Custom Command", "Command",
-        "Dynamic Profile Parent Name", "Dynamic Profile Parent GUID"}
+        "Dynamic Profile Parent Name", "Dynamic Profile Parent GUID",
+        # Managed in home/apps/iterm2/default.nix (Shift+Enter binding).
+        "Keyboard Map",
+        # Managed bell/notification keys.
+        "Silence Bell", "BM Growl", "Visual Bell", "Flashing Bell"}
 clean = {k: v for k, v in profile.items() if k not in drop}
 
 with open(out_path, "w") as f:
