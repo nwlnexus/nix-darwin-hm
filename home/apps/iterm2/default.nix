@@ -31,6 +31,14 @@ let
     "Guid" = guid;
     "Custom Command" = "Yes";
     "Command" = tmuxCommand;
+
+    # Kill the "iTerm bell rang" Notification Center alert (and the audible
+    # bell) for tmux sessions. "BM Growl" = the per-profile "Notifications"
+    # toggle that posts NC alerts on bell; "Silence Bell" mutes the bell.
+    "Silence Bell" = true;
+    "BM Growl" = false;
+    "Visual Bell" = false;
+    "Flashing Bell" = false;
   };
 
   dynamicProfiles = builtins.toJSON { Profiles = [ tmuxProfile ]; };

@@ -31,7 +31,7 @@ out="${repo_root}/home/apps/iterm2/profile.json"
 # Export the live prefs to a temp file. We read it by path in Python (rather
 # than piping to stdin) because `python3 -` already consumes stdin for the
 # heredoc-supplied script.
-tmp_plist="$(mktemp -t iterm2-prefs).plist"
+tmp_plist="$(mktemp "${TMPDIR:-/tmp}/iterm2-prefs.XXXXXX")"
 trap 'rm -f "$tmp_plist"' EXIT
 defaults export com.googlecode.iterm2 "$tmp_plist"
 
