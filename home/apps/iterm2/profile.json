@@ -1,19 +1,176 @@
 {
-  "Dynamic Profile Parent Name": "Default",
-  "Normal Font": "MesloLGSNF-Regular 13",
-  "Non Ascii Font": "MesloLGSNF-Regular 13",
-  "Use Non-ASCII Font": false,
-  "Horizontal Spacing": 1,
-  "Vertical Spacing": 1,
-  "Minimum Contrast": 0,
-  "Cursor Type": 2,
+  "ASCII Anti Aliased": true,
+  "ASCII Ligatures": true,
+  "Ambiguous Double Width": false,
+  "Ansi 0 Color": {
+    "Blue Component": 0.0,
+    "Green Component": 0.0,
+    "Red Component": 0.0
+  },
+  "Ansi 1 Color": {
+    "Blue Component": 0.0,
+    "Green Component": 0.0,
+    "Red Component": 0.7333333492279053
+  },
+  "Ansi 10 Color": {
+    "Blue Component": 0.3333333432674408,
+    "Green Component": 1.0,
+    "Red Component": 0.3333333432674408
+  },
+  "Ansi 11 Color": {
+    "Blue Component": 0.3333333432674408,
+    "Green Component": 1.0,
+    "Red Component": 1.0
+  },
+  "Ansi 12 Color": {
+    "Blue Component": 1.0,
+    "Green Component": 0.3333333432674408,
+    "Red Component": 0.3333333432674408
+  },
+  "Ansi 13 Color": {
+    "Blue Component": 1.0,
+    "Green Component": 0.3333333432674408,
+    "Red Component": 1.0
+  },
+  "Ansi 14 Color": {
+    "Blue Component": 1.0,
+    "Green Component": 1.0,
+    "Red Component": 0.3333333432674408
+  },
+  "Ansi 15 Color": {
+    "Blue Component": 1.0,
+    "Green Component": 1.0,
+    "Red Component": 1.0
+  },
+  "Ansi 2 Color": {
+    "Blue Component": 0.0,
+    "Green Component": 0.7333333492279053,
+    "Red Component": 0.0
+  },
+  "Ansi 3 Color": {
+    "Blue Component": 0.0,
+    "Green Component": 0.7333333492279053,
+    "Red Component": 0.7333333492279053
+  },
+  "Ansi 4 Color": {
+    "Blue Component": 0.7333333492279053,
+    "Green Component": 0.0,
+    "Red Component": 0.0
+  },
+  "Ansi 5 Color": {
+    "Blue Component": 0.7333333492279053,
+    "Green Component": 0.0,
+    "Red Component": 0.7333333492279053
+  },
+  "Ansi 6 Color": {
+    "Blue Component": 0.7333333492279053,
+    "Green Component": 0.7333333492279053,
+    "Red Component": 0.0
+  },
+  "Ansi 7 Color": {
+    "Blue Component": 0.7333333492279053,
+    "Green Component": 0.7333333492279053,
+    "Red Component": 0.7333333492279053
+  },
+  "Ansi 8 Color": {
+    "Blue Component": 0.3333333432674408,
+    "Green Component": 0.3333333432674408,
+    "Red Component": 0.3333333432674408
+  },
+  "Ansi 9 Color": {
+    "Blue Component": 0.3333333432674408,
+    "Green Component": 0.3333333432674408,
+    "Red Component": 1.0
+  },
+  "BM Growl": true,
+  "Background Color": {
+    "Blue Component": 0.0,
+    "Green Component": 0.0,
+    "Red Component": 0.0
+  },
+  "Background Image Location": "",
   "Blinking Cursor": false,
-  "Scrollback Lines": 50000,
-  "Unlimited Scrollback": false,
-  "Mouse Reporting": true,
-  "Silence Bell": true,
-  "Visual Bell": false,
+  "Blur": false,
+  "Bold Color": {
+    "Blue Component": 1.0,
+    "Green Component": 1.0,
+    "Red Component": 1.0
+  },
+  "Character Encoding": 4,
+  "Close Sessions On End": true,
+  "Columns": 80,
+  "Cursor Color": {
+    "Blue Component": 0.7333333492279053,
+    "Green Component": 0.7333333492279053,
+    "Red Component": 0.7333333492279053
+  },
+  "Cursor Text Color": {
+    "Blue Component": 1.0,
+    "Green Component": 1.0,
+    "Red Component": 1.0
+  },
+  "Cursor Type": 2,
+  "Custom Directory": "No",
+  "Default Bookmark": "No",
+  "Description": "Default",
+  "Disable Window Resizing": true,
+  "Dynamic Profile Filename": "/Users/nwilliams-lucas/Library/Application Support/iTerm2/DynamicProfiles/nix-tmux.json",
   "Flashing Bell": false,
+  "Foreground Color": {
+    "Blue Component": 0.7333333492279053,
+    "Green Component": 0.7333333492279053,
+    "Red Component": 0.7333333492279053
+  },
+  "Horizontal Spacing": 1,
+  "Idle Code": 0,
+  "Jobs to Ignore": [
+    "rlogin",
+    "ssh",
+    "slogin",
+    "telnet"
+  ],
+  "Keyboard Map": {},
+  "Load Shell Integration Automatically": true,
+  "Minimum Contrast": 0,
+  "Mouse Reporting": true,
+  "Non Ascii Font": "MesloLGSNF-Regular 13",
+  "Non-ASCII Anti Aliased": true,
+  "Non-ASCII Ligatures": true,
+  "Normal Font": "MesloLGSNF-Regular 13",
+  "Open Password Manager Automatically": false,
   "Option Key Sends": 2,
-  "Right Option Key Sends": 2
+  "Prompt Before Closing 2": false,
+  "Right Option Key Sends": 2,
+  "Rows": 25,
+  "Screen": -1,
+  "Scrollback Lines": 50000,
+  "Scrollback With Status Bar": false,
+  "Selected Text Color": {
+    "Blue Component": 0.0,
+    "Green Component": 0.0,
+    "Red Component": 0.0
+  },
+  "Selection Color": {
+    "Blue Component": 1.0,
+    "Green Component": 0.8353000283241272,
+    "Red Component": 0.7098000049591064
+  },
+  "Send Code When Idle": false,
+  "Shortcut": "",
+  "Silence Bell": true,
+  "Sync Title": false,
+  "Tags": [
+    "Dynamic"
+  ],
+  "Terminal Type": "xterm-256color",
+  "Transparency": 0.0,
+  "Unlimited Scrollback": false,
+  "Use Bold Font": true,
+  "Use Bright Bold": true,
+  "Use Italic Font": true,
+  "Use Non-ASCII Font": false,
+  "Vertical Spacing": 1,
+  "Visual Bell": false,
+  "Window Type": 0,
+  "Working Directory": "/Users/nwilliams-lucas"
 }
