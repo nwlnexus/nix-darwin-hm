@@ -28,11 +28,19 @@ fi
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 out="${repo_root}/home/apps/iterm2/profile.json"
 
-defaults export com.googlecode.iterm2 - | python3 - "$out" <<'PY'
+# Export the live prefs to a temp file. We read it by path in Python (rather
+# than piping to stdin) because `python3 -` already consumes stdin for the
+# heredoc-supplied script.
+tmp_plist="$(mktemp -t iterm2-prefs).plist"
+trap 'rm -f "$tmp_plist"' EXIT
+defaults export com.googlecode.iterm2 "$tmp_plist"
+
+python3 - "$tmp_plist" "$out" <<'PY'
 import plistlib, json, sys
 
-out_path = sys.argv[1]
-prefs = plistlib.loads(sys.stdin.buffer.read())
+with open(sys.argv[1], "rb") as fp:
+    prefs = plistlib.load(fp)
+out_path = sys.argv[2]
 
 profiles = prefs.get("New Bookmarks", [])
 default_guid = prefs.get("Default Bookmark Guid")
