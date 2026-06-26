@@ -6,7 +6,7 @@ This provides guidance to AI assistants when working with this nix-darwin + Home
 
 ## Quick Reference
 
-**Primary user:** `nwilliams-lucas` | **Version:** `25.05` | **Theme:** `catppuccin`
+**Primary user:** `nwilliams-lucas` | **Version:** `26.05` | **Theme:** `catppuccin`
 
 ### Essential Commands
 
@@ -32,7 +32,7 @@ just                                   # List available tasks
 - **NixOS:** Linux distribution for declarative system configuration
 - **nix-darwin:** Declarative macOS system configuration
 - **home-manager:** User-specific dotfiles, packages, and services
-- **Languages:** Primarily Nix, with Lua for WezTerm configuration
+- **Languages:** Primarily Nix
 
 ### Directory Structure
 
@@ -48,7 +48,7 @@ just                                   # List available tasks
 │   └── nixos/           # NixOS: boot, users, hardware
 ├── home/                # Home Manager user configs
 │   ├── cli/             # CLI tools: git, starship, bat, etc.
-│   └── apps/            # Applications: wezterm, 1password
+│   └── apps/            # Applications: iterm2, 1password
 ├── modules/             # Shared Nix modules
 │   └── profiles/        # Profile modules (base, dev, gui-full, etc.)
 └── users/               # User configuration schema
@@ -119,6 +119,10 @@ For packages available to all users, add to `environment.systemPackages`:
 }
 ```
 
+#### Non-official Homebrew taps (tap trust)
+
+Homebrew 6.0+ requires non-official taps to be explicitly trusted. nix-darwin's `homebrew.taps` option cannot emit `trusted: true`, so trusted taps are declared as verbatim Brewfile lines via `homebrew.extraConfig` (which both taps and trusts them), co-located with the profile that uses them (`base.nix`, `dev.nix`). Fully-qualified brews like `user/repo/formula` auto-trust that item; declaring the tap as `trusted: true` additionally silences the tap-level "not trusted" warnings.
+
 ### Adding Hosts
 
 To add a new host configuration:
@@ -134,7 +138,7 @@ To add a new host configuration:
 # hosts/nixos/new-server.nix
 {
   # Set the state version for NixOS
-  system.stateVersion = "25.05";
+  system.stateVersion = "26.05";
 
   # Host-specific configuration
   networking.hostName = "new-server";
@@ -149,6 +153,13 @@ To add a new host configuration:
 - **NixOS:** `system/nixos/`
 - **Cross-platform:** `system/default.nix`
 - **User environment:** `home/`
+
+### Terminal & tmux
+
+- **tmux** is managed by home-manager (`home/cli/tmux.nix`, `programs.tmux`) on all hosts — not Homebrew. It carries the Claude Code integration settings (`allow-passthrough`, `extended-keys` + `xterm*:extkeys`, `focus-events`).
+- **iTerm2** is the default terminal on all macOS hosts (`system/darwin/iterm2.nix` installs the cask + sets it as default handler via `duti`).
+- The default iTerm2 profile is a **Dynamic Profile** (`home/apps/iterm2/`) that auto-launches `tmux -CC` (control mode). The gateway window is hidden via `AutoHideTmuxClientSession`. The profile is made default by matching `Default Bookmark Guid` (system) to the profile `Guid` (home) — keep these two in sync.
+- To refresh the profile template from a host's live settings: `just export-iterm-profile`, then commit `home/apps/iterm2/profile.json`.
 
 ### Updating Dependencies
 
@@ -167,7 +178,7 @@ For in-depth architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
 **Key technical points:**
 
 - Uses `flake-utils-plus.mkFlake` for declarative host generation
-- Supports stable (25.05) and unstable nixpkgs channels
+- Supports stable (26.05) and unstable nixpkgs channels
 - Includes overlays for VSCode extensions and Rust toolchain
 - Custom CA certificates from `files/certs/` for corporate environments
 - PATH includes `~/.local/bin` for custom scripts (via Home Manager)

@@ -15,12 +15,12 @@ This is a pure Nix flake configuration repository that manages NixOS and macOS (
 - **Home Manager:** User-specific dotfiles, packages, and services
 - **flake-utils-plus:** Declarative host generation from directory structure
 - **NixOS:** Linux distribution (for non-macOS hosts)
-- **Languages:** Primarily Nix, with some Lua for WezTerm configuration
+- **Languages:** Primarily Nix
 
 ### Key Components
 
 - **flake-utils-plus (`mkFlake`):** Enables declarative host generation from directory structure
-- **nixpkgs channels:** Supports both stable (25.05) and unstable, with stable as default
+- **nixpkgs channels:** Supports both stable (26.05) and unstable, with stable as default
 - **nix-darwin:** macOS system management integration
 - **Home Manager:** User environment configurations
 - **impermanence module:** Stateless system support
@@ -94,7 +94,7 @@ Home Manager configurations for user-specific settings.
 
 **`home/apps/`** - Application configurations:
 
-- `wezterm/` - WezTerm terminal emulator (Lua config)
+- `iterm2/` - iTerm2 Dynamic Profile that launches tmux in control mode (`-CC`); seeded from `profile.json` (regenerable via `scripts/export-iterm-profile.sh`)
 - `1password.nix` - 1Password configuration
 - Other GUI applications
 
@@ -161,7 +161,7 @@ The flake uses the `mkHosts` function with `flake-utils-plus.mkFlake` to automat
 ```nix
 # hosts/nixos/my-server.nix
 {
-  system.stateVersion = "25.05";
+  system.stateVersion = "26.05";
   networking.hostName = "my-server";
   # Additional host-specific options...
 }
@@ -223,8 +223,8 @@ The configuration includes overlays for:
 
 ## Version Information
 
-- **NixOS/nix-darwin version:** 25.05
-- **Home Manager state version:** 25.05
+- **NixOS/nix-darwin version:** 26.05
+- **Home Manager state version:** 26.05
 - **Theme:** Catppuccin
 - **Primary user:** nwilliams-lucas
 

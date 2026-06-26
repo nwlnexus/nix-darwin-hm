@@ -13,7 +13,7 @@
 
     homebrew = {
       casks = [
-        "iterm2"
+        # iterm2 is installed for all macOS hosts in system/darwin/iterm2.nix
         "sublime-text"
       ];
     };

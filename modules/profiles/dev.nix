@@ -7,7 +7,12 @@
 
 {
   config = lib.mkIf config.d.profiles.dev.enable {
-    d.apps.claudeMem.enable = true;
+    # claudeMem is a home-manager option (declared in home/apps/claude-mem.nix),
+    # so it must be set inside the home-manager scope via d.hm, not at the
+    # nix-darwin system level.
+    d.hm = [
+      { d.apps.claudeMem.enable = true; }
+    ];
 
     environment.systemPackages = with pkgs; [
       github-cli
@@ -43,10 +48,15 @@
       casks = [
         "temurin@20"
       ];
-      taps = [
-        "derailed/k9s"
-        "Azure/kubelogin"
-      ];
+
+      # Trust non-official taps for Homebrew 6.0 (see base.nix for rationale).
+      # `fluxcd/tap` is auto-tapped by the qualified `fluxcd/tap/flux` brew, but
+      # still needs to be trusted to avoid the "not trusted" warning/skip.
+      extraConfig = ''
+        tap "derailed/k9s", trusted: true
+        tap "Azure/kubelogin", trusted: true
+        tap "fluxcd/tap", trusted: true
+      '';
     };
   };
 }

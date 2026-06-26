@@ -11,6 +11,7 @@
     ./jq.nix
     ./nix-index.nix
     ./terraform.nix
+    ./tmux.nix
     ./zoxide.nix
   ];
 }

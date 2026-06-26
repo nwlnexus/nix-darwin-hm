@@ -127,8 +127,8 @@ in
         op-connect-env = {
           account = "my.1password.com";
           template = ../secrets/op-connect.tpl;
-          dest     = "${config.home.homeDirectory}/projects/personal/.op-connect";
-          mode     = "0600";
+          dest = "${config.home.homeDirectory}/projects/personal/.op-connect";
+          mode = "0600";
         };
       };
     };

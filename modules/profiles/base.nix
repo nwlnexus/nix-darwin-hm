@@ -20,7 +20,7 @@
         httpie
         killall
         lsof
-        neofetch
+        fastfetch
         ripgrep
         unzip
         bat
@@ -41,7 +41,7 @@
         age
         ssh-to-age
         tree
-        nixfmt-rfc-style
+        nixfmt
         gnupg
       ]
       ++ builtins.filter lib.attrsets.isDerivation (builtins.attrValues pkgs.nerd-fonts);
@@ -57,7 +57,7 @@
         "openssl@3"
         "gemini-cli"
         "nwlnexus/olympus/atlas"
-        "tmux"
+        # tmux is now managed by home-manager (home/cli/tmux.nix)
         "gh"
         "mise"
         "pkgconf"
@@ -66,10 +66,17 @@
         "1password-cli"
         "tailscale-app"
       ];
-      taps = [
-        "cloudflare/cloudflare"
-        "nwlnexus/olympus"
-      ];
+
+      # Homebrew 6.0 (June 2026) requires non-official taps to be explicitly
+      # trusted. nix-darwin's `taps` option can't emit `trusted: true`, so we
+      # declare trusted taps here as verbatim Brewfile lines (this both taps
+      # and trusts them). See https://docs.brew.sh/Tap-Trust
+      #
+      # Note: `cloudflared` now lives in homebrew-core, so the old
+      # `cloudflare/cloudflare` tap is no longer needed and has been dropped.
+      extraConfig = ''
+        tap "nwlnexus/olympus", trusted: true
+      '';
     };
   };
 }

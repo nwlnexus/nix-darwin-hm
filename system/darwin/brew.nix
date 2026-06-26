@@ -11,7 +11,10 @@
 
     brews = [ ];
 
-    casks = [ ];
+    # Casks installed on all macOS hosts.
+    casks = [
+      "obsidian"
+    ];
 
     taps = [ ];
   };

@@ -4,14 +4,14 @@
   inputs = {
     # Nixpkgs
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    nixpkgs-stable.url = "github:nixos/nixpkgs/nixos-25.05";
+    nixpkgs-stable.url = "github:nixos/nixpkgs/nixos-26.05";
 
     # nix-darwin
-    darwin.url = "github:nix-darwin/nix-darwin/nix-darwin-25.05";
+    darwin.url = "github:nix-darwin/nix-darwin/nix-darwin-26.05";
     darwin.inputs.nixpkgs.follows = "nixpkgs-stable";
 
     # Home manager
-    hm.url = "github:nix-community/home-manager/release-25.05";
+    hm.url = "github:nix-community/home-manager/release-26.05";
     hm.inputs.nixpkgs.follows = "nixpkgs-stable";
 
     hardware.url = "github:NixOS/nixos-hardware";
@@ -148,7 +148,7 @@
         extraArgs = {
           user = "nwilliams-lucas";
           theme = "catppuccin";
-          version = "25.05";
+          version = "26.05";
           PROJECT_ROOT = PROJECT_ROOT;
         };
       };
@@ -164,7 +164,7 @@
           projectRootFile = "flake.nix";
           programs.nixfmt = {
             enable = true;
-            package = channels.nixpkgs-stable.nixfmt-rfc-style;
+            package = channels.nixpkgs-stable.nixfmt;
           };
         };
       };
