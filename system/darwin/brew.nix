@@ -23,10 +23,15 @@
       "obsidian"
     ];
 
-    # NOTE: slp/krun is a third-party tap. Homebrew gates untrusted taps, so a
-    # fresh machine needs a one-time `brew trust slp/krun` (run as your user)
-    # before the first `darwin-rebuild switch`, or the brew bundle will refuse
-    # to install these formulae.
-    taps = [ "slp/krun" ];
+    # slp/krun is a third-party tap. Homebrew 6.0 gates untrusted taps, and
+    # libkrun pulls in `slp/krun/virglrenderer` as a dependency (not
+    # fully-qualified above), so the bundle refuses it from an untrusted tap.
+    # nix-darwin's `taps` option can't emit `trusted: true`, so declare the tap
+    # as a verbatim Brewfile line that both taps AND trusts it (covering the
+    # dependency too). Same pattern as modules/profiles/base.nix for
+    # nwlnexus/olympus. See https://docs.brew.sh/Tap-Trust
+    extraConfig = ''
+      tap "slp/krun", trusted: true
+    '';
   };
 }
