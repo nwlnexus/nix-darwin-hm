@@ -1,6 +1,7 @@
 {
   imports = [
     ./bat
+    ./claude
     ./git
     ./starship
 
