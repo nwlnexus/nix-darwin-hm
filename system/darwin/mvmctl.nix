@@ -2,7 +2,7 @@
 # release. There is no Homebrew formula, and crates.io only carries the older
 # Lima-based 0.13.0 (wrong architecture for Apple Silicon), so we fetch the
 # release binary and re-sign it. The libkrun/libkrunfw/gvproxy runtime deps
-# come from Homebrew (slp/krun tap) — see ./brew.nix.
+# come from Homebrew (libkrun/krun tap) — see ./brew.nix.
 #
 # Bump: change `version` + `hash` (get hash via `nix hash file <tarball>`).
 { pkgs, lib, ... }:
