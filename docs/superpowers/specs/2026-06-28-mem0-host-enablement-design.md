@@ -123,7 +123,10 @@ Config via env with baked defaults:
 2. **Disable across all 3 layers** (jq, idempotent):
    - `~/.claude/settings.json` → `enabledPlugins["claude-mem@thedotmack"] = false`.
    - `~/.claude.json` → remove/disable any `claude-mem` / `thedotmack` entries
-     (per-project MCP + plugin registration). **This is the actual respawn source.**
+     (per-project MCP + plugin registration; also holds plugin/skill usage telemetry).
+     The authoritative install record is `~/.claude/plugins/installed_plugins.json`;
+     leftover daemons and the plugin cache are handled by the process-kill (step 1) and
+     cache removal (step 3).
    - `~/.claude/plugins/installed_plugins.json` → mark claude-mem uninstalled/disabled.
 3. **Remove** plugin cache `~/.claude/plugins/cache/thedotmack/`.
 4. **Clean `~/.claude-mem/` runtime + live working set**, **deleting**:
@@ -131,8 +134,9 @@ Config via env with baked defaults:
    `vector-db/`. **Keep**: `*.premem0-*` backup files and
    `mem0-migrate-checkpoint.json`.
 5. **Re-verify** (success gate): re-scan processes; if any claude-mem proc
-   respawned within a short grace window, report it (the respawn source in step 2
-   was missed). Idempotent: a second run finds nothing to do and exits clean.
+   respawned within a short grace window, report it (a claude-mem process is still
+   running — inspect the layers cleaned in step 2). Idempotent: a second run finds
+   nothing to do and exits clean.
 
 #### 1b. `settings.json` SessionStart merge (the core engineering)
 

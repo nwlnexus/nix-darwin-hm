@@ -10,9 +10,7 @@ CLAUDE_MEM_DIR="${CLAUDE_MEM_DIR:-$HOME/.claude-mem}"
 CLAUDE_JSON="${CLAUDE_JSON:-$HOME/.claude.json}"
 SETTINGS="$CLAUDE_DIR/settings.json"
 INSTALLED="$CLAUDE_DIR/plugins/installed_plugins.json"
-# shellcheck disable=SC2034  # used by enable (Task 5) and migrate (Task 6)
 HOOK_DEST="$CLAUDE_DIR/hooks/mem0-recall-hook.sh"
-# shellcheck disable=SC2034  # used by enable (Task 5) and migrate (Task 6)
 RES="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"   # resources dir (siblings live here)
 PROC_PATTERNS='claude-mem/[^/]+/scripts/worker-service\.cjs|claude-mem/[^/]+/scripts/mcp-server\.cjs|chroma-mcp.*\.claude-mem'
 

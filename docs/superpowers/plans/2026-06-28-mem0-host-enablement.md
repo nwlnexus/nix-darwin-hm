@@ -743,7 +743,7 @@ Expected: logs "stopping claude-mem processes…", disables across layers, "clau
 - [ ] **Step 3: Verify no claude-mem processes remain**
 
 Run: `pgrep -fl 'worker-service\.cjs|claude-mem/.*/mcp-server\.cjs|chroma-mcp' || echo "none"`
-Expected: `none`. If any remain, the `~/.claude.json` respawn entry was missed — inspect `~/.claude.json` and re-run; do not proceed to Task 9.
+Expected: `none`. If any remain, a claude-mem daemon survived — inspect `installed_plugins.json` / plugin cache and re-run; do not proceed to Task 9.
 
 - [ ] **Step 4: Verify settings + recall wiring**
 
