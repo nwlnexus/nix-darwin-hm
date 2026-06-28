@@ -65,5 +65,20 @@ path_kept="$(jq '.projects | has("/Users/x/projects/claude-mem-notes")' "$CLAUDE
   || no "anchored walk anchoring (pu_gone=$pu_gone path_kept=$path_kept)"
 teardown
 
+# --- enable: merge SessionStart, keep existing, idempotent ---
+setup
+MEM0_URL="http://127.0.0.1:1" bash "$MEM0CTL" enable --no-verify >/dev/null 2>&1
+n1="$(jq '.hooks.SessionStart | length' "$CLAUDE_DIR/settings.json")"
+keep_existing="$(jq '[.hooks.SessionStart[].hooks[].command] | any(. == "/existing/other-hook.sh")' "$CLAUDE_DIR/settings.json")"
+has_recall="$(jq '[.hooks.SessionStart[].hooks[].command] | any(endswith("mem0-recall-hook.sh"))' "$CLAUDE_DIR/settings.json")"
+{ [ "$n1" = 2 ] && [ "$keep_existing" = true ] && [ "$has_recall" = true ]; } \
+  && ok "enable adds recall, keeps existing group" || no "enable merge (len=$n1 keep=$keep_existing recall=$has_recall)"
+MEM0_URL="http://127.0.0.1:1" bash "$MEM0CTL" enable --no-verify >/dev/null 2>&1
+n2="$(jq '.hooks.SessionStart | length' "$CLAUDE_DIR/settings.json")"
+[ "$n2" = 2 ] && ok "enable idempotent (no duplicate group)" || no "enable idempotent (len=$n2)"
+# connectivity failure without --no-verify still exits 0
+MEM0_URL="http://127.0.0.1:1" bash "$MEM0CTL" enable >/dev/null 2>&1 && ok "enable warn-only on unreachable" || no "enable warn-only on unreachable (nonzero)"
+teardown
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

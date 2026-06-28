@@ -80,7 +80,43 @@ disable_claude_mem() {
 }
 
 migrate() { log "migrate: implemented in Task 6"; return 0; }
-enable()  { log "enable: implemented in Task 5"; return 0; }
+
+enable() {
+  local verify=1
+  [ "${1:-}" = "--no-verify" ] && verify=0
+
+  # Install hook for ad-hoc (non-nix) hosts; skip if already a nix-store symlink.
+  if [ -L "$HOOK_DEST" ] && readlink "$HOOK_DEST" | grep -q '/nix/store/'; then
+    log "recall hook is nix-managed — skipping copy"
+  else
+    mkdir -p "$(dirname "$HOOK_DEST")"
+    cp "$RES/mem0-recall-hook.sh"   "$HOOK_DEST"
+    cp "$RES/mem0_recall_format.py" "$(dirname "$HOOK_DEST")/mem0_recall_format.py"
+    chmod +x "$HOOK_DEST"
+    log "installed recall hook → $HOOK_DEST"
+  fi
+
+  # Keyed replace-or-skip merge of the SessionStart recall group.
+  # shellcheck disable=SC2016  # $cmd is a jq variable, not a shell variable
+  jq_inplace "$SETTINGS" --arg cmd "$HOOK_DEST" '
+    .hooks //= {} | .hooks.SessionStart //= [] |
+    .hooks.SessionStart |=
+      ( map(select(any(.hooks[]?; (.command // "") | endswith("mem0-recall-hook.sh")) | not))
+        + [ { hooks: [ { type: "command", command: $cmd, timeout: 5 } ] } ] )'
+  log "wired SessionStart recall hook into settings.json"
+
+  if [ "$verify" -eq 1 ]; then
+    if curl -fsS --connect-timeout 1 --max-time 2 \
+         -X POST -H 'Content-Type: application/json' \
+         -d "{\"user_id\":\"$MEM0_USER_ID\",\"search_query\":\"healthcheck\",\"page\":1,\"size\":1}" \
+         "$MEM0_URL/api/v1/memories/filter" >/dev/null 2>&1; then
+      log "mem0 reachable at $MEM0_URL"
+    else
+      log "WARN: mem0 not reachable at $MEM0_URL (off-tailnet?) — hook will fail-open"
+    fi
+  fi
+  return 0
+}
 
 main() {
   local cmd="${1:-}"; shift || true
