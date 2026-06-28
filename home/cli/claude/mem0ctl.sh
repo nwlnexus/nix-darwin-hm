@@ -79,7 +79,26 @@ disable_claude_mem() {
   return 0
 }
 
-migrate() { log "migrate: implemented in Task 6"; return 0; }
+migrate() {
+  local db="" mode="full"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --db)   db="$2"; shift 2;;
+      --mode) mode="$2"; shift 2;;
+      *) log "unknown migrate arg: $1"; return 2;;
+    esac
+  done
+  if [ -z "$db" ]; then
+    # shellcheck disable=SC2010
+    db="$(ls -t "$CLAUDE_MEM_DIR"/*.premem0-* 2>/dev/null | grep -vE '\-(wal|shm)$' | head -1 || true)"
+  fi
+  [ -n "$db" ] && [ -f "$db" ] || { log "no migration DB found (pass --db PATH)"; return 1; }
+  command -v uv >/dev/null 2>&1 || { log "uv not found on PATH"; return 1; }
+  local ckpt="$CLAUDE_MEM_DIR/mem0-migrate-checkpoint.json"
+  log "migrating $db → $MEM0_URL (mode=$mode, checkpoint=$ckpt)…"
+  uv run --project "$RES/mem0-migrate" --with httpx mem0-migrate \
+    --db "$db" --url "$MEM0_URL" --user-id "$MEM0_USER_ID" --mode "$mode" --checkpoint "$ckpt"
+}
 
 enable() {
   local verify=1
