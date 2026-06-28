@@ -14,7 +14,7 @@ INSTALLED="$CLAUDE_DIR/plugins/installed_plugins.json"
 HOOK_DEST="$CLAUDE_DIR/hooks/mem0-recall-hook.sh"
 # shellcheck disable=SC2034  # used by enable (Task 5) and migrate (Task 6)
 RES="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"   # resources dir (siblings live here)
-PROC_PATTERNS='worker-service\.cjs|claude-mem/.*/mcp-server\.cjs|chroma-mcp|uvx .*chroma-mcp'
+PROC_PATTERNS='claude-mem/[^/]+/scripts/worker-service\.cjs|claude-mem/[^/]+/scripts/mcp-server\.cjs|chroma-mcp.*\.claude-mem'
 
 log() { printf 'mem0ctl: %s\n' "$*" >&2; }
 
@@ -47,13 +47,13 @@ disable_claude_mem() {
   log "disabling plugin across all layers…"
   jq_inplace "$SETTINGS" '.enabledPlugins["claude-mem@thedotmack"] = false'
   if [ -f "$CLAUDE_JSON" ]; then
-    cp -f "$CLAUDE_JSON" "$CLAUDE_JSON.mem0ctl.bak"
+    [ -f "$CLAUDE_JSON.mem0ctl.bak" ] || cp "$CLAUDE_JSON" "$CLAUDE_JSON.mem0ctl.bak"
     jq_inplace "$CLAUDE_JSON" 'walk(if type=="object"
-      then with_entries(select(.key | test("claude-mem|thedotmack") | not)) else . end)'
+      then with_entries(select(.key | test("^claude-mem([@:].*)?$|@thedotmack$") | not)) else . end)'
   fi
   if [ -f "$INSTALLED" ]; then
     jq_inplace "$INSTALLED" 'walk(if type=="object"
-      then with_entries(select(.key | test("claude-mem|thedotmack") | not)) else . end)'
+      then with_entries(select(.key | test("^claude-mem([@:].*)?$|@thedotmack$") | not)) else . end)'
   fi
 
   log "removing plugin cache…"

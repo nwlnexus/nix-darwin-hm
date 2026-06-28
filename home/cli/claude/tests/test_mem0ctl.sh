@@ -43,5 +43,27 @@ bash "$MEM0CTL" disable-claude-mem >/dev/null 2>&1
 [ -f "$CLAUDE_MEM_DIR/claude-mem.db" ] && ok "no-backup guard keeps live DB" || no "no-backup guard keeps live DB"
 teardown
 
+# --- disable: layer-3 (installed_plugins) cleanup, keep unrelated ---
+setup
+printf '{"enabledPlugins":{"claude-mem@thedotmack":true,"keep@me":true},"plugins":{"claude-mem@thedotmack":[{"version":"1"}],"keep@me":[{"version":"1"}]},"version":1}' > "$CLAUDE_DIR/plugins/installed_plugins.json"
+bash "$MEM0CTL" disable-claude-mem >/dev/null 2>&1
+ip_cm="$(jq '.plugins | has("claude-mem@thedotmack")' "$CLAUDE_DIR/plugins/installed_plugins.json")"
+ip_keep="$(jq '.plugins | has("keep@me")' "$CLAUDE_DIR/plugins/installed_plugins.json")"
+{ [ "$ip_cm" = false ] && [ "$ip_keep" = true ]; } \
+  && ok "disable removes claude-mem from installed_plugins, keeps others" \
+  || no "installed_plugins cleanup (cm=$ip_cm keep=$ip_keep)"
+teardown
+
+# --- disable: anchored walk preserves project-path keys containing the substring ---
+setup
+printf '{"pluginUsage":{"claude-mem@thedotmack":{"n":1}},"projects":{"/Users/x/projects/claude-mem-notes":{"keep":1}}}' > "$CLAUDE_JSON"
+bash "$MEM0CTL" disable-claude-mem >/dev/null 2>&1
+pu_gone="$(jq '.pluginUsage | has("claude-mem@thedotmack")' "$CLAUDE_JSON")"
+path_kept="$(jq '.projects | has("/Users/x/projects/claude-mem-notes")' "$CLAUDE_JSON")"
+{ [ "$pu_gone" = false ] && [ "$path_kept" = true ]; } \
+  && ok "anchored walk drops plugin keys but keeps project-path keys" \
+  || no "anchored walk anchoring (pu_gone=$pu_gone path_kept=$path_kept)"
+teardown
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
