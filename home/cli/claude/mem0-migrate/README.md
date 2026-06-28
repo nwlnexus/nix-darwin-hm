@@ -39,7 +39,8 @@ the rows are already distilled). Provenance is written **twice**:
 ## Usage
 
 ```bash
-cd tools/mem0-migrate
+# Preferred entrypoint: `mem0ctl migrate` (wraps the commands below).
+# To run directly, from this directory (home/cli/claude/mem0-migrate):
 
 # Smoke test — first 20 rows (the P3.6 visibility gate)
 uv run --with httpx python -m mem0_migrate.run \
