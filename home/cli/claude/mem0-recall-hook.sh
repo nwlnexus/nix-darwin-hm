@@ -16,10 +16,12 @@ command -v curl    >/dev/null 2>&1 || fail_open
 
 # Resolve the directory holding the formatter sibling.
 src="${BASH_SOURCE[0]}"
-hook_dir="$(cd "$(dirname "$src")" && pwd -P)"
+hook_dir="$(cd "$(dirname "$src")" 2>/dev/null && pwd -P)" || fail_open
 if [ ! -f "$hook_dir/mem0_recall_format.py" ]; then
   resolved="$(python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$src" 2>/dev/null || true)"
-  [ -n "$resolved" ] && hook_dir="$(cd "$(dirname "$resolved")" && pwd -P)"
+  if [ -n "$resolved" ]; then
+    hook_dir="$(cd "$(dirname "$resolved")" 2>/dev/null && pwd -P)" || fail_open
+  fi
 fi
 formatter="$hook_dir/mem0_recall_format.py"
 [ -f "$formatter" ] || fail_open
