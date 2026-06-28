@@ -21,7 +21,7 @@ def _truncate(text: str, width: int) -> str:
     return one_line[: width - 1].rstrip() + "…"
 
 
-def format_block(data: dict, cwd: str, top_k: int = TOP_K, width: int = WIDTH):
+def format_block(data: dict, cwd: str, top_k: int = TOP_K, width: int = WIDTH) -> str | None:
     """Return a compact markdown block, or None when there is nothing to show."""
     items = data.get("items") or []
     total = data.get("total", len(items)) or 0
