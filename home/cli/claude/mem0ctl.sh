@@ -94,7 +94,11 @@ migrate() {
   command -v uv >/dev/null 2>&1 || { log "uv not found on PATH"; return 1; }
   local ckpt="$CLAUDE_MEM_DIR/mem0-migrate-checkpoint.json"
   log "migrating $db → $MEM0_URL (mode=$mode, checkpoint=$ckpt)…"
-  uv run --project "$RES/mem0-migrate" --with httpx mem0-migrate \
+  # Run in an ephemeral uv env (--no-project) importing the tool from the
+  # read-only nix store via PYTHONPATH. Project mode would try to create a
+  # .venv inside the store and fail (read-only). Matches the tool's README.
+  PYTHONPATH="$RES/mem0-migrate/src" uv run --no-project --with httpx \
+    python -m mem0_migrate.run \
     --db "$db" --url "$MEM0_URL" --user-id "$MEM0_USER_ID" --mode "$mode" --checkpoint "$ckpt"
 }
 
