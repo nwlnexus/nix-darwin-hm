@@ -31,7 +31,7 @@ def format_block(data: dict, cwd: str, top_k: int = TOP_K, width: int = WIDTH) -
     shown = min(top_k, len(items))
     lines = [f"Recalled {total} memories for {project} — top {shown}:"]
     for i, item in enumerate(items[:top_k], 1):
-        memory = (item.get("memory") or item.get("text") or "").strip()
+        memory = (item.get("content") or item.get("memory") or item.get("text") or "").strip()
         if memory:
             lines.append(f"{i}. {_truncate(memory, width)}")
     return "\n".join(lines) if len(lines) > 1 else None
@@ -40,7 +40,9 @@ def format_block(data: dict, cwd: str, top_k: int = TOP_K, width: int = WIDTH) -
 def main(argv):
     cwd = argv[1] if len(argv) > 1 else os.getcwd()
     try:
-        data = json.load(sys.stdin)
+        # strict=False: the OpenMemory /filter API embeds literal newline/tab
+        # control characters inside JSON string values, which strict parsing rejects.
+        data = json.loads(sys.stdin.read(), strict=False)
     except Exception:
         print(json.dumps({"continue": True}))
         return 0
