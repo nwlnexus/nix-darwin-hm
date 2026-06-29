@@ -11,7 +11,9 @@ Safety properties:
 from __future__ import annotations
 
 import argparse
+import random
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -27,6 +29,8 @@ DEFAULT_CHECKPOINT = ".mem0-migrate-checkpoint.json"
 # add_fn(text, metadata) -> (ok, error)
 AddFn = Callable[[str, dict], tuple[bool, str | None]]
 
+_RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
+
 
 def classify_response(status_code: int, body) -> tuple[bool, str | None]:
     """Success iff HTTP 200 AND a dict body without an ``error`` key."""
@@ -40,18 +44,36 @@ def classify_response(status_code: int, body) -> tuple[bool, str | None]:
 
 
 class MemoryClient:
-    """Thin httpx wrapper that POSTs one composed memory and classifies the reply."""
+    """Thin httpx wrapper that POSTs one composed memory and classifies the reply.
+
+    Transient failures (connection errors, timeouts, HTTP 429/5xx) are retried
+    with bounded exponential backoff + full jitter. 4xx and HTTP-200-with-error
+    are permanent and recorded as failed (resume-able via the checkpoint).
+    """
 
     def __init__(self, base_url: str, *, user_id: str = DEFAULT_USER_ID,
-                 app: str = DEFAULT_APP, timeout: float = 30.0, client=None) -> None:
+                 app: str = DEFAULT_APP, timeout: float = 30.0, client=None,
+                 max_attempts: int = 5, backoff_base: float = 1.0,
+                 backoff_cap: float = 30.0, sleep=time.sleep,
+                 rng=random.random) -> None:
         self.base_url = base_url.rstrip("/")
         self.user_id = user_id
         self.app = app
+        self.max_attempts = max(1, max_attempts)
+        self.backoff_base = backoff_base
+        self.backoff_cap = backoff_cap
+        self._sleep = sleep
+        self._rng = rng
         if client is None:
             import httpx  # imported lazily so unit tests need no network dep
 
             client = httpx.Client(timeout=timeout)
         self._client = client
+
+    def _retry_delay(self, attempt: int) -> float:
+        """Full-jitter exponential backoff for a 1-based attempt number."""
+        window = min(self.backoff_cap, self.backoff_base * (2 ** (attempt - 1)))
+        return self._rng() * window
 
     def add(self, text: str, metadata: dict) -> tuple[bool, str | None]:
         payload = {
@@ -61,15 +83,25 @@ class MemoryClient:
             "text": text,
             "metadata": metadata,
         }
-        try:
-            resp = self._client.post(f"{self.base_url}/api/v1/memories/", json=payload)
-        except Exception as exc:  # network/timeout -> treat as a failed row
-            return False, f"request error: {exc}"
-        try:
-            body = resp.json()
-        except ValueError:
-            body = None
-        return classify_response(resp.status_code, body)
+        last_err: str | None = None
+        for attempt in range(1, self.max_attempts + 1):
+            try:
+                resp = self._client.post(
+                    f"{self.base_url}/api/v1/memories/", json=payload)
+            except Exception as exc:  # network/timeout -> retryable
+                last_err = f"request error: {exc}"
+            else:
+                try:
+                    body = resp.json()
+                except ValueError:
+                    body = None
+                if resp.status_code in _RETRYABLE_STATUS:
+                    last_err = f"http {resp.status_code}"
+                else:
+                    return classify_response(resp.status_code, body)
+            if attempt < self.max_attempts:
+                self._sleep(self._retry_delay(attempt))
+        return False, last_err
 
     def close(self) -> None:
         self._client.close()
