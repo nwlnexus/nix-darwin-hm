@@ -47,6 +47,35 @@ def test_content_key_is_read():
     assert lines[1] == "1. alpha mem"
 
 
+def test_default_top_k_is_five():
+    # Default recall count bumped 3 -> 5; env still overrides.
+    assert f.TOP_K == 5
+
+
+def test_format_unavailable_mentions_url_and_reason():
+    note = f.format_unavailable("http://openmemory.example:8765")
+    assert "http://openmemory.example:8765" in note
+    assert "unavailable" in note
+    # Must read as "failed", not "empty", so the session doesn't assume none exist.
+    assert "not loaded" in note or "not empty" in note
+
+
+def test_format_unavailable_blank_url_falls_back():
+    assert "endpoint" in f.format_unavailable("")
+
+
+def test_main_unavailable_mode_emits_session_context():
+    proc = subprocess.run(
+        [sys.executable, str(Path(f.__file__)), "--unavailable", "http://x.invalid:9"],
+        capture_output=True, text=True,
+    )
+    out = json.loads(proc.stdout)
+    ctx = out["hookSpecificOutput"]["additionalContext"]
+    assert out["hookSpecificOutput"]["hookEventName"] == "SessionStart"
+    assert "http://x.invalid:9" in ctx
+    assert ctx.startswith("⚠️")
+
+
 def test_main_parses_content_with_literal_control_chars():
     # The API emits raw newlines/tabs inside JSON string values; the main path
     # must parse them (strict=False) and surface the content as a memory.

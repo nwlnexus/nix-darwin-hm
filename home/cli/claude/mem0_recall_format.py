@@ -10,7 +10,7 @@ import json
 import os
 import sys
 
-TOP_K = int(os.environ.get("MEM0_TOP_K", "3"))
+TOP_K = int(os.environ.get("MEM0_TOP_K", "5"))
 WIDTH = int(os.environ.get("MEM0_LINE_WIDTH", "200"))
 
 
@@ -37,7 +37,34 @@ def format_block(data: dict, cwd: str, top_k: int = TOP_K, width: int = WIDTH) -
     return "\n".join(lines) if len(lines) > 1 else None
 
 
+def format_unavailable(url: str) -> str:
+    """A short SessionStart note for when the endpoint could not be reached.
+
+    Distinct from the silent fail-open used for a genuinely empty result: this
+    is surfaced so the session knows memories *exist but did not load*, rather
+    than wrongly assuming there are none.
+    """
+    where = url.strip() if url and url.strip() else "endpoint"
+    return (
+        f"⚠️ openmemory recall unavailable — {where} unreachable; "
+        "memories were not loaded this session (recall failed, not empty)."
+    )
+
+
+def _emit(context: str) -> None:
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "SessionStart",
+            "additionalContext": context,
+        }
+    }))
+
+
 def main(argv):
+    # `--unavailable URL`: bypass stdin parsing and emit the unreachable note.
+    if len(argv) > 1 and argv[1] == "--unavailable":
+        _emit(format_unavailable(argv[2] if len(argv) > 2 else ""))
+        return 0
     cwd = argv[1] if len(argv) > 1 else os.getcwd()
     try:
         # strict=False: the OpenMemory /filter API embeds literal newline/tab
@@ -50,12 +77,7 @@ def main(argv):
     if not block:
         print(json.dumps({"continue": True}))
         return 0
-    print(json.dumps({
-        "hookSpecificOutput": {
-            "hookEventName": "SessionStart",
-            "additionalContext": block,
-        }
-    }))
+    _emit(block)
     return 0
 
 
