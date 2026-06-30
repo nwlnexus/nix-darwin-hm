@@ -111,8 +111,10 @@ class StubHttpClient:
         self._response = response
         self.last_url = None
         self.last_json = None
+        self.calls = 0
 
     def post(self, url, json):
+        self.calls += 1
         self.last_url = url
         self.last_json = json
         return self._response
@@ -142,3 +144,85 @@ def test_memory_client_flags_error_body_as_failure():
     client = run.MemoryClient("http://x:8765", client=stub)
     ok, err = client.add("t", {})
     assert ok is False and "boom" in err
+
+
+# ---- retry/backoff (Task A1) ------------------------------------------------
+
+import time as _time  # noqa: E402
+
+class FlakyHttpClient:
+    """Raises a connection error `fail_times` times, then returns `response`."""
+
+    def __init__(self, fail_times, response, exc=None):
+        self.fail_times = fail_times
+        self.response = response
+        self.exc = exc or ConnectionError("connection refused")
+        self.calls = 0
+
+    def post(self, url, json):
+        self.calls += 1
+        if self.calls <= self.fail_times:
+            raise self.exc
+        return self.response
+
+    def close(self):
+        pass
+
+class SequenceHttpClient:
+    """Returns the given responses in order, one per call."""
+
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.calls = 0
+
+    def post(self, url, json):
+        r = self.responses[self.calls]
+        self.calls += 1
+        return r
+
+    def close(self):
+        pass
+
+def test_add_retries_transient_connection_error_then_succeeds():
+    flaky = FlakyHttpClient(2, StubResponse(200, {"id": "ok"}))
+    client = run.MemoryClient("http://x:8765", client=flaky,
+                              max_attempts=5, sleep=lambda _d: None)
+    ok, err = client.add("t", {})
+    assert ok is True and err is None
+    assert flaky.calls == 3  # 2 failures + 1 success
+
+def test_add_gives_up_after_max_attempts():
+    flaky = FlakyHttpClient(99, StubResponse(200, {"id": "never"}))
+    client = run.MemoryClient("http://x:8765", client=flaky,
+                              max_attempts=4, sleep=lambda _d: None)
+    ok, err = client.add("t", {})
+    assert ok is False
+    assert flaky.calls == 4
+    assert "request error" in err
+
+def test_add_retries_5xx_then_succeeds():
+    seq = SequenceHttpClient([
+        StubResponse(503, None),
+        StubResponse(503, None),
+        StubResponse(200, {"id": "ok"}),
+    ])
+    client = run.MemoryClient("http://x:8765", client=seq,
+                              max_attempts=5, sleep=lambda _d: None)
+    ok, err = client.add("t", {})
+    assert ok is True and err is None
+    assert seq.calls == 3
+
+def test_add_does_not_retry_4xx():
+    stub = StubHttpClient(StubResponse(400, {"detail": "bad"}))
+    client = run.MemoryClient("http://x:8765", client=stub,
+                              max_attempts=5, sleep=lambda _d: None)
+    ok, err = client.add("t", {})
+    assert ok is False and "400" in err
+    assert stub.calls == 1  # no retry on a 4xx
+
+def test_retry_delay_uses_full_jitter_and_cap():
+    client = run.MemoryClient("http://x:8765",
+                              client=StubHttpClient(StubResponse(200, {"id": "x"})),
+                              backoff_base=1.0, backoff_cap=30.0, rng=lambda: 1.0)
+    assert client._retry_delay(1) == 1.0    # min(30, 1*2^0) * 1.0
+    assert client._retry_delay(10) == 30.0  # min(30, 1*2^9) capped to 30

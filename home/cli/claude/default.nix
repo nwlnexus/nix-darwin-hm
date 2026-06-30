@@ -4,7 +4,7 @@ let
   runtimeDeps = with pkgs; [ curl jq python3 uv gnugrep coreutils procps ];
   mem0ctlPkg = pkgs.stdenv.mkDerivation {
     pname = "mem0ctl";
-    version = "1.0.0";
+    version = "1.1.0";
     src = ./.;
     nativeBuildInputs = [ pkgs.makeWrapper ];
     dontConfigure = true;

@@ -78,11 +78,12 @@ disable_claude_mem() {
 }
 
 migrate() {
-  local db="" mode="full"
+  local db="" mode="full" conc=""
   while [ $# -gt 0 ]; do
     case "$1" in
-      --db)   db="$2"; shift 2;;
-      --mode) mode="$2"; shift 2;;
+      --db)          db="$2"; shift 2;;
+      --mode)        mode="$2"; shift 2;;
+      --concurrency) conc="$2"; shift 2;;
       *) log "unknown migrate arg: $1"; return 2;;
     esac
   done
@@ -99,7 +100,8 @@ migrate() {
   # .venv inside the store and fail (read-only). Matches the tool's README.
   PYTHONPATH="$RES/mem0-migrate/src" uv run --no-project --with httpx \
     python -m mem0_migrate.run \
-    --db "$db" --url "$MEM0_URL" --user-id "$MEM0_USER_ID" --mode "$mode" --checkpoint "$ckpt"
+    --db "$db" --url "$MEM0_URL" --user-id "$MEM0_USER_ID" --mode "$mode" \
+    --checkpoint "$ckpt" ${conc:+--concurrency "$conc"}
 }
 
 enable() {
@@ -146,7 +148,7 @@ main() {
     migrate)            migrate "$@";;
     enable)             enable "$@";;
     bootstrap)          disable_claude_mem; enable "$@";;
-    *) echo "usage: mem0ctl {disable-claude-mem|migrate [--db PATH] [--mode smoke|full]|enable [--no-verify]|bootstrap}" >&2; return 2;;
+    *) echo "usage: mem0ctl {disable-claude-mem|migrate [--db PATH] [--mode smoke|full] [--concurrency N]|enable [--no-verify]|bootstrap}" >&2; return 2;;
   esac
 }
 main "$@"
