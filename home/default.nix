@@ -142,12 +142,6 @@ in
         '';
         target = "${homePrefix}/${user}/.curlrc";
       };
-      "asdfrc" = {
-        text = ''
-          legacy_version_file = yes
-        '';
-        target = "${homePrefix}/${user}/.asdfrc";
-      };
       "direnv-hook-personal" = {
         text = ''
           #!/usr/bin/env bash

@@ -33,14 +33,12 @@ in
           source ~/.zshenv.local
         fi
       '';
-      # initExtra = ''
-      #   source "${pkgs.asdf-vm}/share/asdf-vm/asdf.sh"
-      #   source "${pkgs.asdf-vm}/share/asdf-vm/completions/asdf.bash"
-      # '';
       initContent = ''
-        # asdf 0.16+ (Go rewrite, no asdf.sh) is configured by putting its
-        # shims dir on PATH; the `asdf` binary comes from the asdf-vm package.
-        export PATH="''${ASDF_DATA_DIR:-$HOME/.asdf}/shims:$PATH"
+        # mise (replaces asdf) — activate global shims from ~/.tool-versions.
+        # The `mise` binary comes from Homebrew (see modules/profiles/dev.nix).
+        if command -v mise >/dev/null 2>&1; then
+          eval "$(mise activate zsh)"
+        fi
         export PATH="$(brew --prefix python)/libexec/bin:$PATH"
       '';
       shellAliases = {

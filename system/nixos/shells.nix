@@ -15,8 +15,7 @@
       enable = true;
       autosuggestion.enable = true;
       # initExtra = ''
-      #   source "${pkgs.asdf-vm}/share/asdf-vm/asdf.sh"
-      #   source "${pkgs.asdf-vm}/share/asdf-vm/completions/asdf.bash"
+      #   eval "$(mise activate zsh)"
       # '';
     };
   };

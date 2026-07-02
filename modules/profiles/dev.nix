@@ -10,7 +10,6 @@
     environment.systemPackages = with pkgs; [
       github-cli
       lazygit
-      asdf-vm
       vscode
       azure-cli
       dotnet-sdk_8
@@ -22,6 +21,7 @@
 
     homebrew = {
       brews = [
+        "mise"
         "Azure/kubelogin/kubelogin"
         "opentofu"
         "derailed/k9s/k9s"
