@@ -59,7 +59,7 @@
         "nwlnexus/olympus/atlas"
         # tmux is now managed by home-manager (home/cli/tmux.nix)
         "gh"
-        "mise"
+        # mise now provided by home-manager (programs.mise) — see home/default.nix
         "pkgconf"
       ];
       casks = [

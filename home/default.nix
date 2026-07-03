@@ -184,7 +184,6 @@ in
     sessionVariables = {
       HOMEBREW_BAT = "1";
       HOMEBREW_CURLRC = "1";
-      VOLTA_FEATURE_PNPM = "1";
       GOPATH = "${homePrefix}/${user}/go";
     };
 
@@ -197,6 +196,28 @@ in
   xdg.enable = true;
   programs.home-manager.enable = true;
   programs.go.enable = true;
+
+  # mise — sole toolchain & version manager (asdf fully retired, no corepack).
+  # Owns the global mise config declaratively (was a hand-edited
+  # ~/.config/mise/config.toml); per-project versions still come from each
+  # repo's mise.toml / .tool-versions / package.json "packageManager".
+  # Activation is handled by system/darwin/shells.nix, so zsh integration is off
+  # here to avoid double-activation.
+  programs.mise = {
+    enable = true;
+    enableZshIntegration = false;
+    globalConfig = {
+      tools = {
+        node = "24.18.0";
+        pnpm = "11.9.0";
+      };
+      settings = {
+        # Read .nvmrc/.node-version (node) and package.json "packageManager"
+        # (pnpm), so mise resolves the pnpm version from packageManager — no corepack.
+        idiomatic_version_file_enable_tools = [ "node" "pnpm" ];
+      };
+    };
+  };
 
   programs.zsh = {
     initContent = ''

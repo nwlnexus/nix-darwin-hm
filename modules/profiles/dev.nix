@@ -21,7 +21,7 @@
 
     homebrew = {
       brews = [
-        "mise"
+        # mise now provided by home-manager (programs.mise) — see home/default.nix
         "Azure/kubelogin/kubelogin"
         "opentofu"
         "derailed/k9s/k9s"

@@ -34,8 +34,10 @@ in
         fi
       '';
       initContent = ''
-        # mise (replaces asdf) — activate global shims from ~/.tool-versions.
-        # The `mise` binary comes from Homebrew (see modules/profiles/dev.nix).
+        # mise (replaces asdf) — reads the home-manager-managed global config
+        # (~/.config/mise/config.toml) and per-project mise.toml / .tool-versions
+        # / package.json packageManager. Binary + global config come from
+        # home-manager (programs.mise, see home/default.nix).
         if command -v mise >/dev/null 2>&1; then
           eval "$(mise activate zsh)"
         fi
