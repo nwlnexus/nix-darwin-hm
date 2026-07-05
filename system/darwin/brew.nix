@@ -4,6 +4,13 @@
     onActivation = {
       autoUpdate = true;
       upgrade = true;
+      # Run `brew bundle --cleanup` on every rebuild: remove any tap, brew, or
+      # cask NOT declared in this config. Keeps Homebrew fully declarative and
+      # prevents stale taps (e.g. a renamed slp/krun) from lingering on disk and
+      # colliding with their replacements ("Formulae found in multiple taps").
+      # Trade-off: also removes anything installed manually with `brew install`
+      # outside Nix.
+      cleanup = "uninstall";
     };
     caskArgs = {
       fontdir = "~/Library/Fonts";
