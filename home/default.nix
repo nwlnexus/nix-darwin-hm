@@ -224,6 +224,17 @@ in
           "node"
           "pnpm"
         ];
+        # Auto-install a pinned-but-missing tool on first use (already the mise
+        # default; pinned here so a future default change can't silently disable
+        # it) — entering a repo never requires a manual `mise install`.
+        auto_install = true;
+        # Implicitly trust mise.toml under the trees I own, skipping the
+        # `mise trust` prompt there. Any other path (e.g. ~/projects/freelance,
+        # or a one-off clone elsewhere) still requires an explicit `mise trust`.
+        trusted_config_paths = [
+          "${homePrefix}/${user}/projects/work"
+          "${homePrefix}/${user}/projects/personal"
+        ];
       };
     };
   };
