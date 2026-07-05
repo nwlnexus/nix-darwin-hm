@@ -210,11 +210,20 @@ in
       tools = {
         node = "24.18.0";
         pnpm = "11.9.0";
+        # Migrated from the retired ~/.tool-versions (asdf global) so these
+        # stay globally available but declaratively. Pinned to latest.
+        bun = "1.3.14";
+        terraform = "1.15.7";
+        terraform-ls = "0.38.8";
+        packer = "1.15.4";
       };
       settings = {
         # Read .nvmrc/.node-version (node) and package.json "packageManager"
         # (pnpm), so mise resolves the pnpm version from packageManager — no corepack.
-        idiomatic_version_file_enable_tools = [ "node" "pnpm" ];
+        idiomatic_version_file_enable_tools = [
+          "node"
+          "pnpm"
+        ];
       };
     };
   };
