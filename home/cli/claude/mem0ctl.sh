@@ -11,6 +11,8 @@ CLAUDE_JSON="${CLAUDE_JSON:-$HOME/.claude.json}"
 SETTINGS="$CLAUDE_DIR/settings.json"
 INSTALLED="$CLAUDE_DIR/plugins/installed_plugins.json"
 HOOK_DEST="$CLAUDE_DIR/hooks/mem0-recall-hook.sh"
+DRAIN_DEST="$CLAUDE_DIR/hooks/mnemosyne-drain.sh"       # SessionStart (before recall)
+ENQUEUE_DEST="$CLAUDE_DIR/hooks/mnemosyne-enqueue.sh"   # SessionEnd + PreCompact
 RES="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"   # resources dir (siblings live here)
 PROC_PATTERNS='claude-mem/[^/]+/scripts/worker-service\.cjs|claude-mem/[^/]+/scripts/mcp-server\.cjs|chroma-mcp.*\.claude-mem'
 
@@ -127,6 +129,39 @@ enable() {
       ( map(select(any(.hooks[]?; (.command // "") | endswith("mem0-recall-hook.sh")) | not))
         + [ { hooks: [ { type: "command", command: $cmd, timeout: 5 } ] } ] )'
   log "wired SessionStart recall hook into settings.json"
+
+  # --- mnemosyne capture hooks (drain + enqueue) ---
+  # Install for ad-hoc (non-nix) hosts; skip files already nix-store symlinks.
+  for pair in "mnemosyne-drain.sh:$DRAIN_DEST" "mnemosyne-enqueue.sh:$ENQUEUE_DEST"; do
+    src="${pair%%:*}"; dest="${pair##*:}"
+    if [ -L "$dest" ] && readlink "$dest" | grep -q '/nix/store/'; then
+      log "$src is nix-managed — skipping copy"
+    else
+      mkdir -p "$(dirname "$dest")"
+      cp "$RES/$src" "$dest"; chmod +x "$dest"
+      log "installed $src → $dest"
+    fi
+  done
+
+  # SessionStart: prepend the drain group so it runs BEFORE recall (keyed
+  # replace-or-skip keeps it idempotent).
+  # shellcheck disable=SC2016  # $cmd is a jq variable, not a shell variable
+  jq_inplace "$SETTINGS" --arg cmd "$DRAIN_DEST" '
+    .hooks //= {} | .hooks.SessionStart //= [] |
+    .hooks.SessionStart |=
+      ( [ { hooks: [ { type: "command", command: $cmd, timeout: 10 } ] } ]
+        + map(select(any(.hooks[]?; (.command // "") | endswith("mnemosyne-drain.sh")) | not)) )'
+
+  # SessionEnd + PreCompact: append the enqueue group (keyed replace-or-skip).
+  for evt in SessionEnd PreCompact; do
+    # shellcheck disable=SC2016  # $cmd/$evt are jq variables, not shell variables
+    jq_inplace "$SETTINGS" --arg cmd "$ENQUEUE_DEST" --arg evt "$evt" '
+      .hooks //= {} | .hooks[$evt] //= [] |
+      .hooks[$evt] |=
+        ( map(select(any(.hooks[]?; (.command // "") | endswith("mnemosyne-enqueue.sh")) | not))
+          + [ { hooks: [ { type: "command", command: $cmd } ] } ] )'
+  done
+  log "wired mnemosyne drain (SessionStart) + enqueue (SessionEnd, PreCompact) into settings.json"
 
   if [ "$verify" -eq 1 ]; then
     if curl -fsS --connect-timeout 1 --max-time 2 \
