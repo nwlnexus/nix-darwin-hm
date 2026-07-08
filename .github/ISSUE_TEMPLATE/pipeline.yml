@@ -1,0 +1,44 @@
+name: Pipeline Improvement
+description: Propose a CI/CD or quality-gate improvement
+labels: ["ci"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for CI/CD changes, build optimizations, or quality-gate improvements.
+
+  - type: textarea
+    id: current-behavior
+    attributes:
+      label: Current Behavior
+      description: How does the pipeline / quality gate currently work?
+    validations:
+      required: true
+
+  - type: textarea
+    id: desired-behavior
+    attributes:
+      label: Desired Behavior
+      description: How should it work instead?
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: affected-gates
+    attributes:
+      label: Affected Quality Gates
+      description: Which gates are affected?
+      options:
+        - label: treefmt / nixfmt (just fmt)
+        - label: nix flake check
+        - label: darwin-rebuild build (aarch64-darwin / x86_64-darwin)
+        - label: nixos-rebuild build (x86_64-linux / aarch64-linux)
+        - label: nix flake update / lock
+
+  - type: textarea
+    id: performance-impact
+    attributes:
+      label: Performance Impact
+      description: Expected impact on build times, evaluation, or reliability
+    validations:
+      required: false
