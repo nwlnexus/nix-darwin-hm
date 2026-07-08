@@ -39,9 +39,10 @@
     op-secrets.inputs.nixpkgs.follows = "nixpkgs-stable";
 
     # mnemosyne memory-capture CLI (private repo via the github.com-work SSH
-    # host alias; the github: fetcher 404s on it). Build-verified against its
-    # OWN pinned nixpkgs (nodejs_24 + pnpm 11.6) — do NOT set inputs.follows.
-    mnemosyne.url = "git+ssh://git@github.com-work/nwlnexus/mnemosyne.git?ref=fix/drain-dead-queue-entries";
+    # host alias; the github: fetcher 404s on it). Tracks the default branch
+    # (main). Build-verified against its OWN pinned nixpkgs (nodejs_24 + pnpm
+    # 11.6) — do NOT set inputs.follows.
+    mnemosyne.url = "git+ssh://git@github.com-work/nwlnexus/mnemosyne.git";
   };
 
   outputs =
