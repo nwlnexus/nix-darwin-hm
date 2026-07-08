@@ -31,7 +31,12 @@ in
       ];
 
       extraSpecialArgs = {
-        inherit version user theme;
+        inherit
+          version
+          user
+          theme
+          inputs
+          ;
       };
 
       users.${user} = {

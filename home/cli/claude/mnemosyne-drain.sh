@@ -24,8 +24,16 @@ if [ -d "$OUTBOX" ]; then
   done
 fi
 
-# Kick the worker without blocking session start.
+# Kick the worker without blocking session start. Guard against a missing /
+# non-runnable CLI: if `mnemosyne` isn't on PATH the drain would fail silently,
+# so surface a visible breadcrumb to stderr (the hook transcript) instead.
+# On success, background it but tee its stderr to a log so a dead worker
+# surfaces rather than vanishing into /dev/null.
 if command -v mnemosyne >/dev/null 2>&1; then
-  nohup mnemosyne drain >/dev/null 2>&1 &
+  DRAIN_LOG="$MNEMOSYNE_HOME/drain.log"
+  mkdir -p "$MNEMOSYNE_HOME"
+  nohup mnemosyne drain >/dev/null 2>>"$DRAIN_LOG" &
+else
+  printf 'mnemosyne-drain: CLI not found on PATH — queue not drained\n' >&2
 fi
 emit

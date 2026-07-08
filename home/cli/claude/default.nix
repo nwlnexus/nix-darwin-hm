@@ -1,7 +1,21 @@
 # home/cli/claude/default.nix
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  inputs,
+  ...
+}:
 let
-  runtimeDeps = with pkgs; [ curl jq python3 uv gnugrep coreutils procps ];
+  runtimeDeps = with pkgs; [
+    curl
+    jq
+    python3
+    uv
+    gnugrep
+    coreutils
+    procps
+  ];
   mem0ctlPkg = pkgs.stdenv.mkDerivation {
     pname = "mem0ctl";
     version = "1.3.0";
@@ -32,14 +46,25 @@ let
     '';
   };
 
-  # Wrapper putting the standalone mnemosyne worker's built CLI on PATH.
-  # (Points at the repo checkout's dist; run `pnpm build` there after updates.)
-  mnemosyneBin = pkgs.writeShellScriptBin "mnemosyne" ''
-    exec ${pkgs.nodejs}/bin/node "$HOME/projects/personal/mnemosyne/dist/cli.js" "$@"
-  '';
+  # The mnemosyne CLI now comes from the nix-built `mnemosyne` flake input
+  # (no manual clone/build). Wrapped so `mem0-add.sh` is on PATH — the CLI's
+  # spawnMem0Add execs it by name at runtime.
+  mnemosynePkg = inputs.mnemosyne.packages.${pkgs.stdenv.hostPlatform.system}.default;
+  mnemosyneBin = pkgs.symlinkJoin {
+    name = "mnemosyne";
+    paths = [ mnemosynePkg ];
+    nativeBuildInputs = [ pkgs.makeWrapper ];
+    postBuild = ''
+      wrapProgram "$out/bin/mnemosyne" \
+        --prefix PATH : ${lib.makeBinPath [ mem0ctlPkg ]}
+    '';
+  };
 in
 {
-  home.packages = [ mem0ctlPkg mnemosyneBin ];
+  home.packages = [
+    mem0ctlPkg
+    mnemosyneBin
+  ];
 
   # Declarative recall hook + formatter, and the mnemosyne capture hooks
   # (store symlinks). `mem0ctl enable` wires them into settings.json.
