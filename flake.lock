@@ -240,17 +240,17 @@
         "nixpkgs": "nixpkgs_6"
       },
       "locked": {
-        "lastModified": 1783517289,
-        "narHash": "sha256-U54tHdJOY3ebSCNYzAWiyA2JFsLoWVlblvWX0Vd8Bjs=",
-        "ref": "refs/heads/main",
-        "rev": "40206a90b53f9a39d6671aab70231089f297c48e",
-        "revCount": 17,
-        "type": "git",
-        "url": "ssh://git@github.com-work/nwlnexus/mnemosyne.git"
+        "lastModified": 1783660005,
+        "narHash": "sha256-X+hru9NIpUT4BL7mfBXggHnGOAKqR4fHKkMZAxHjxgw=",
+        "owner": "nwlnexus",
+        "repo": "mnemosyne",
+        "rev": "71329bf46c1a96f46a3a7b71d633b0bc3b7e6d8b",
+        "type": "github"
       },
       "original": {
-        "type": "git",
-        "url": "ssh://git@github.com-work/nwlnexus/mnemosyne.git"
+        "owner": "nwlnexus",
+        "repo": "mnemosyne",
+        "type": "github"
       }
     },
     "nix-index": {

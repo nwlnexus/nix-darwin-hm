@@ -18,6 +18,15 @@
       warn-dirty = false;
     };
 
+    # Private-repo flake inputs (e.g. github:nwlnexus/mnemosyne) authenticate via
+    # a GitHub access token in /etc/nix/github-token.conf — root-owned 0600,
+    # materialized once per host by `just materialize-nix-github-token` (from the
+    # op-provisioned PAT in ~/projects/personal/.env). `!include` is the optional
+    # form: hosts without the file still evaluate; only private fetches 404.
+    extraOptions = ''
+      !include /etc/nix/github-token.conf
+    '';
+
     # Linux builder VM (NixOS aarch64-linux guest via Apple Virtualization).
     # Provides aarch64-linux build capability on this aarch64-darwin host —
     # needed for building Linux Nix derivations (e.g. mvm microVM images).

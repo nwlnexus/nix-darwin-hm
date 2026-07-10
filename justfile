@@ -29,3 +29,17 @@ fetch-personal-ssh-key:
     OP_SERVICE_ACCOUNT_TOKEN="$token" op read "op://Private/obvqbmo4u6fxdhrrmb6jq2li5e/public key" > ~/.ssh/id_ed25519_personal.pub
     chmod 644 ~/.ssh/id_ed25519_personal.pub
     echo "Personal SSH key placed at ~/.ssh/id_ed25519_personal"
+
+# Materialize the GitHub access token for nix's github: fetcher so ROOT evals
+# (sudo darwin-rebuild switch) can fetch private flake inputs like
+# github:nwlnexus/mnemosyne. Reads the op-provisioned PAT from
+# ~/projects/personal/.env; system/nix.nix `!include`s the resulting file.
+# Run once per host (and re-run if the PAT rotates). Requires sudo.
+materialize-nix-github-token:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    pat="$(grep -E '^GITHUB_PERSONAL_ACCESS_TOKEN=' ~/projects/personal/.env | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'")"
+    [ -n "$pat" ] || { echo "no GITHUB_PERSONAL_ACCESS_TOKEN in ~/projects/personal/.env (rebuild home-manager first)"; exit 1; }
+    printf 'access-tokens = github.com=%s\n' "$pat" | sudo tee /etc/nix/github-token.conf >/dev/null
+    sudo chmod 600 /etc/nix/github-token.conf && sudo chown root:wheel /etc/nix/github-token.conf
+    echo "Wrote /etc/nix/github-token.conf (root:wheel 0600)"

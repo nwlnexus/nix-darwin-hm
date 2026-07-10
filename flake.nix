@@ -38,11 +38,14 @@
     op-secrets.url = "github:nwlnexus/nix-op-secrets";
     op-secrets.inputs.nixpkgs.follows = "nixpkgs-stable";
 
-    # mnemosyne memory-capture CLI (private repo via the github.com-work SSH
-    # host alias; the github: fetcher 404s on it). Tracks the default branch
-    # (main). Build-verified against its OWN pinned nixpkgs (nodejs_24 + pnpm
+    # mnemosyne memory-capture CLI (private repo). Fetched via the github:
+    # fetcher + a nix access token (`just materialize-nix-github-token` writes
+    # /etc/nix/github-token.conf, included from system/nix.nix). The previous
+    # git+ssh://github.com-work URL only resolved in the *user's* ssh config, so
+    # `sudo darwin-rebuild switch` (root eval) failed on any cold fetch. Tracks
+    # main. Build-verified against its OWN pinned nixpkgs (nodejs_24 + pnpm
     # 11.6) — do NOT set inputs.follows.
-    mnemosyne.url = "git+ssh://git@github.com-work/nwlnexus/mnemosyne.git";
+    mnemosyne.url = "github:nwlnexus/mnemosyne";
   };
 
   outputs =
