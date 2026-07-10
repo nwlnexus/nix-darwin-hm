@@ -43,3 +43,11 @@ materialize-nix-github-token:
     printf 'access-tokens = github.com=%s\n' "$pat" | sudo tee /etc/nix/github-token.conf >/dev/null
     sudo chmod 600 /etc/nix/github-token.conf && sudo chown root:wheel /etc/nix/github-token.conf
     echo "Wrote /etc/nix/github-token.conf (root:wheel 0600)"
+    echo
+    echo "BOOTSTRAP NOTE: the !include of this file only lands in /etc/nix/nix.conf"
+    echo "after a successful switch, so the FIRST rebuild on this host needs the"
+    echo "token passed explicitly:"
+    echo
+    echo '  sudo NIX_CONFIG="$(sudo cat /etc/nix/github-token.conf)" darwin-rebuild switch --flake .'
+    echo
+    echo "Subsequent rebuilds need no prefix."
