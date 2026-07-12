@@ -224,6 +224,8 @@ in
         terraform = "1.15.7";
         terraform-ls = "0.38.8";
         packer = "1.15.4";
+        "npm:repomix" = "latest";
+        "npm:gitnexus" = "latest";
       };
       settings = {
         # Read .nvmrc/.node-version (node) and package.json "packageManager"

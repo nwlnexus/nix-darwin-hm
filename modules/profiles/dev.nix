@@ -7,6 +7,10 @@
 
 {
   config = lib.mkIf config.d.profiles.dev.enable {
+    d.hm = [
+      ../repomix/repomix.nix
+    ];
+
     environment.systemPackages = with pkgs; [
       github-cli
       lazygit

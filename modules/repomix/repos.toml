@@ -1,0 +1,16 @@
+[defaults]
+pack_path = ".llm/repomix.xml"
+branch    = "automation/repomix-pack"
+
+[groups.personal]
+base_dir = "~/projects/personal"
+ssh_host = "github.com"
+owner    = "nwlnexus"
+repos    = ["olympus-sdk", "olympus-gitops", "olympus-infra", "nix-darwin-hm",
+            "moneta", "nix-op-secrets", "second-brain", "olympus-tailnet", "homebrew-olympus"]
+
+[groups.work]
+base_dir = "~/projects/work"
+ssh_host = "github.com-work"
+owner    = "dtlr"
+repos    = ["marquee", "drop-app"]
