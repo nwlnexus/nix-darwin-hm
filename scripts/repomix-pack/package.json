@@ -1,0 +1,6 @@
+{
+  "name": "repomix-pack",
+  "type": "module",
+  "private": true,
+  "scripts": { "test": "bun test", "start": "bun run src/index.ts" }
+}
