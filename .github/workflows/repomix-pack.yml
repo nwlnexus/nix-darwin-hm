@@ -1,0 +1,57 @@
+name: repomix-pack
+on:
+  workflow_call:
+    inputs:
+      pack_path:
+        type: string
+        default: ".llm/repomix.xml"
+    secrets:
+      SLACK_WEBHOOK:
+        required: false
+concurrency:
+  group: repomix-pack-${{ github.repository }}
+  cancel-in-progress: true
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "24" }
+      - name: Generate pack
+        run: |
+          npx --yes repomix --style xml --output "${{ inputs.pack_path }}" \
+            --ignore ".llm/**" .
+      - name: Guarantee tracked
+        run: |
+          if git check-ignore "${{ inputs.pack_path }}" >/dev/null 2>&1; then
+            printf '\n# repomix pipeline: keep context pack tracked\n!/%s/\n' \
+              "$(dirname "${{ inputs.pack_path }}")" >> .gitignore
+          fi
+      - name: Create or update PR
+        uses: peter-evans/create-pull-request@v6
+        id: cpr
+        with:
+          branch: automation/repomix-pack
+          base: ${{ github.event.repository.default_branch }}
+          add-paths: |
+            ${{ inputs.pack_path }}
+            .gitignore
+          commit-message: "chore: refresh repomix context pack"
+          title: "chore: refresh repomix context pack"
+          body: "Automated repomix context pack refresh."
+          labels: automation
+      - name: Slack notify
+        if: steps.cpr.outputs.pull-request-operation != ''
+        env:
+          WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          URL: ${{ steps.cpr.outputs.pull-request-url }}
+          OP: ${{ steps.cpr.outputs.pull-request-operation }}
+        run: |
+          [ -z "$WEBHOOK" ] && exit 0
+          curl -sf -X POST -H 'content-type: application/json' \
+            --data "{\"text\":\"repomix pack $OP for *${{ github.repository }}* → <$URL|review PR>\"}" \
+            "$WEBHOOK"
