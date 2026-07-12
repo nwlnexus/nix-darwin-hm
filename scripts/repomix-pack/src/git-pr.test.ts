@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { commitToBranch } from "./git-pr";
+import { commitToBranch, isMissingLabelError } from "./git-pr";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -31,4 +31,11 @@ test("commits pack to deterministic branch and pushes to origin", async () => {
   expect(branches).toContain("automation/repomix-pack");
   const show = await $`git -C ${bare} show automation/repomix-pack:.llm/repomix.xml`.text();
   expect(show.trim()).toBe("PACK");
+});
+
+test("isMissingLabelError detects label-not-found gh output", () => {
+  expect(isMissingLabelError('label "automation" not found for nwlnexus/foo')).toBe(true);
+  expect(isMissingLabelError("repository not found")).toBe(true);
+  expect(isMissingLabelError("permission denied")).toBe(false);
+  expect(isMissingLabelError("HTTP 422: Validation Failed")).toBe(false);
 });
