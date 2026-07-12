@@ -225,7 +225,30 @@ in
         terraform-ls = "0.38.8";
         packer = "1.15.4";
         "npm:repomix" = "latest";
-        "npm:gitnexus" = "latest";
+        # gitnexus needs native postinstall (tree-sitter grammars, onnxruntime, etc.).
+        # mise passes --ignore-scripts=true for npm globals by default; with npm 11.16+
+        # allow_builds becomes --allow-scripts=<pkgs> so only reviewed deps run scripts.
+        "npm:gitnexus" = {
+          version = "latest";
+          allow_builds = [
+            "gitnexus"
+            "tree-sitter"
+            "tree-sitter-c-sharp"
+            "tree-sitter-cpp"
+            "tree-sitter-go"
+            "tree-sitter-java"
+            "tree-sitter-javascript"
+            "tree-sitter-php"
+            "tree-sitter-python"
+            "tree-sitter-ruby"
+            "tree-sitter-rust"
+            "tree-sitter-typescript"
+            "onnxruntime-node"
+            "@ladybugdb/core"
+            "sharp"
+            "protobufjs"
+          ];
+        };
       };
       settings = {
         # Read .nvmrc/.node-version (node) and package.json "packageManager"
