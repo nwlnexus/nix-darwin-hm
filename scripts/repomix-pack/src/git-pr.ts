@@ -1,5 +1,7 @@
 import { $ } from "bun";
 import { RepoTarget } from "./types";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join, dirname } from "node:path";
 
 export async function commitToBranch(
   dir: string,
@@ -7,10 +9,32 @@ export async function commitToBranch(
   base: string,
   files: string[],
 ): Promise<void> {
-  await $`git -C ${dir} checkout -B ${target.branch} ${base}`.quiet();
-  for (const f of files) await $`git -C ${dir} add -f ${f}`.quiet();
-  await $`git -C ${dir} -c commit.gpgsign=false -c user.email=repomix-bot@nwlnexus.io -c user.name=repomix-pipeline commit -qm ${"chore: refresh repomix context pack"}`.quiet();
-  await $`git -C ${dir} push -f origin ${target.branch}`.quiet();
+  const snapshots = new Map<string, Buffer>();
+  for (const f of files) {
+    const p = join(dir, f);
+    if (existsSync(p)) snapshots.set(f, readFileSync(p));
+  }
+  const co = await $`git -C ${dir} checkout -B ${target.branch} ${base}`.quiet().nothrow();
+  if (co.exitCode !== 0) {
+    throw new Error(`git checkout failed (${co.exitCode}): ${co.stderr.toString()}`);
+  }
+  for (const [f, content] of snapshots) {
+    const p = join(dir, f);
+    mkdirSync(dirname(p), { recursive: true });
+    writeFileSync(p, content);
+  }
+  for (const f of files) {
+    if (!existsSync(join(dir, f))) continue;
+    await $`git -C ${dir} add -f ${f}`.quiet();
+  }
+  const commit = await $`git -C ${dir} -c commit.gpgsign=false -c user.email=repomix-bot@nwlnexus.io -c user.name=repomix-pipeline commit -qm ${"chore: refresh repomix context pack"}`.quiet().nothrow();
+  if (commit.exitCode !== 0) {
+    throw new Error(`git commit failed (${commit.exitCode}): ${commit.stderr.toString()}`);
+  }
+  const push = await $`git -C ${dir} push -f origin ${target.branch}`.quiet().nothrow();
+  if (push.exitCode !== 0) {
+    throw new Error(`git push failed (${push.exitCode}): ${push.stderr.toString()}`);
+  }
 }
 
 export async function openOrUpdatePr(

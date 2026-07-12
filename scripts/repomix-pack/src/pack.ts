@@ -3,7 +3,10 @@ import { join } from "node:path";
 import { contentHash } from "./hash";
 
 export async function runPack(dir: string, configPath: string): Promise<void> {
-  await $`repomix --config ${configPath} ${dir}`.cwd(dir).quiet();
+  const res = await $`repomix --config ${configPath} .`.cwd(dir).quiet().nothrow();
+  if (res.exitCode !== 0) {
+    throw new Error(`repomix failed (${res.exitCode}): ${res.stderr.toString()}`);
+  }
 }
 
 export async function packChanged(
