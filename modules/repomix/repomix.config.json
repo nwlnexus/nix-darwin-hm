@@ -1,0 +1,13 @@
+{
+  "output": {
+    "filePath": ".llm/repomix.xml",
+    "style": "xml",
+    "removeComments": false,
+    "compress": false
+  },
+  "ignore": {
+    "useGitignore": true,
+    "useDefaultPatterns": true,
+    "customPatterns": [".llm/**"]
+  }
+}
