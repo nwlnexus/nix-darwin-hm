@@ -155,6 +155,10 @@ in
           set -a
           [ -f "${homePrefix}/${user}/projects/personal/.env" ] && . "${homePrefix}/${user}/projects/personal/.env"
           [ -f "${homePrefix}/${user}/projects/personal/.op-connect" ] && . "${homePrefix}/${user}/projects/personal/.op-connect"
+          # The gh CLI reads GH_TOKEN (it ignores GITHUB_PERSONAL_ACCESS_TOKEN). Mirror the
+          # tree-scoped PAT into GH_TOKEN so `gh` auto-selects the PERSONAL account here —
+          # process-scoped via direnv, so no global `gh auth switch` and no cross-shell clash.
+          [ -n "''${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ] && GH_TOKEN="''${GITHUB_PERSONAL_ACCESS_TOKEN}"
           set +a
         '';
         target = "${homePrefix}/${user}/projects/personal/.envrc";
@@ -172,6 +176,10 @@ in
           set -a
           [ -f "${homePrefix}/${user}/projects/work/.env" ] && . "${homePrefix}/${user}/projects/work/.env"
           [ -f "${homePrefix}/${user}/projects/work/.op-connect" ] && . "${homePrefix}/${user}/projects/work/.op-connect"
+          # The gh CLI reads GH_TOKEN (it ignores GITHUB_PERSONAL_ACCESS_TOKEN). Mirror the
+          # tree-scoped PAT into GH_TOKEN so `gh` auto-selects the WORK account here —
+          # process-scoped via direnv, so no global `gh auth switch` and no cross-shell clash.
+          [ -n "''${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ] && GH_TOKEN="''${GITHUB_PERSONAL_ACCESS_TOKEN}"
           set +a
         '';
         target = "${homePrefix}/${user}/projects/work/.envrc";
