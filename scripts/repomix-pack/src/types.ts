@@ -8,4 +8,6 @@ export interface RepoTarget {
   packPath: string;
   branch: string;
   group: string;
+  graph: boolean;
+  devClonePath: string;
 }

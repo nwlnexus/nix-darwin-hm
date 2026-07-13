@@ -43,7 +43,19 @@ export async function checkout(
       "git reset",
       $`git -C ${dir} reset --hard origin/${defaultBranch}`,
     );
-    await git("git clean", $`git -C ${dir} clean -fdx`);
+    // `-e /.gitnexus` is load-bearing. The graph storage lives INSIDE the cache
+    // checkout (`<dir>/.gitnexus`) and is untracked, so an unqualified
+    // `clean -fdx` would delete it on every sweep: the commit gate in
+    // refreshGraph would then never hit (it requires the storage's meta.json to
+    // exist), every repo would be re-analyzed from scratch every run, and the
+    // incremental index gitnexus maintains would be pointless. Everything else
+    // untracked still goes -- including the pack, which runPack regenerates.
+    //
+    // The LEADING SLASH pins the exclude to the repo root. Bare `.gitnexus` is a
+    // gitignore pattern with no slash, so it matches at ANY depth: a stray
+    // `vendor/x/.gitnexus` in some repo's tree would survive every clean too.
+    // Ours is exactly `<dir>/.gitnexus` and nothing else.
+    await git("git clean", $`git -C ${dir} clean -fdx -e /.gitnexus`);
   }
   const head = await git("git rev-parse", $`git -C ${dir} rev-parse HEAD`);
   return { dir, defaultBranch, headSha: head.stdout.trim() };
