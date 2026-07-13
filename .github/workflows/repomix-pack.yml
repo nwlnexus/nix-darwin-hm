@@ -22,9 +22,14 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: "24" }
       - name: Generate pack
+        # Pinned to match `pkgs.repomix` in modules/repomix/repomix.nix, which the
+        # local sweep uses. CI and the sweep write the SAME file (.llm/repomix.xml)
+        # and force-push the SAME branch (automation/repomix-pack). If the versions
+        # drift, each rewrites the other's pack on every run — a permanent two-way
+        # churn of duplicate PRs. Bump both together, or not at all.
         run: |
-          npx --yes repomix --style xml --output "${{ inputs.pack_path }}" \
-            --ignore ".llm/**" .
+          npx --yes repomix@1.14.0 --style xml --output "${{ inputs.pack_path }}" \
+            --ignore ".gitnexus/**" --ignore ".llm/**" .
       - name: Guarantee tracked
         run: |
           if git check-ignore "${{ inputs.pack_path }}" >/dev/null 2>&1; then
