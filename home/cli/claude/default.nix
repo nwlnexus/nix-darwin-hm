@@ -92,4 +92,16 @@ in
     PATH="${lib.makeBinPath runtimeDeps}:$PATH" \
       "${mem0ctlPkg}/bin/mem0ctl" enable --no-verify || true
   '';
+
+  # gitnexus ships its own installer; it is idempotent and non-interactive.
+  # gitnexus is a mise global (npm:gitnexus, see home/default.nix), not a
+  # nixpkgs package, so it has no nix store path and isn't on the activation
+  # script's PATH — resolve it from the mise install prefix instead.
+  # Fail-soft: a fresh host may not have the mise global installed yet.
+  home.activation.gitnexusSetup = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    GITNEXUS_BIN="${config.home.homeDirectory}/.local/share/mise/installs/npm-gitnexus/latest/bin/gitnexus"
+    if [ -x "$GITNEXUS_BIN" ]; then
+      "$GITNEXUS_BIN" setup -c claude || true
+    fi
+  '';
 }
