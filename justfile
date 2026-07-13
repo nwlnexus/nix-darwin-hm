@@ -74,3 +74,32 @@ darwin-rebuild-bootstrap:
       exit 1
     fi
     sudo NIX_CONFIG="$(sudo cat /etc/nix/github-token.conf)" darwin-rebuild switch --flake .
+
+# Materialize the nwlnexus R2 nix binary-cache substituter + credentials so
+# the nix daemon substitutes mnemosyne's CI-built closure instead of building
+# it locally. Same pattern as materialize-nix-github-token: system/nix.nix
+# `!include`s /etc/nix/r2-cache.conf, so hosts that never run this recipe are
+# unaffected. Reads from 1Password (adjust the op:// refs below if the item
+# fields are named differently). Run once per host; re-run on key rotation.
+materialize-r2-cache-creds:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    read_ref() { op read "$1" 2>/dev/null || { echo "op read failed for $1 — fix the op:// ref in this recipe to match your vault item fields" >&2; exit 1; }; }
+    account_id="$(read_ref "op://Dev/cloudflare-account-id/account-id")"
+    key_id="$(read_ref "op://Dev/cloudflare-r2-access/access-key-id")"
+    secret="$(read_ref "op://Dev/cloudflare-r2-access/secret-access-key")"
+    printf 'extra-substituters = s3://nwlnexus-nix-cache?endpoint=https://%s.r2.cloudflarestorage.com&region=auto&profile=nwlnexus-r2\n' "$account_id" \
+      | sudo tee /etc/nix/r2-cache.conf >/dev/null
+    sudo chmod 600 /etc/nix/r2-cache.conf && sudo chown root:wheel /etc/nix/r2-cache.conf
+    # nix's S3 substituter resolves credentials via the AWS SDK chain of the
+    # daemon (root). A dedicated profile keeps any root default profile intact.
+    sudo mkdir -p /var/root/.aws
+    if sudo grep -q '^\[nwlnexus-r2\]' /var/root/.aws/credentials 2>/dev/null; then
+      echo "profile [nwlnexus-r2] already present in /var/root/.aws/credentials — update it manually if rotating" >&2
+    else
+      printf '[nwlnexus-r2]\naws_access_key_id = %s\naws_secret_access_key = %s\n' "$key_id" "$secret" \
+        | sudo tee -a /var/root/.aws/credentials >/dev/null
+    fi
+    sudo chmod 600 /var/root/.aws/credentials && sudo chown root:wheel /var/root/.aws/credentials
+    echo "Wrote /etc/nix/r2-cache.conf and root AWS profile [nwlnexus-r2]."
+    echo "The !include lands in /etc/nix/nix.conf on the next darwin-rebuild switch."
