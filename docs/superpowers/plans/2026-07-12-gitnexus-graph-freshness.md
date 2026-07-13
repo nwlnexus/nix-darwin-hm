@@ -235,17 +235,17 @@ gitnexus analyze --no-stats --skip-skills --name <alias> <cache-path>
 **Files:**
 - Modify: `scripts/repomix-pack/src/index.ts`, `src/index.test.ts`
 
-- [ ] **Step 1: Wire the graph stage** into the per-repo flow, after checkout and before the PR step, so its `CLAUDE.md` edit is staged by Task 5's gate.
+- [x] **Step 1: Wire the graph stage** into the per-repo flow, after checkout and before the PR step, so its `CLAUDE.md` edit is staged by Task 5's gate.
 
-- [ ] **Step 2: Run the graph stage SERIALLY.** The pack stage keeps its bounded parallel pool; `analyze` spawns its own worker pool (`cores-1`), so concurrent analyses would thrash the machine. Serialize graph work even while packs run in parallel.
+- [x] **Step 2: Run the graph stage SERIALLY.** The pack stage keeps its bounded parallel pool; `analyze` spawns its own worker pool (`cores-1`), so concurrent analyses would thrash the machine. Serialize graph work even while packs run in parallel.
 
-- [ ] **Step 3: CLI flags.** Add `--graph-only` and `--no-graph`, composing with the existing `--group`/`--only`/`--dry-run`/`--no-pr`/`--no-notify`.
+- [x] **Step 3: CLI flags.** Add `--graph-only` and `--no-graph`, composing with the existing `--group`/`--only`/`--dry-run`/`--no-pr`/`--no-notify`.
 
-- [ ] **Step 4: Disk budget + prune.** Log total graph cache size per sweep (full coverage is projected at **~1–2 GB**; measured: `moneta` 41 MB, `olympus-sdk` 318 MB). Prune graphs + registry entries for repos no longer in `repos.toml`.
+- [x] **Step 4: Disk budget + prune.** Log total graph cache size per sweep (full coverage is projected at **~1–2 GB**; measured: `moneta` 41 MB, `olympus-sdk` 318 MB). Prune graphs + registry entries for repos no longer in `repos.toml`.
 
-- [ ] **Step 5: End-of-run summary.** Extend the existing summary table with a graph column (`analyzed | skipped | failed`) and the total cache size. Per-repo isolation is preserved: a graph failure must never abort the sweep.
+- [x] **Step 5: End-of-run summary.** Extend the existing summary table with a graph column (`analyzed | skipped | failed`) and the total cache size. Per-repo isolation is preserved: a graph failure must never abort the sweep.
 
-- [ ] **Step 6: Tests + commit.**
+- [x] **Step 6: Tests + commit.**
 
 ---
 
