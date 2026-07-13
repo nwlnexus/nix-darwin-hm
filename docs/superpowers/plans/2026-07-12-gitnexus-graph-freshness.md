@@ -254,20 +254,20 @@ gitnexus analyze --no-stats --skip-skills --name <alias> <cache-path>
 **Files:**
 - Create: `scripts/repomix-pack/src/graph.integration.test.ts`
 
-- [ ] **Step 1: Integration test** against a sandbox repo, asserting the properties the spike established:
+- [x] **Step 1: Integration test** against a sandbox repo, asserting the properties the spike established:
   1. analyze → re-anchor → `detect-changes` reads the **dev clone**, not the cache;
   2. the dev clone stays free of `.gitnexus` **and** of injected files;
   3. a **graph-only** change still opens a PR (the Task 5 regression, end-to-end);
   4. an unchanged repo no-ops — no analyze, no PR.
 
-- [ ] **Step 2: Pilot on ONE personal repo** (suggest `moneta` — already spiked, 14s/41 MB, so deviation from the known-good baseline is obvious).
+- [x] **Step 2: Pilot on ONE personal repo** (suggest `moneta` — already spiked, 14s/41 MB, so deviation from the known-good baseline is obvious).
 
 Run: `repomix-pack --only nwlnexus/moneta --graph-only`
 Expected: graph analyzed; registry `path` → `~/projects/personal/moneta`, `storagePath` → cache; **no `.gitnexus` in the dev clone**; `gitnexus query -r moneta` works from an unrelated cwd.
 
-- [ ] **Step 3: Verify against the real dev clone.** Confirm `git status` in `~/projects/personal/moneta` shows **no** new untracked/modified files from the sweep.
+- [x] **Step 3: Verify against the real dev clone.** Confirm `git status` in `~/projects/personal/moneta` shows **no** new untracked/modified files from the sweep.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
 ---
 
