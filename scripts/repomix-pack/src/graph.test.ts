@@ -26,6 +26,8 @@ import { tmpdir } from "node:os";
 
 interface Fixture {
   root: string;
+  /** Stands in for ~/.cache/repomix-pipeline: the ONLY deletable tree. */
+  cacheRoot: string;
   cachePath: string;
   devClonePath: string;
   registryPath: string;
@@ -45,7 +47,8 @@ function sh(cmd: string[], cwd: string): string {
 /** A real git repo standing in for the persistent cache checkout. */
 function makeFixture(opts: { withDevClone?: boolean } = {}): Fixture {
   const root = mkdtempSync(join(tmpdir(), "graph-"));
-  const cachePath = join(root, "cache", "acme", "widget");
+  const cacheRoot = join(root, "cache");
+  const cachePath = join(cacheRoot, "acme", "widget");
   mkdirSync(cachePath, { recursive: true });
 
   // The cache checkout carries the target repo's own mise.toml -- the exact
@@ -82,6 +85,7 @@ function makeFixture(opts: { withDevClone?: boolean } = {}): Fixture {
 
   return {
     root,
+    cacheRoot,
     cachePath,
     devClonePath,
     registryPath: join(root, "gitnexus", "registry.json"),
@@ -188,8 +192,9 @@ if (mode !== "empty-success") {
 }
 
 // Real gitnexus registers the repo at the path it analyzed, merging into any
-// existing entry (which is why the user's multi-branch \`branches\` field
-// survives a re-analyze in the real registry).
+// existing entry -- which is why the user's multi-branch \`branches\` field
+// survives a RECALL (the entry is still there to merge into) but NOT an ADOPT
+// (the entry was dropped, so this writes a fresh one and \`branches\` are gone).
 const { updateRegistry } = await import(${JSON.stringify(join(import.meta.dir, "registry.ts"))});
 await updateRegistry(
   (entries) => {
@@ -312,7 +317,7 @@ test("commit gate HIT: registry lastCommit == cache HEAD -> skipped, analyze nev
   ]);
 
   const result = await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
 
@@ -333,7 +338,7 @@ test("commit gate MISS: lastCommit differs from cache HEAD -> analyze runs", asy
   ]);
 
   const result = await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
 
@@ -347,7 +352,7 @@ test("commit gate MISS: no registry entry at all -> analyze runs", async () => {
   seedRegistry(fx, []);
 
   const result = await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
 
@@ -365,7 +370,7 @@ test("analyze is invoked with the documented flags and the checkout as a PATH AR
   seedRegistry(fx, []);
 
   await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
 
@@ -386,7 +391,7 @@ test("analyze is NEVER invoked with the cache checkout as cwd (mise trust blocke
   seedRegistry(fx, []);
 
   await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
 
@@ -407,7 +412,7 @@ test("re-anchor rewrites ALL THREE locations: registry entry, meta.json, gitnexu
   seedRegistry(fx, []);
 
   const result = await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
 
@@ -438,7 +443,7 @@ test("re-anchor preserves fields gitnexus owns but we do not model (branch/branc
     { branch: "main", indexedAt: "2026-07-07T02:11:54.001Z", lastCommit: "abc1234", stats: {} },
   ];
   await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
   const { updateRegistry } = await import("./registry");
@@ -456,7 +461,7 @@ test("re-anchor preserves fields gitnexus owns but we do not model (branch/branc
   );
 
   await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
 
@@ -472,7 +477,7 @@ test("dev clone missing on this machine -> re-anchor is SKIPPED, and that is not
   seedRegistry(fx, []);
 
   const result = await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
 
@@ -508,7 +513,7 @@ test("failed analyze DEREGISTERS the entry rather than leave a half-written grap
   ]);
 
   const result = await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
 
@@ -534,7 +539,7 @@ test("failed analyze leaves OTHER repos' entries untouched (per-repo isolation)"
   ]);
 
   const result = await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
 
@@ -551,7 +556,7 @@ test("analyze timeout -> failed + deregistered, never throws into the sweep", as
   ]);
 
   const result = await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
     timeoutMs: 300,
   });
@@ -568,7 +573,7 @@ test("a missing gitnexus binary is reported as failed, not thrown", async () => 
   seedRegistry(fx, []);
 
   const result = await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: join(fx.root, "no-such-binary"),
   });
 
@@ -597,7 +602,7 @@ test("spawn failure PRESERVES a pre-existing entry pointing at OTHER storage", a
   seedRegistry(fx, [healthy]);
 
   const result = await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: join(fx.root, "no-such-binary"), // ENOENT on spawn
   });
 
@@ -621,7 +626,7 @@ test("failed analyze still deregisters when the entry points at OUR cache storag
   ]);
 
   const result = await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
 
@@ -654,7 +659,7 @@ test("gate HIT with the entry stranded at the cache -> re-anchored anyway (renam
   ]);
 
   const result = await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
 
@@ -685,7 +690,7 @@ test("gate HIT but the cache storage was pruned -> treated as a MISS, re-analyze
   ]);
 
   const result = await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
 
@@ -710,7 +715,7 @@ test("commit gate compares SHAs by plain equality (a short SHA is a MISS, not a 
   ]);
 
   const result = await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
 
@@ -730,7 +735,7 @@ test("a manifest write failure leaves the entry fully CACHE-anchored, never half
   seedRegistry(fx, []);
 
   const result = await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
 
@@ -752,7 +757,7 @@ test("analyze exits 0 but writes no meta.json -> hard failure, not a silent no-o
   seedRegistry(fx, []);
 
   const result = await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
 
@@ -767,7 +772,7 @@ test("re-anchor preserves manifest permissions (0600, not widened to 0644)", asy
   seedRegistry(fx, []);
 
   await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
 
@@ -792,7 +797,7 @@ test("re-anchor changes only `path` -- it never asserts its own storagePath", as
   ]);
 
   const result = await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
 
@@ -836,7 +841,7 @@ test("colliding alias is ADOPTED: the entry is dropped BEFORE analyze, and analy
   seedRegistry(fx, [collidingEntry(fx)]);
 
   const result = await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
 
@@ -862,7 +867,7 @@ test("ADOPTION is registry-only: the dev clone's own index is never written or d
   const before = snapshotTree(fx.devClonePath);
 
   const result = await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
 
@@ -884,7 +889,7 @@ test("ADOPTION that then FAILS restores the original entry byte-for-byte (branch
   seedRegistry(fx, [original]);
 
   const result = await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
 
@@ -919,7 +924,7 @@ test("a failed analyze REMOVES the cache storage it may have corrupted (self-hea
   ]);
 
   const result = await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
 
@@ -942,7 +947,7 @@ test("a leftover UNREGISTERED index in the cache heals in the SAME sweep, not th
   seedRegistry(fx, []); // nothing vouches for that storage
 
   const result = await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
 
@@ -977,7 +982,7 @@ test("steady state: an entry anchored at the dev clone is RECALLED, so re-analyz
   ]);
 
   const result = await refreshGraph(fx.target, fx.cachePath, {
-    registryPath: fx.registryPath,
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
     gitnexusBin: bin,
   });
 
@@ -995,6 +1000,188 @@ test("steady state: an entry anchored at the dev clone is RECALLED, so re-analyz
   expect(entry.branches).toEqual(branches); // survived the round trip
 });
 
+// ---------------------------------------------------------------------------
+// Adoption is LOSSY, and the loss must be VISIBLE
+//
+// On the ADOPT path the old entry is dropped and gitnexus creates a fresh one,
+// so `branches` (multi-branch index registrations) are destroyed on the SUCCESS
+// path -- permanently. olympus-sdk is exactly this case: the one real entry
+// carrying `branches`, anchored at its dev clone. Carrying them forward would be
+// WORSE (they describe branch storage under the OLD storagePath; the cache's
+// `branches/` is empty, so gitnexus would believe in indexes that don't exist).
+// Dropping them is the only coherent option -- so the sweep must SAY it did.
+// ---------------------------------------------------------------------------
+
+test("ADOPT reports what the drop cost: droppedBranches + the orphaned storage path", async () => {
+  const fx = makeFixture();
+  const bin = writeMockGitnexus(fx, "success");
+  const devStorage = seedDevCloneStorage(fx);
+  const original: RegistryEntry = {
+    ...collidingEntry(fx),
+    branches: [
+      { branch: "main", lastCommit: "abc", stats: {} },
+      { branch: "release/2.x", lastCommit: "def", stats: {} },
+    ],
+  };
+  seedRegistry(fx, [original]);
+
+  const result = await refreshGraph(fx.target, fx.cachePath, {
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
+    gitnexusBin: bin,
+  });
+
+  expect(result.status).toBe("analyzed");
+  // The loss is disclosed, not silent: task 6 surfaces this in the run summary.
+  expect(result.adopted).toEqual({
+    droppedBranches: 2,
+    orphanedStorage: devStorage, // still on disk; we never delete it
+  });
+
+  // ...and it really is gone from the new entry (this is the loss being reported).
+  const entry = (await readRegistry(fx.registryPath)).find((e) => e.name === "widget")!;
+  expect(entry.branches).toBeUndefined();
+  expect(existsSync(devStorage)).toBe(true); // orphaned, not deleted
+});
+
+test("ADOPT of an entry with no branches reports droppedBranches: 0, not a missing field", async () => {
+  const fx = makeFixture();
+  const bin = writeMockGitnexus(fx, "success");
+  seedDevCloneStorage(fx);
+  const { branches, ...noBranches } = collidingEntry(fx);
+  seedRegistry(fx, [noBranches as RegistryEntry]);
+
+  const result = await refreshGraph(fx.target, fx.cachePath, {
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
+    gitnexusBin: bin,
+  });
+
+  expect(result.status).toBe("analyzed");
+  expect(result.adopted).toEqual({
+    droppedBranches: 0,
+    orphanedStorage: join(fx.devClonePath, ".gitnexus"),
+  });
+});
+
+test("RECALL and first-index report NO adoption -- nothing was dropped", async () => {
+  // RECALL merges into our own entry (branches survive), and a first index has
+  // nothing to drop. Reporting a loss on either would be a false alarm.
+  const fx = makeFixture();
+  const bin = writeMockGitnexus(fx, "success");
+  seedStorage(fx, fx.devClonePath);
+  seedRegistry(fx, [
+    {
+      name: "widget",
+      path: fx.devClonePath,
+      storagePath: join(fx.cachePath, ".gitnexus"), // ours
+      lastCommit: "0000000000000000000000000000000000000000",
+      branches: [{ branch: "main", lastCommit: "abc", stats: {} }],
+    },
+  ]);
+
+  const recalled = await refreshGraph(fx.target, fx.cachePath, {
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
+    gitnexusBin: bin,
+  });
+  expect(recalled.status).toBe("analyzed");
+  expect(recalled.adopted).toBeUndefined();
+
+  const fresh = makeFixture();
+  const freshBin = writeMockGitnexus(fresh, "success");
+  seedRegistry(fresh, []);
+  const first = await refreshGraph(fresh.target, fresh.cachePath, {
+    registryPath: fresh.registryPath, cacheRoot: fresh.cacheRoot,
+    gitnexusBin: freshBin,
+  });
+  expect(first.status).toBe("analyzed");
+  expect(first.adopted).toBeUndefined();
+});
+
+// ---------------------------------------------------------------------------
+// clearCacheStorage: the module's only rm. It runs ONLY when it must.
+// ---------------------------------------------------------------------------
+
+test("a SPAWN failure does NOT delete the cache storage -- analyze never ran", async () => {
+  // gitnexus is a mise shim and may not resolve on PATH under launchd. The
+  // process never starts, so the storage on disk is exactly what the last good
+  // run left: healthy, hundreds of MB, minutes to rebuild. A self-heal here
+  // would nuke every repo's graph on every sweep for as long as PATH is wrong.
+  const fx = makeFixture();
+  const storagePath = seedStorage(fx, fx.devClonePath);
+  seedRegistry(fx, [
+    {
+      name: "widget",
+      path: fx.devClonePath,
+      storagePath, // ours, so preflight does NOT clear it either
+      lastCommit: "0000000000000000000000000000000000000000", // gate misses
+    },
+  ]);
+
+  const result = await refreshGraph(fx.target, fx.cachePath, {
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
+    gitnexusBin: join(fx.root, "no-such-binary"), // ENOENT on spawn
+  });
+
+  expect(result.status).toBe("failed");
+  expect(existsSync(join(storagePath, "meta.json"))).toBe(true);
+  expect(readFileSync(join(storagePath, "lbug"), "utf8")).toBe("x".repeat(4096));
+});
+
+test("a real analyze failure STILL deletes the cache storage (the self-heal is intact)", async () => {
+  // The other side of the spawned gate: the process ran, so the index on disk
+  // may be partial and unregistered -- which wedges every later sweep.
+  const fx = makeFixture();
+  const bin = writeMockGitnexus(fx, "fail");
+  const storagePath = seedStorage(fx, fx.devClonePath);
+  seedRegistry(fx, [
+    {
+      name: "widget",
+      path: fx.devClonePath,
+      storagePath,
+      lastCommit: "0000000000000000000000000000000000000000",
+    },
+  ]);
+
+  const result = await refreshGraph(fx.target, fx.cachePath, {
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
+    gitnexusBin: bin,
+  });
+
+  expect(result.status).toBe("failed");
+  expect(existsSync(storagePath)).toBe(false);
+});
+
+test("a cachePath OUTSIDE the pipeline cache root is REFUSED, never rm -rf'd", async () => {
+  // The positive containment guard. Both other guards are vacuous here: the
+  // path ends in `.gitnexus` (storageDir always appends it) and it is not under
+  // THIS target's dev clone. A task-6 wiring bug handing us some other repo's
+  // path would otherwise delete that repo's real index.
+  const fx = makeFixture();
+  const bin = writeMockGitnexus(fx, "fail"); // spawns, so the self-heal would fire
+  const storagePath = seedStorage(fx, fx.devClonePath);
+  seedRegistry(fx, [
+    {
+      name: "widget",
+      path: fx.devClonePath,
+      storagePath,
+      lastCommit: "0000000000000000000000000000000000000000",
+    },
+  ]);
+
+  const result = await refreshGraph(fx.target, fx.cachePath, {
+    registryPath: fx.registryPath,
+    // The wiring bug: the cache root does not contain the path we were handed.
+    cacheRoot: join(fx.root, "some-other-cache-root"),
+    gitnexusBin: bin,
+  });
+
+  // The sweep still gets a clean failure -- a refusal never throws...
+  expect(result.status).toBe("failed");
+  expect(result.error).toBeTruthy();
+  // ...and not one byte was deleted.
+  expect(existsSync(join(storagePath, "meta.json"))).toBe(true);
+  expect(readFileSync(join(storagePath, "lbug"), "utf8")).toBe("x".repeat(4096));
+});
+
 test("target.graph === false -> skipped: no analyze, and the registry is never touched", async () => {
   const fx = makeFixture();
   const bin = writeMockGitnexus(fx, "fail");
@@ -1009,7 +1196,7 @@ test("target.graph === false -> skipped: no analyze, and the registry is never t
   const result = await refreshGraph(
     { ...fx.target, graph: false },
     fx.cachePath,
-    { registryPath: fx.registryPath, gitnexusBin: bin },
+    { registryPath: fx.registryPath, cacheRoot: fx.cacheRoot, gitnexusBin: bin },
   );
 
   expect(result.status).toBe("skipped");

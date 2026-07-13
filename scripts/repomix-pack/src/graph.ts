@@ -2,7 +2,7 @@ import { $ } from "bun";
 import { existsSync } from "node:fs";
 import { chmod, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { randomBytes } from "node:crypto";
 import { RepoTarget } from "./types";
 import {
@@ -17,6 +17,28 @@ export interface GraphResult {
   nodes?: number;
   bytes?: number;
   error?: string;
+  /**
+   * Set only when this run ADOPTED a pre-existing entry that was not ours (its
+   * storage lived somewhere else, typically the dev clone's own index).
+   *
+   * Adoption is LOSSY and the loss is permanent on the success path: the old
+   * entry is dropped so the alias is free, gitnexus then creates a FRESH entry,
+   * and any `branches` (multi-branch index registrations) the old entry carried
+   * are gone. Carrying them forward would be worse, not better: they describe
+   * branch storage under the OLD storagePath, and after adoption the entry's
+   * storage is the cache, whose `branches/` is empty -- gitnexus would believe
+   * in branch indexes that do not exist. Dropping them is the only coherent
+   * option, so the only thing left to do is SAY SO. The sweep surfaces this.
+   *
+   * (On the FAILURE path rollbackFailedAnalyze restores the entry byte-for-byte,
+   * branches included, so nothing is lost and this field is not reported.)
+   */
+  adopted?: {
+    /** How many `branches` registrations the dropped entry carried. */
+    droppedBranches: number;
+    /** The old storagePath, now orphaned on disk (we never delete it). */
+    orphanedStorage: string;
+  };
 }
 
 export interface GraphOpts {
@@ -24,6 +46,13 @@ export interface GraphOpts {
   registryPath?: string;
   /** Injectable so tests don't depend on this machine's mise install. */
   gitnexusBin?: string;
+  /**
+   * The pipeline's cache root (`~/.cache/repomix-pipeline`). This is the
+   * POSITIVE containment guard on the module's only `rm -rf`: nothing outside
+   * this tree is ever deletable, whatever `cachePath` a caller hands us.
+   * Injectable so tests can point it at a temp dir.
+   */
+  cacheRoot?: string;
   /**
    * Where to invoke gitnexus FROM. Must never be the cache checkout: the
    * checkout carries the target repo's own mise.toml, and the mise shim
@@ -36,6 +65,9 @@ export interface GraphOpts {
 }
 
 const DEFAULT_TIMEOUT_MS = 15 * 60_000;
+
+/** Mirrors index.ts's `cacheRoot`. Every deletable path lives under this tree. */
+const DEFAULT_CACHE_ROOT = join(homedir(), ".cache", "repomix-pipeline");
 
 /** Storage always stays in the cache, even after the entry is re-anchored. */
 function storageDir(cachePath: string): string {
@@ -65,20 +97,31 @@ function isAtOrUnder(child: string, parent: string): boolean {
  * that repo's graph forever -- a self-perpetuating failure, which is precisely
  * what a scheduled sweep must never have.
  *
- * Two hard guards, because this is the only rm in the module:
+ * Three hard guards, because this is the only rm in the module:
+ *  - POSITIVE containment: the target must be at or under the pipeline's cache
+ *    root. This is the one that holds when the others are vacuous -- the
+ *    `.gitnexus` check is trivially true (storageDir always appends it) and the
+ *    dev-clone check only catches THIS target's clone. A wiring bug handing us
+ *    someone else's `cachePath` -- another repo under ~/projects, say -- would
+ *    sail past both and rm -rf that repo's real index. Nothing outside the tree
+ *    this pipeline created is deletable, full stop.
  *  - the path must be a `.gitnexus` dir, and
  *  - it must NOT be at or under the dev clone. Writing anything under
  *    ~/projects/** is a hard invariant; deleting the user's real index there
  *    would be unrecoverable. (`gitnexus remove`/`clean` are off-limits for the
  *    same reason: both delete the index on disk.)
  *
- * Never throws: losing the self-heal must not cost us the sweep.
+ * Never throws: losing the self-heal must not cost us the sweep. A refusal is
+ * silent for the same reason -- the caller is always already on a path that
+ * reports the underlying analyze error.
  */
 async function clearCacheStorage(
   cachePath: string,
   devClonePath: string,
+  cacheRoot: string,
 ): Promise<void> {
   const dir = storageDir(cachePath);
+  if (!isAtOrUnder(dir, cacheRoot)) return; // must be OUR cache tree
   if (!dir.endsWith(`${"/"}.gitnexus`)) return;
   if (isAtOrUnder(dir, devClonePath)) return; // never touch the dev clone
   try {
@@ -234,6 +277,11 @@ async function rollbackFailedAnalyze(
  *    for the user to reclaim by hand. `gitnexus remove`/`clean` are off-limits
  *    precisely because both delete the index on disk.
  *
+ *    Adoption is LOSSY: gitnexus creates a FRESH entry, so any `branches` the
+ *    old one carried are gone for good on the success path. That cannot be
+ *    fixed (see GraphResult.adopted), so it is REPORTED -- this function
+ *    returns what the drop cost, and refreshGraph surfaces it on success.
+ *
  *  - RECALL (the entry is ours -- storagePath already IS the cache -- but it is
  *    anchored at the dev clone, i.e. the steady state after any previous run):
  *    point `path` back at the cache just for the analyze. gitnexus then merges
@@ -251,16 +299,17 @@ async function preflightAlias(
   cachePath: string,
   devClonePath: string,
   registryPath: string,
-): Promise<void> {
+  cacheRoot: string,
+): Promise<GraphResult["adopted"]> {
   const ours = !!existing && existing.storagePath === storageDir(cachePath);
 
   // Cache storage that no registry entry vouches for is poison to the next
   // analyze (see clearCacheStorage). Clearing it here is what lets an adoption
   // -- and a sweep following an aborted analyze -- succeed on the FIRST try
   // rather than burning a run to heal.
-  if (!ours) await clearCacheStorage(cachePath, devClonePath);
+  if (!ours) await clearCacheStorage(cachePath, devClonePath, cacheRoot);
 
-  if (!existing) return;
+  if (!existing) return undefined;
 
   await updateRegistry((entries) => {
     const idx = entries.findIndex((e) => e.name === alias);
@@ -271,6 +320,12 @@ async function preflightAlias(
     next[idx] = { ...next[idx], path: cachePath }; // RECALL
     return next;
   }, registryPath);
+
+  if (ours) return undefined;
+  return {
+    droppedBranches: Array.isArray(existing.branches) ? existing.branches.length : 0,
+    orphanedStorage: existing.storagePath,
+  };
 }
 
 /**
@@ -309,6 +364,16 @@ async function reanchor(
 
 interface RunResult {
   ok: boolean;
+  /**
+   * Did the process actually start? A spawn failure (gitnexus is a mise shim
+   * and may not resolve on PATH under launchd) means analyze NEVER RAN and the
+   * cache storage on disk is exactly as the last good run left it -- healthy,
+   * registered, and worth hundreds of MB and minutes of rebuild per repo. Only
+   * a process that really ran can have left a partial/unregistered index, so
+   * only then is the self-heal `rm` warranted. Otherwise one bad PATH would
+   * nuke every repo's graph on every sweep.
+   */
+  spawned: boolean;
   error?: string;
 }
 
@@ -327,7 +392,11 @@ async function runAnalyze(
     );
   } catch (e) {
     // e.g. binary not found / not executable
-    return { ok: false, error: `gitnexus could not be spawned: ${String(e)}` };
+    return {
+      ok: false,
+      spawned: false,
+      error: `gitnexus could not be spawned: ${String(e)}`,
+    };
   }
 
   let timedOut = false;
@@ -346,6 +415,7 @@ async function runAnalyze(
   if (timedOut) {
     return {
       ok: false,
+      spawned: true,
       error: `gitnexus analyze timed out after ${timeoutMs}ms`,
     };
   }
@@ -353,10 +423,11 @@ async function runAnalyze(
     const stderr = await new Response(proc.stderr).text();
     return {
       ok: false,
+      spawned: true,
       error: `gitnexus analyze failed (${exitCode}): ${stderr.trim() || "(no stderr)"}`,
     };
   }
-  return { ok: true };
+  return { ok: true, spawned: true };
 }
 
 /**
@@ -376,6 +447,7 @@ export async function refreshGraph(
   opts: GraphOpts = {},
 ): Promise<GraphResult> {
   const registryPath = opts.registryPath ?? DEFAULT_REGISTRY_PATH;
+  const cacheRoot = opts.cacheRoot ?? DEFAULT_CACHE_ROOT;
   const bin = opts.gitnexusBin ?? "gitnexus";
   const neutralCwd = opts.neutralCwd ?? tmpdir();
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -417,12 +489,13 @@ export async function refreshGraph(
     // --- Step 2: analyze -----------------------------------------------------
     // Free the alias first: gitnexus refuses to analyze under a name whose
     // entry points elsewhere, and every entry we own points at the dev clone.
-    await preflightAlias(
+    const adopted = await preflightAlias(
       alias,
       existing,
       cachePath,
       target.devClonePath,
       registryPath,
+      cacheRoot,
     );
 
     // NEVER cwd into cachePath: it carries the repo's own mise.toml and the
@@ -437,7 +510,13 @@ export async function refreshGraph(
       // index is incomplete and was not registered" / a leftover lbug.wal), so
       // a single failure would wedge this repo's graph FOREVER -- every later
       // sweep failing the same way. Cache-only, never a dev clone.
-      await clearCacheStorage(cachePath, target.devClonePath);
+      //
+      // ONLY if the process actually ran. A spawn failure means analyze never
+      // touched the storage, so there is nothing to heal and everything to lose
+      // (see RunResult.spawned).
+      if (run.spawned) {
+        await clearCacheStorage(cachePath, target.devClonePath, cacheRoot);
+      }
       // A corrupt-but-registered graph is worse than no graph -- but only OUR
       // storage can be corrupt. See rollbackFailedAnalyze.
       try {
@@ -456,7 +535,8 @@ export async function refreshGraph(
     // re-anchor would silently no-op and we'd report a graph that isn't built.
     if (!existsSync(metaPath(cachePath))) {
       const error = `gitnexus analyze reported success but wrote no ${metaPath(cachePath)}`;
-      await clearCacheStorage(cachePath, target.devClonePath); // same self-heal
+      // The process did run here by definition, so the self-heal applies.
+      await clearCacheStorage(cachePath, target.devClonePath, cacheRoot);
       try {
         await rollbackFailedAnalyze(alias, existing, cachePath, registryPath);
       } catch (e) {
@@ -476,7 +556,9 @@ export async function refreshGraph(
       await reanchor(alias, target.devClonePath, storagePath, registryPath);
     }
 
-    return { status: "analyzed", nodes, bytes };
+    // `adopted` rides along on SUCCESS only: on failure the entry (branches and
+    // all) was restored, so nothing was lost and there is nothing to report.
+    return { status: "analyzed", nodes, bytes, ...(adopted ? { adopted } : {}) };
   } catch (e) {
     // Hard invariant: never throw into the sweep.
     return { status: "failed", error: String(e) };
