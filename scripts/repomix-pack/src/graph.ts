@@ -81,7 +81,7 @@ function metaPath(cachePath: string): string {
 }
 
 /** Lexical containment: is `child` the same path as, or under, `parent`? */
-function isAtOrUnder(child: string, parent: string): boolean {
+export function isAtOrUnder(child: string, parent: string): boolean {
   const rel = relative(resolve(parent), resolve(child));
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
@@ -194,7 +194,8 @@ async function readNodeCount(cachePath: string): Promise<number | undefined> {
   }
 }
 
-async function dirBytes(dir: string): Promise<number> {
+/** Recursive apparent size. Missing dirs are 0, not an error. */
+export async function dirBytes(dir: string): Promise<number> {
   let total = 0;
   let entries;
   try {
