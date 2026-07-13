@@ -9,6 +9,7 @@ import {
   readFileSync,
   existsSync,
   chmodSync,
+  statSync,
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -99,12 +100,12 @@ function makeFixture(opts: { withDevClone?: boolean } = {}): Fixture {
  */
 function writeMockGitnexus(
   fx: Fixture,
-  mode: "success" | "fail" | "hang",
+  mode: "success" | "fail" | "hang" | "empty-success" | "readonly-storage",
   nodes = 5,
 ): string {
   const binPath = join(fx.root, "gitnexus-mock");
   const script = `#!/usr/bin/env bun
-import { mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const argv = process.argv.slice(2);
@@ -126,7 +127,7 @@ const repoPath = argv[argv.length - 1];
 const nameIdx = argv.indexOf("--name");
 const alias = argv[nameIdx + 1];
 const storagePath = join(repoPath, ".gitnexus");
-mkdirSync(storagePath, { recursive: true });
+if (mode !== "empty-success") mkdirSync(storagePath, { recursive: true });
 
 const meta = {
   repoPath,
@@ -136,10 +137,14 @@ const meta = {
   stats: { files: 2, nodes: ${nodes}, edges: 5, communities: 1, processes: 0, embeddings: 0 },
   schemaVersion: 5,
 };
-writeFileSync(join(storagePath, "meta.json"), JSON.stringify(meta, null, 2));
-writeFileSync(join(storagePath, "gitnexus.json"), JSON.stringify(meta, null, 2));
-// Stand in for the LadybugDB payload so the byte count is non-trivial.
-writeFileSync(join(storagePath, "lbug"), "x".repeat(4096));
+if (mode !== "empty-success") {
+  for (const f of ["meta.json", "gitnexus.json"]) {
+    writeFileSync(join(storagePath, f), JSON.stringify(meta, null, 2));
+    chmodSync(join(storagePath, f), 0o600); // real gitnexus writes these 0600
+  }
+  // Stand in for the LadybugDB payload so the byte count is non-trivial.
+  writeFileSync(join(storagePath, "lbug"), "x".repeat(4096));
+}
 
 // Real gitnexus registers the repo at the path it analyzed, merging into any
 // existing entry (which is why the user's multi-branch \`branches\` field
@@ -164,6 +169,12 @@ await updateRegistry(
   },
   ${JSON.stringify(fx.registryPath)},
 );
+
+if (mode === "readonly-storage") {
+  // Storage the process can no longer write into: the manifest rewrite will
+  // blow up with EACCES partway through the re-anchor.
+  chmodSync(storagePath, 0o500);
+}
 `;
   writeFileSync(binPath, script);
   chmodSync(binPath, 0o755);
@@ -173,6 +184,33 @@ await updateRegistry(
 function seedRegistry(fx: Fixture, entries: RegistryEntry[]): void {
   mkdirSync(join(fx.root, "gitnexus"), { recursive: true });
   writeFileSync(fx.registryPath, JSON.stringify(entries, null, 2));
+}
+
+/**
+ * Stand in for storage a PREVIOUS run left in the cache. A registry entry whose
+ * lastCommit matches HEAD is only an honest gate hit if the storage it points
+ * at is actually on disk.
+ */
+function seedStorage(fx: Fixture, repoPath: string, nodes = 5): string {
+  const storagePath = join(fx.cachePath, ".gitnexus");
+  mkdirSync(storagePath, { recursive: true });
+  const meta = {
+    repoPath,
+    lastCommit: fx.headSha,
+    branch: "main",
+    stats: { files: 2, nodes, edges: 5 },
+    schemaVersion: 5,
+  };
+  for (const f of ["meta.json", "gitnexus.json"]) {
+    writeFileSync(join(storagePath, f), JSON.stringify(meta, null, 2), { mode: 0o600 });
+    chmodSync(join(storagePath, f), 0o600);
+  }
+  writeFileSync(join(storagePath, "lbug"), "x".repeat(4096));
+  return storagePath;
+}
+
+function modeOf(path: string): string {
+  return (statSync(path).mode & 0o777).toString(8);
 }
 
 function readJson(path: string): any {
@@ -190,6 +228,8 @@ function invocation(fx: Fixture): { argv: string[]; cwd: string } | null {
 test("commit gate HIT: registry lastCommit == cache HEAD -> skipped, analyze never runs", async () => {
   const fx = makeFixture();
   const bin = writeMockGitnexus(fx, "success");
+  // A gate hit is only honest if the storage a previous run built is still there.
+  seedStorage(fx, fx.devClonePath);
   seedRegistry(fx, [
     {
       name: "widget",
@@ -462,4 +502,256 @@ test("a missing gitnexus binary is reported as failed, not thrown", async () => 
 
   expect(result.status).toBe("failed");
   expect(result.error).toBeTruthy();
+});
+
+// ---------------------------------------------------------------------------
+// Step 4 (regression): a failure must never delete storage this run never opened
+// ---------------------------------------------------------------------------
+
+test("spawn failure PRESERVES a pre-existing entry pointing at OTHER storage", async () => {
+  // The production failure mode: gitnexus is a mise shim and doesn't resolve on
+  // PATH under launchd -> spawn throws ENOENT -> analyze never ran and touched
+  // nothing. Deleting the entry here would orphan hundreds of MB of storage the
+  // user's real graph depends on, with no backup.
+  const fx = makeFixture();
+  const healthy: RegistryEntry = {
+    name: "widget", // same name we sweep -- this is the whole trap
+    path: fx.devClonePath,
+    storagePath: join(fx.root, "elsewhere", ".gitnexus"), // NOT our cache storage
+    lastCommit: "0000000000000000000000000000000000000000",
+    branch: "main",
+    branches: [{ branch: "main", lastCommit: "abc", stats: {} }],
+  };
+  seedRegistry(fx, [healthy]);
+
+  const result = await refreshGraph(fx.target, fx.cachePath, {
+    registryPath: fx.registryPath,
+    gitnexusBin: join(fx.root, "no-such-binary"), // ENOENT on spawn
+  });
+
+  expect(result.status).toBe("failed");
+
+  const entries = await readRegistry(fx.registryPath);
+  expect(entries).toEqual([healthy]); // untouched, branches and all
+});
+
+test("failed analyze still deregisters when the entry points at OUR cache storage", async () => {
+  // Same-storage case: this run really could have half-written that LadybugDB.
+  const fx = makeFixture();
+  const bin = writeMockGitnexus(fx, "fail");
+  seedRegistry(fx, [
+    {
+      name: "widget",
+      path: fx.devClonePath,
+      storagePath: join(fx.cachePath, ".gitnexus"),
+      lastCommit: "0000000000000000000000000000000000000000",
+    },
+  ]);
+
+  const result = await refreshGraph(fx.target, fx.cachePath, {
+    registryPath: fx.registryPath,
+    gitnexusBin: bin,
+  });
+
+  expect(result.status).toBe("failed");
+  const entries = await readRegistry(fx.registryPath);
+  expect(entries.find((e) => e.name === "widget")).toBeUndefined();
+});
+
+// ---------------------------------------------------------------------------
+// Step 1 (regression): the gate skips the ANALYZE, not the RE-ANCHOR
+// ---------------------------------------------------------------------------
+
+test("gate HIT with the entry stranded at the cache -> re-anchored anyway (rename safety)", async () => {
+  // Run 1 happened with no dev clone on this machine, so the entry is anchored
+  // at the cache. The user has since cloned the repo. HEAD hasn't moved, so a
+  // gate that skipped everything would leave path=<cache> forever -- and
+  // gitnexus's `rename` would write the user's refactor into the cache
+  // checkout, where checkout()'s `reset --hard` silently destroys it.
+  const fx = makeFixture();
+  const bin = writeMockGitnexus(fx, "success");
+  const storagePath = seedStorage(fx, fx.cachePath);
+  seedRegistry(fx, [
+    {
+      name: "widget",
+      path: fx.cachePath, // stranded
+      storagePath,
+      lastCommit: fx.headSha,
+      branches: [{ branch: "main", lastCommit: fx.headSha, stats: {} }],
+    },
+  ]);
+
+  const result = await refreshGraph(fx.target, fx.cachePath, {
+    registryPath: fx.registryPath,
+    gitnexusBin: bin,
+  });
+
+  expect(result.status).toBe("skipped");
+  expect(invocation(fx)).toBeNull(); // the expensive part still never ran
+
+  const entry = (await readRegistry(fx.registryPath)).find((e) => e.name === "widget")!;
+  expect(entry.path).toBe(fx.devClonePath); // re-anchored
+  expect(entry.storagePath).toBe(storagePath); // storage stays in the cache
+  expect(entry.branches).toHaveLength(1); // fields we don't model survive
+  expect(readJson(join(storagePath, "meta.json")).repoPath).toBe(fx.devClonePath);
+  expect(readJson(join(storagePath, "gitnexus.json")).repoPath).toBe(fx.devClonePath);
+});
+
+test("gate HIT but the cache storage was pruned -> treated as a MISS, re-analyzes", async () => {
+  // User cleared ~/.cache/repomix-pipeline to reclaim space. The entry survives
+  // with a matching lastCommit, so a naive gate hits forever while storagePath
+  // points at a deleted dir: the graph is dead and never rebuilds.
+  const fx = makeFixture();
+  const bin = writeMockGitnexus(fx, "success");
+  seedRegistry(fx, [
+    {
+      name: "widget",
+      path: fx.devClonePath,
+      storagePath: join(fx.cachePath, ".gitnexus"), // nothing on disk there
+      lastCommit: fx.headSha,
+    },
+  ]);
+
+  const result = await refreshGraph(fx.target, fx.cachePath, {
+    registryPath: fx.registryPath,
+    gitnexusBin: bin,
+  });
+
+  expect(result.status).toBe("analyzed");
+  expect(invocation(fx)).not.toBeNull();
+  expect(existsSync(join(fx.cachePath, ".gitnexus", "meta.json"))).toBe(true);
+});
+
+test("commit gate compares SHAs by plain equality (a short SHA is a MISS, not a skip)", async () => {
+  // A false skip silently serves a stale graph; a false miss costs one
+  // re-analyze. Never trade the cheap failure for the silent one.
+  const fx = makeFixture();
+  const bin = writeMockGitnexus(fx, "success");
+  seedStorage(fx, fx.devClonePath);
+  seedRegistry(fx, [
+    {
+      name: "widget",
+      path: fx.devClonePath,
+      storagePath: join(fx.cachePath, ".gitnexus"),
+      lastCommit: fx.headSha.slice(0, 7),
+    },
+  ]);
+
+  const result = await refreshGraph(fx.target, fx.cachePath, {
+    registryPath: fx.registryPath,
+    gitnexusBin: bin,
+  });
+
+  expect(result.status).toBe("analyzed");
+  expect(invocation(fx)).not.toBeNull();
+});
+
+// ---------------------------------------------------------------------------
+// Step 3 (regression): write order, post-condition, permissions, storagePath
+// ---------------------------------------------------------------------------
+
+test("a manifest write failure leaves the entry fully CACHE-anchored, never half-anchored", async () => {
+  // The registry is the single commit point: manifests are written first, so a
+  // throw mid-re-anchor can never leave registry=devClone / meta=cache.
+  const fx = makeFixture();
+  const bin = writeMockGitnexus(fx, "readonly-storage");
+  seedRegistry(fx, []);
+
+  const result = await refreshGraph(fx.target, fx.cachePath, {
+    registryPath: fx.registryPath,
+    gitnexusBin: bin,
+  });
+
+  const storagePath = join(fx.cachePath, ".gitnexus");
+  chmodSync(storagePath, 0o700); // so the temp dir can be cleaned up
+
+  expect(result.status).toBe("failed");
+
+  const entry = (await readRegistry(fx.registryPath)).find((e) => e.name === "widget")!;
+  expect(entry.path).toBe(fx.cachePath); // coherent: cache-anchored, like a missing dev clone
+  expect(readJson(join(storagePath, "meta.json")).repoPath).toBe(fx.cachePath);
+});
+
+test("analyze exits 0 but writes no meta.json -> hard failure, not a silent no-op", async () => {
+  // rewriteRepoPath tolerates missing manifests, so without a post-condition we
+  // would report a built graph that isn't there.
+  const fx = makeFixture();
+  const bin = writeMockGitnexus(fx, "empty-success");
+  seedRegistry(fx, []);
+
+  const result = await refreshGraph(fx.target, fx.cachePath, {
+    registryPath: fx.registryPath,
+    gitnexusBin: bin,
+  });
+
+  expect(result.status).toBe("failed");
+  expect(result.error).toMatch(/meta\.json/);
+});
+
+test("re-anchor preserves manifest permissions (0600, not widened to 0644)", async () => {
+  // meta.json/gitnexus.json carry fileHashes and full path listings.
+  const fx = makeFixture();
+  const bin = writeMockGitnexus(fx, "success");
+  seedRegistry(fx, []);
+
+  await refreshGraph(fx.target, fx.cachePath, {
+    registryPath: fx.registryPath,
+    gitnexusBin: bin,
+  });
+
+  const storagePath = join(fx.cachePath, ".gitnexus");
+  expect(modeOf(join(storagePath, "meta.json"))).toBe("600");
+  expect(modeOf(join(storagePath, "gitnexus.json"))).toBe("600");
+});
+
+test("re-anchor changes only `path` -- it never asserts its own storagePath", async () => {
+  // storagePath is gitnexus's field: post-analyze it already IS the cache, so
+  // writing our assumption over it can only ever be wrong.
+  const fx = makeFixture();
+  const bin = writeMockGitnexus(fx, "success");
+  seedStorage(fx, fx.cachePath);
+  seedRegistry(fx, [
+    {
+      name: "widget",
+      path: fx.cachePath,
+      storagePath: "/custom/store", // gitnexus's value, whatever it is
+      lastCommit: fx.headSha,
+    },
+  ]);
+
+  const result = await refreshGraph(fx.target, fx.cachePath, {
+    registryPath: fx.registryPath,
+    gitnexusBin: bin,
+  });
+
+  expect(result.status).toBe("skipped");
+  const after = (await readRegistry(fx.registryPath)).find((e) => e.name === "widget")!;
+  expect(after.path).toBe(fx.devClonePath); // re-anchored
+  expect(after.storagePath).toBe("/custom/store"); // preserved, not asserted
+});
+
+// ---------------------------------------------------------------------------
+// target.graph opt-out
+// ---------------------------------------------------------------------------
+
+test("target.graph === false -> skipped: no analyze, and the registry is never touched", async () => {
+  const fx = makeFixture();
+  const bin = writeMockGitnexus(fx, "fail");
+  const entry: RegistryEntry = {
+    name: "widget",
+    path: fx.devClonePath,
+    storagePath: join(fx.cachePath, ".gitnexus"),
+    lastCommit: "0000000000000000000000000000000000000000",
+  };
+  seedRegistry(fx, [entry]);
+
+  const result = await refreshGraph(
+    { ...fx.target, graph: false },
+    fx.cachePath,
+    { registryPath: fx.registryPath, gitnexusBin: bin },
+  );
+
+  expect(result.status).toBe("skipped");
+  expect(invocation(fx)).toBeNull();
+  expect(await readRegistry(fx.registryPath)).toEqual([entry]);
 });

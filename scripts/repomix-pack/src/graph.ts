@@ -1,11 +1,16 @@
 import { $ } from "bun";
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomBytes } from "node:crypto";
 import { RepoTarget } from "./types";
-import { DEFAULT_REGISTRY_PATH, readRegistry, updateRegistry } from "./registry";
+import {
+  DEFAULT_REGISTRY_PATH,
+  readRegistry,
+  updateRegistry,
+  type RegistryEntry,
+} from "./registry";
 
 export interface GraphResult {
   status: "analyzed" | "skipped" | "failed";
@@ -37,18 +42,21 @@ function storageDir(cachePath: string): string {
   return join(cachePath, ".gitnexus");
 }
 
+/** The manifest gitnexus writes on a successful analyze; its presence is our
+ * proof that the cache storage actually exists on disk. */
+function metaPath(cachePath: string): string {
+  return join(storageDir(cachePath), "meta.json");
+}
+
 /**
- * gitnexus has written full SHAs in every entry we've seen, but its own docs
- * show short SHAs. Treat a prefix match as the same commit so a short-SHA entry
- * doesn't force a pointless 14s+ re-analyze.
+ * Plain equality. Every entry gitnexus writes carries a full 40-char SHA, so a
+ * prefix-tolerant compare solves a non-problem and the cost asymmetry is wrong:
+ * a false miss costs one re-analyze, a false skip silently serves a stale graph
+ * forever.
  */
 function sameCommit(a: string | undefined, b: string | undefined): boolean {
   if (!a || !b) return false;
-  const x = a.trim().toLowerCase();
-  const y = b.trim().toLowerCase();
-  if (x.length < 7 || y.length < 7) return false;
-  const n = Math.min(x.length, y.length);
-  return x.slice(0, n) === y.slice(0, n);
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
 
 /** HEAD of the cache checkout, which checkout() has reset --hard to origin. */
@@ -62,9 +70,16 @@ async function cacheHead(cachePath: string): Promise<string> {
   return res.stdout.toString().trim();
 }
 
+/**
+ * rename(2) replaces the target inode, so the temp file's mode becomes the
+ * manifest's mode. Real meta.json/gitnexus.json are 0600 and carry fileHashes
+ * and full path listings -- a default-mode temp file would silently widen them
+ * to 0644.
+ */
 async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
   const tmpPath = join(dirname(path), `.${randomBytes(6).toString("hex")}.tmp`);
-  await writeFile(tmpPath, JSON.stringify(value, null, 2));
+  await writeFile(tmpPath, JSON.stringify(value, null, 2), { mode: 0o600 });
+  await chmod(tmpPath, 0o600); // umask can't widen it, but be explicit
   await rename(tmpPath, path);
 }
 
@@ -85,10 +100,10 @@ async function rewriteRepoPath(
 }
 
 async function readNodeCount(cachePath: string): Promise<number | undefined> {
-  const metaPath = join(storageDir(cachePath), "meta.json");
-  if (!existsSync(metaPath)) return undefined;
+  const p = metaPath(cachePath);
+  if (!existsSync(p)) return undefined;
   try {
-    const meta = JSON.parse(await readFile(metaPath, "utf8"));
+    const meta = JSON.parse(await readFile(p, "utf8"));
     const nodes = meta?.stats?.nodes;
     return typeof nodes === "number" ? nodes : undefined;
   } catch {
@@ -119,12 +134,70 @@ async function dirBytes(dir: string): Promise<number> {
   return total;
 }
 
-/** Drop the entry so a half-written LadybugDB is never left registered. */
-async function deregister(alias: string, registryPath: string): Promise<void> {
-  await updateRegistry(
-    (entries) => entries.filter((e) => e.name !== alias),
-    registryPath,
-  );
+/**
+ * Undo whatever THIS run did to the registry after a failed analyze.
+ *
+ * Drop the entry only if this run could have corrupted the storage it points
+ * at -- i.e. the pre-analyze entry already pointed at the storage dir we were
+ * about to write (`<cachePath>/.gitnexus`), or there was no pre-analyze entry
+ * at all (so anything present now was created by this run's analyze).
+ *
+ * A pre-existing entry pointing at DIFFERENT storage was never opened by this
+ * run: a spawn failure (gitnexus is a mise shim and may not resolve on PATH
+ * under launchd) must not delete a healthy entry and orphan its storage. It is
+ * restored exactly as it was found.
+ */
+async function rollbackFailedAnalyze(
+  alias: string,
+  existing: RegistryEntry | undefined,
+  cachePath: string,
+  registryPath: string,
+): Promise<void> {
+  const ours = !!existing && existing.storagePath === storageDir(cachePath);
+  await updateRegistry((entries) => {
+    if (existing && !ours) {
+      const idx = entries.findIndex((e) => e.name === alias);
+      if (idx === -1) return [...entries, existing];
+      const next = [...entries];
+      next[idx] = existing; // restore the untouched pre-existing entry
+      return next;
+    }
+    return entries.filter((e) => e.name !== alias);
+  }, registryPath);
+}
+
+/**
+ * Point the entry + both storage manifests at the dev clone.
+ *
+ * Write order matters: the manifests go FIRST and `updateRegistry` LAST, as the
+ * single commit point. A manifest write that throws then leaves a coherent,
+ * fully-cache-anchored entry -- exactly the "dev clone missing" state we already
+ * treat as fine -- instead of a half-anchored registry/manifest split.
+ *
+ * `storagePath` is deliberately NOT asserted: it is gitnexus's field and is
+ * already correct post-analyze. Only `path` changes.
+ */
+async function reanchor(
+  alias: string,
+  devClonePath: string,
+  storagePath: string,
+  registryPath: string,
+): Promise<void> {
+  await rewriteRepoPath(join(storagePath, "meta.json"), devClonePath);
+  await rewriteRepoPath(join(storagePath, "gitnexus.json"), devClonePath);
+
+  await updateRegistry((entries) => {
+    const idx = entries.findIndex((e) => e.name === alias);
+    if (idx === -1) {
+      // analyze should have registered it; upsert so we never silently leave
+      // the graph unregistered.
+      return [...entries, { name: alias, path: devClonePath, storagePath }];
+    }
+    const next = [...entries];
+    // Spread preserves branch/branches and anything else gitnexus owns.
+    next[idx] = { ...next[idx], path: devClonePath };
+    return next;
+  }, registryPath);
 }
 
 interface RunResult {
@@ -200,13 +273,37 @@ export async function refreshGraph(
   const neutralCwd = opts.neutralCwd ?? tmpdir();
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const alias = target.name;
+  const storagePath = storageDir(cachePath);
+
+  // Defense in depth: the caller gates on this too, but a forgotten gate here
+  // would let a failure path touch the registry entry of a repo the user
+  // explicitly opted out of.
+  if (!target.graph) return { status: "skipped" };
 
   try {
     // --- Step 1: commit gate -------------------------------------------------
     const head = await cacheHead(cachePath);
     const before = await readRegistry(registryPath);
     const existing = before.find((e) => e.name === alias);
-    if (existing && sameCommit(existing.lastCommit, head)) {
+
+    // The gate skips the ANALYZE, not the re-anchor. Guarding on the cache
+    // storage actually existing closes two false skips at once:
+    //  - storage pruned (user cleared the cache dir): no meta.json -> treat the
+    //    gate as a MISS and rebuild, instead of skipping forever with a
+    //    storagePath pointing at a deleted dir.
+    //  - anchor drift: entry still anchored at the cache because the dev clone
+    //    was absent on an earlier run. HEAD hasn't moved, so a plain gate hit
+    //    would never re-anchor -- and gitnexus's `rename` would then write the
+    //    user's refactor into the cache checkout, where checkout()'s
+    //    `reset --hard` silently destroys it.
+    if (
+      existing &&
+      sameCommit(existing.lastCommit, head) &&
+      existsSync(metaPath(cachePath))
+    ) {
+      if (existsSync(target.devClonePath)) {
+        await reanchor(alias, target.devClonePath, storagePath, registryPath);
+      }
       return { status: "skipped" };
     }
 
@@ -218,20 +315,33 @@ export async function refreshGraph(
 
     // --- Step 4: failure handling -------------------------------------------
     if (!run.ok) {
-      // A corrupt-but-registered graph is worse than no graph.
+      // A corrupt-but-registered graph is worse than no graph -- but only OUR
+      // storage can be corrupt. See rollbackFailedAnalyze.
       try {
-        await deregister(alias, registryPath);
+        await rollbackFailedAnalyze(alias, existing, cachePath, registryPath);
       } catch (e) {
         return {
           status: "failed",
-          error: `${run.error} (and deregistration failed: ${String(e)})`,
+          error: `${run.error} (and registry rollback failed: ${String(e)})`,
         };
       }
       return { status: "failed", error: run.error };
     }
 
+    // A "successful" analyze that left no meta.json means the storage is not
+    // there. rewriteRepoPath tolerates missing manifests, so without this the
+    // re-anchor would silently no-op and we'd report a graph that isn't built.
+    if (!existsSync(metaPath(cachePath))) {
+      const error = `gitnexus analyze reported success but wrote no ${metaPath(cachePath)}`;
+      try {
+        await rollbackFailedAnalyze(alias, existing, cachePath, registryPath);
+      } catch (e) {
+        return { status: "failed", error: `${error} (and registry rollback failed: ${String(e)})` };
+      }
+      return { status: "failed", error };
+    }
+
     // --- Step 3: re-anchor ---------------------------------------------------
-    const storagePath = storageDir(cachePath);
     const nodes = await readNodeCount(cachePath);
     const bytes = await dirBytes(storagePath);
 
@@ -239,24 +349,7 @@ export async function refreshGraph(
     // cache. Not an error: the graph stays queryable, only the working-tree
     // tools are moot.
     if (existsSync(target.devClonePath)) {
-      await updateRegistry((entries) => {
-        const idx = entries.findIndex((e) => e.name === alias);
-        if (idx === -1) {
-          // analyze should have registered it; upsert so we never silently
-          // leave the graph unregistered.
-          return [
-            ...entries,
-            { name: alias, path: target.devClonePath, storagePath },
-          ];
-        }
-        const next = [...entries];
-        // Spread preserves branch/branches and anything else gitnexus owns.
-        next[idx] = { ...next[idx], path: target.devClonePath, storagePath };
-        return next;
-      }, registryPath);
-
-      await rewriteRepoPath(join(storagePath, "meta.json"), target.devClonePath);
-      await rewriteRepoPath(join(storagePath, "gitnexus.json"), target.devClonePath);
+      await reanchor(alias, target.devClonePath, storagePath, registryPath);
     }
 
     return { status: "analyzed", nodes, bytes };
