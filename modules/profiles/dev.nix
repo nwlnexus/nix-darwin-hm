@@ -9,6 +9,7 @@
   config = lib.mkIf config.d.profiles.dev.enable {
     d.hm = [
       ../repomix/repomix.nix
+      ../memory-watchdog/memory-watchdog.nix
     ];
 
     environment.systemPackages = with pkgs; [
