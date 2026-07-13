@@ -4,12 +4,26 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { withGhTokenForGroup } from "./auth";
 
+/**
+ * Stage `files` onto the deterministic automation branch (branched fresh off
+ * `base`) and, IFF the staged tree differs from `base`, commit and push.
+ *
+ * The gate is "any staged diff against base" — not any single file's content
+ * hash. This is what lets a graph-only change (e.g. gitnexus rewriting
+ * CLAUDE.md/AGENTS.md) produce a commit/PR even when the repomix pack itself
+ * is byte-identical to what's already on `base`. Missing files (a repo with
+ * no CLAUDE.md/AGENTS.md) are simply skipped, not an error.
+ *
+ * Returns `{ committed: false }` when nothing changed — callers must treat
+ * that as a no-op: no push happened, so there's nothing to open/update a PR
+ * for and nothing to notify about.
+ */
 export async function commitToBranch(
   dir: string,
   target: RepoTarget,
   base: string,
   files: string[],
-): Promise<void> {
+): Promise<{ committed: boolean }> {
   const snapshots = new Map<string, Buffer>();
   for (const f of files) {
     const p = join(dir, f);
@@ -28,6 +42,10 @@ export async function commitToBranch(
     if (!existsSync(join(dir, f))) continue;
     await $`git -C ${dir} add -f ${f}`.quiet();
   }
+  const diff = await $`git -C ${dir} diff --cached --quiet`.quiet().nothrow();
+  if (diff.exitCode === 0) {
+    return { committed: false };
+  }
   const commit = await $`git -C ${dir} -c commit.gpgsign=false -c user.email=repomix-bot@nwlnexus.io -c user.name=repomix-pipeline commit -qm ${"chore: refresh repomix context pack"}`.quiet().nothrow();
   if (commit.exitCode !== 0) {
     throw new Error(`git commit failed (${commit.exitCode}): ${commit.stderr.toString()}`);
@@ -36,6 +54,7 @@ export async function commitToBranch(
   if (push.exitCode !== 0) {
     throw new Error(`git push failed (${push.exitCode}): ${push.stderr.toString()}`);
   }
+  return { committed: true };
 }
 
 export function isMissingLabelError(output: string): boolean {

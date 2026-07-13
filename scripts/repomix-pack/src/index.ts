@@ -43,22 +43,33 @@ export async function run(opts: RunOpts): Promise<RunSummary> {
         if (opts.originOverride?.[t.slug]) t.originUrl = opts.originOverride[t.slug];
         const { dir, defaultBranch, headSha } = await checkout(t, opts.cacheRoot);
         await runPack(dir, opts.configPath);
+        // `gate` still tells us whether the pack itself changed, which drives
+        // the brain-staging sink and the PR body's byte count. It is NOT the
+        // PR gate anymore — see commitToBranch, which gates on any staged
+        // diff against base (pack, .gitignore, CLAUDE.md, AGENTS.md), so a
+        // graph-only refresh (pack unchanged) still produces a PR.
         const gate = await packChanged(dir, t.packPath);
-        if (!gate.changed) { summary.skipped.push(t.slug); continue; }
 
-        const packBytes = new Uint8Array(
-          await Bun.file(join(dir, t.packPath)).arrayBuffer(),
-        );
-        const meta: RepoMeta = {
-          slug: t.slug, owner: t.owner, name: t.name, commit: headSha,
-          hash: gate.newHash, bytes: gate.bytes, ts: new Date().toISOString(),
-        };
-        await sink.write(packBytes, meta);
+        if (gate.changed) {
+          const packBytes = new Uint8Array(
+            await Bun.file(join(dir, t.packPath)).arrayBuffer(),
+          );
+          const meta: RepoMeta = {
+            slug: t.slug, owner: t.owner, name: t.name, commit: headSha,
+            hash: gate.newHash, bytes: gate.bytes, ts: new Date().toISOString(),
+          };
+          await sink.write(packBytes, meta);
+        }
 
+        let committed = false;
         if (!opts.brainOnly && !opts.dryRun) {
           await ensureTracked(dir, t.packPath);
-          await commitToBranch(dir, t, defaultBranch, [t.packPath, ".gitignore"]);
-          if (!opts.noPr) {
+          const result = await commitToBranch(
+            dir, t, defaultBranch,
+            [t.packPath, ".gitignore", "CLAUDE.md", "AGENTS.md"],
+          );
+          committed = result.committed;
+          if (committed && !opts.noPr) {
             const pr = await openOrUpdatePr(
               t, defaultBranch, "chore: refresh repomix context pack",
               `Automated repomix context pack refresh.\n\nCloses the paired tracking sub-issue.\nPack: \`${t.packPath}\` (${gate.bytes} bytes).`,
@@ -70,7 +81,12 @@ export async function run(opts: RunOpts): Promise<RunSummary> {
             }));
           }
         }
-        summary.succeeded.push(t.slug);
+
+        if (!gate.changed && !committed) {
+          summary.skipped.push(t.slug);
+        } else {
+          summary.succeeded.push(t.slug);
+        }
       } catch (e) {
         summary.failed.push({ slug: t.slug, error: String(e) });
       }
