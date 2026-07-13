@@ -11,6 +11,7 @@ in
     ./iterm2.nix
     ./finder.nix
     ./keyboard.nix
+    ./limits.nix
     ./login.nix
     ./brew.nix
     ./fonts.nix
