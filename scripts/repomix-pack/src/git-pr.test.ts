@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test";
 import { commitToBranch, isMissingLabelError } from "./git-pr";
+import { checkout } from "./checkout";
 import { packChanged } from "./pack";
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -87,9 +88,11 @@ test("both pack and graph files changed produces exactly one commit/branch", asy
   const result = await commitToBranch(dir, target as any, target.defaultBranch, STAGE_FILES);
   expect(result.committed).toBe(true);
 
-  const branches = (await $`git -C ${bare} branch --list automation/repomix-pack`.text())
-    .trim().split("\n").filter(Boolean);
-  expect(branches.length).toBe(1); // create-or-update semantics: one deterministic branch
+  // Both files land in ONE commit on top of base, not one commit per file.
+  // (`branch --list <exact-name>` could only ever return 0 or 1, so counting
+  // its output asserted nothing beyond "the branch exists".)
+  const ahead = (await $`git -C ${bare} rev-list --count main..automation/repomix-pack`.text()).trim();
+  expect(ahead).toBe("1");
 });
 
 test("no changes at all: nothing is committed or pushed (no PR, no notification)", async () => {
@@ -101,6 +104,47 @@ test("no changes at all: nothing is committed or pushed (no PR, no notification)
 
   const branches = await $`git -C ${bare} branch`.text();
   expect(branches).not.toContain("automation/repomix-pack"); // no push happened
+});
+
+// Regression coverage for the stale-base bug. Every other test in this file
+// builds a FRESH clone, where local `main` == `origin/main` by construction —
+// so it structurally cannot see this. Only a *persistent* cacheRoot reused
+// across sweeps (which is exactly how production runs) exposes it:
+//
+//   checkout() does `fetch` + `reset --hard origin/<default>`, and reset only
+//   moves the branch HEAD is currently on. After sweep 1, commitToBranch has
+//   left HEAD on automation/repomix-pack, so refs/heads/main is never advanced
+//   again — it stays pinned at the original clone commit forever.
+//
+// Pre-fix, commitToBranch branched off the bare ref `main` (i.e. the stale
+// LOCAL refs/heads/main). So on the sweep right after the automation PR is
+// merged — when nothing whatsoever has changed and the pack is byte-identical
+// — the gate still saw a diff, force-pushed, opened an empty PR and fired
+// Slack, and did so on every subsequent sweep, forever. Worse, the branch was
+// cut from stale main, so the PR reverted unrelated upstream commits.
+//
+// The fix branches off `origin/<base>` — the true remote state.
+test("second sweep on a persistent cache after the PR is merged: no commit", async () => {
+  const { root, bare, target } = await setupBaseRepo();
+  const cacheRoot = join(root, "cache");
+
+  // Sweep 1: the source drifted, so the pack regenerates differently.
+  const first = await checkout(target as any, cacheRoot);
+  writeFileSync(join(first.dir, ".llm/repomix.xml"), "PACK v2");
+  const run1 = await commitToBranch(first.dir, target as any, first.defaultBranch, STAGE_FILES);
+  expect(run1.committed).toBe(true);
+
+  // A human merges the automation PR: origin/main now carries the new pack.
+  await $`git -C ${bare} update-ref refs/heads/main refs/heads/automation/repomix-pack`;
+
+  // Sweep 2: same cacheRoot (persists by design). Nothing in the world has
+  // changed, so repomix reproduces a byte-identical pack.
+  const second = await checkout(target as any, cacheRoot);
+  expect(second.dir).toBe(first.dir); // same cached checkout, reused
+  writeFileSync(join(second.dir, ".llm/repomix.xml"), "PACK v2");
+
+  const run2 = await commitToBranch(second.dir, target as any, second.defaultBranch, STAGE_FILES);
+  expect(run2.committed).toBe(false); // nothing changed => no PR, no Slack
 });
 
 test("missing CLAUDE.md/AGENTS.md in the repo is not an error", async () => {

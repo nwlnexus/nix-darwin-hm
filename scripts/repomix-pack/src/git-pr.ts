@@ -17,6 +17,17 @@ import { withGhTokenForGroup } from "./auth";
  * Returns `{ committed: false }` when nothing changed — callers must treat
  * that as a no-op: no push happened, so there's nothing to open/update a PR
  * for and nothing to notify about.
+ *
+ * The branch is cut from `origin/<base>` (the remote-tracking ref), NOT the
+ * bare `<base>` (the LOCAL branch). This is load-bearing. Checkouts live in a
+ * cache that persists across sweeps, and `checkout()` refreshes them with
+ * `reset --hard origin/<base>`, which only moves the branch HEAD is currently
+ * on. Since we leave HEAD on the automation branch, the local `<base>` is
+ * never advanced again and stays pinned at the original clone commit. Diffing
+ * against that stale ref means that after an automation PR is merged, every
+ * subsequent sweep would see a phantom diff, force-push, open an empty PR and
+ * fire Slack — forever — and, because the branch was cut from stale `<base>`,
+ * revert whatever unrelated upstream commits had landed in the meantime.
  */
 export async function commitToBranch(
   dir: string,
@@ -29,7 +40,7 @@ export async function commitToBranch(
     const p = join(dir, f);
     if (existsSync(p)) snapshots.set(f, readFileSync(p));
   }
-  const co = await $`git -C ${dir} checkout -B ${target.branch} ${base}`.quiet().nothrow();
+  const co = await $`git -C ${dir} checkout -B ${target.branch} ${"origin/" + base}`.quiet().nothrow();
   if (co.exitCode !== 0) {
     throw new Error(`git checkout failed (${co.exitCode}): ${co.stderr.toString()}`);
   }
