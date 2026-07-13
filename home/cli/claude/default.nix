@@ -56,7 +56,8 @@ let
     nativeBuildInputs = [ pkgs.makeWrapper ];
     postBuild = ''
       wrapProgram "$out/bin/mnemosyne" \
-        --prefix PATH : ${lib.makeBinPath [ mem0ctlPkg ]}
+        --prefix PATH : ${lib.makeBinPath [ mem0ctlPkg ]} \
+        --run 'if [ -f "$HOME/projects/personal/.env" ]; then set -a; . "$HOME/projects/personal/.env"; set +a; fi'
     '';
   };
 in

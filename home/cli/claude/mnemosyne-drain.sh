@@ -10,6 +10,15 @@
 set -eu
 MEM0_URL="${MEM0_URL:-http://openmemory.raptor-mimosa.ts.net:8765}"
 MNEMOSYNE_HOME="${MNEMOSYNE_HOME:-$HOME/.claude/mnemosyne}"
+# moneta dual-write needs MONETA_AUTH_TOKEN + CF Access Service Auth from the
+# personal secrets bundle (op-secrets → ~/projects/personal/.env).
+PERSONAL_ENV="${PERSONAL_ENV:-$HOME/projects/personal/.env}"
+if [ -f "$PERSONAL_ENV" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$PERSONAL_ENV"
+  set +a
+fi
 OUTBOX="$MNEMOSYNE_HOME/outbox"
 emit() { printf '{"continue":true}\n'; exit 0; }
 
