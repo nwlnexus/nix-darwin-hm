@@ -7,6 +7,7 @@ import {
   mkdirSync,
   writeFileSync,
   readFileSync,
+  readdirSync,
   existsSync,
   chmodSync,
   statSync,
@@ -95,8 +96,19 @@ function makeFixture(opts: { withDevClone?: boolean } = {}): Fixture {
  *
  * `success` mimics what a real `analyze` leaves behind: a storage dir with
  * meta.json + gitnexus.json (both carrying `repoPath`), and a registry entry
- * anchored at the path it was handed. It also records argv + cwd so tests can
- * assert we never invoke it from inside the checkout.
+ * anchored at the path it was handed. It also records argv + cwd + the registry
+ * AS SEEN AT INVOCATION, so tests can assert we never invoke it from inside the
+ * checkout and that the alias was freed BEFORE analyze rather than after.
+ *
+ * It reproduces two refusals of the real binary (both verified by hand against
+ * gitnexus 1.6.9 in a sandboxed HOME), because both of them are load-bearing:
+ *
+ *  1. Registry name collision. If an entry with our alias exists whose `path`
+ *     is NOT the path being analyzed, it exits 1 without doing any work. The
+ *     check keys on `path`, NOT on `storagePath`.
+ *  2. Unregistered on-disk index. If the checkout already carries a `.gitnexus`
+ *     that no registry entry claims (what an aborted analyze leaves behind), it
+ *     exits 1 with "the on-disk index is incomplete and was not registered".
  */
 function writeMockGitnexus(
   fx: Fixture,
@@ -105,14 +117,47 @@ function writeMockGitnexus(
 ): string {
   const binPath = join(fx.root, "gitnexus-mock");
   const script = `#!/usr/bin/env bun
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const argv = process.argv.slice(2);
+const registryPath = ${JSON.stringify(fx.registryPath)};
+const readRegistrySync = () => {
+  try {
+    return JSON.parse(readFileSync(registryPath, "utf8"));
+  } catch {
+    return [];
+  }
+};
+
+const repoPath = argv[argv.length - 1];
+const nameIdx = argv.indexOf("--name");
+const alias = argv[nameIdx + 1];
+const storagePath = join(repoPath, ".gitnexus");
+const registryAtInvoke = readRegistrySync();
+
 writeFileSync(
   ${JSON.stringify(fx.logPath)},
-  JSON.stringify({ argv, cwd: process.cwd() }, null, 2),
+  JSON.stringify({ argv, cwd: process.cwd(), registryAtInvoke }, null, 2),
 );
+
+// (1) Registry name collision -- refused BEFORE any work happens.
+const clash = registryAtInvoke.find((e) => e.name === alias && e.path !== repoPath);
+if (clash) {
+  process.stderr.write(
+    \`Registry name collision:\\n  "\${alias}" is already used by "\${clash.path}".\\n\`,
+  );
+  process.exit(1);
+}
+
+// (2) An on-disk index nobody registered: the wedge an aborted analyze leaves.
+const claimed = registryAtInvoke.some((e) => e.path === repoPath);
+if (existsSync(storagePath) && !claimed) {
+  process.stderr.write(
+    \`Analysis did not finalize for \${repoPath}: the on-disk index is incomplete and was not registered. Inspect \${storagePath} - a leftover lbug.wal indicates an aborted write.\\n\`,
+  );
+  process.exit(1);
+}
 
 const mode = ${JSON.stringify(mode)};
 if (mode === "hang") {
@@ -123,10 +168,6 @@ if (mode === "fail") {
   process.exit(1);
 }
 
-const repoPath = argv[argv.length - 1];
-const nameIdx = argv.indexOf("--name");
-const alias = argv[nameIdx + 1];
-const storagePath = join(repoPath, ".gitnexus");
 if (mode !== "empty-success") mkdirSync(storagePath, { recursive: true });
 
 const meta = {
@@ -217,8 +258,39 @@ function readJson(path: string): any {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
-function invocation(fx: Fixture): { argv: string[]; cwd: string } | null {
+function invocation(
+  fx: Fixture,
+): { argv: string[]; cwd: string; registryAtInvoke: RegistryEntry[] } | null {
   return existsSync(fx.logPath) ? readJson(fx.logPath) : null;
+}
+
+/**
+ * The dev clone's OWN gitnexus index -- the storage all three of the user's
+ * real entries point at. The runner must never write to or delete a byte of it:
+ * it lives under ~/projects/** and there is no backup.
+ */
+function seedDevCloneStorage(fx: Fixture): string {
+  const storagePath = join(fx.devClonePath, ".gitnexus");
+  mkdirSync(storagePath, { recursive: true });
+  writeFileSync(join(storagePath, "meta.json"), JSON.stringify({ repoPath: fx.devClonePath }));
+  writeFileSync(join(storagePath, "lbug"), "PRECIOUS-DEV-CLONE-INDEX");
+  return storagePath;
+}
+
+/** Every file under `dir`, as [relpath, contents]. Used to prove non-writes. */
+function snapshotTree(dir: string): [string, string][] {
+  const out: [string, string][] = [];
+  const walk = (cur: string) => {
+    for (const e of readdirSync(cur, { withFileTypes: true }).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )) {
+      const p = join(cur, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.isFile()) out.push([p.slice(dir.length), readFileSync(p, "utf8")]);
+    }
+  };
+  walk(dir);
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -733,6 +805,195 @@ test("re-anchor changes only `path` -- it never asserts its own storagePath", as
 // ---------------------------------------------------------------------------
 // target.graph opt-out
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Registry name collision: adopting an alias already registered to the dev clone
+//
+// This is the state ALL THREE of the user's real entries are in (marquee,
+// drop-app, olympus-sdk are each registered against their DEV CLONE). gitnexus
+// refuses -- exit 1, "Registry name collision" -- to analyze under an alias
+// whose entry points at a different path, so without adoption the graph would
+// NEVER build for exactly the repos this phase exists to serve.
+// ---------------------------------------------------------------------------
+
+/** The pre-existing entry: our alias, anchored at the dev clone, with the dev
+ *  clone's OWN storage -- i.e. storage that is not ours to touch. */
+function collidingEntry(fx: Fixture): RegistryEntry {
+  return {
+    name: "widget",
+    path: fx.devClonePath,
+    storagePath: join(fx.devClonePath, ".gitnexus"), // NOT our cache storage
+    lastCommit: "0000000000000000000000000000000000000000",
+    branch: "main",
+    branches: [{ branch: "main", lastCommit: "abc", stats: {} }],
+  };
+}
+
+test("colliding alias is ADOPTED: the entry is dropped BEFORE analyze, and analyze then succeeds", async () => {
+  const fx = makeFixture();
+  const bin = writeMockGitnexus(fx, "success");
+  seedDevCloneStorage(fx);
+  seedRegistry(fx, [collidingEntry(fx)]);
+
+  const result = await refreshGraph(fx.target, fx.cachePath, {
+    registryPath: fx.registryPath,
+    gitnexusBin: bin,
+  });
+
+  expect(result.status).toBe("analyzed");
+
+  // The alias was free by the time gitnexus ran -- otherwise it would have
+  // refused. This is the assertion that fails without the fix.
+  const inv = invocation(fx)!;
+  expect(inv.registryAtInvoke.find((e) => e.name === "widget")).toBeUndefined();
+
+  // And the end state is the one the design wants.
+  const entry = (await readRegistry(fx.registryPath)).find((e) => e.name === "widget")!;
+  expect(entry.path).toBe(fx.devClonePath);
+  expect(entry.storagePath).toBe(join(fx.cachePath, ".gitnexus"));
+});
+
+test("ADOPTION is registry-only: the dev clone's own index is never written or deleted", async () => {
+  const fx = makeFixture();
+  const bin = writeMockGitnexus(fx, "success");
+  seedDevCloneStorage(fx);
+  seedRegistry(fx, [collidingEntry(fx)]);
+
+  const before = snapshotTree(fx.devClonePath);
+
+  const result = await refreshGraph(fx.target, fx.cachePath, {
+    registryPath: fx.registryPath,
+    gitnexusBin: bin,
+  });
+
+  expect(result.status).toBe("analyzed");
+  // Not one byte under the dev clone changed: its .gitnexus is orphaned in the
+  // registry, never removed from disk. `gitnexus remove`/`clean` would have
+  // deleted it -- which is exactly why we do not call them.
+  expect(snapshotTree(fx.devClonePath)).toEqual(before);
+  expect(readFileSync(join(fx.devClonePath, ".gitnexus", "lbug"), "utf8")).toBe(
+    "PRECIOUS-DEV-CLONE-INDEX",
+  );
+});
+
+test("ADOPTION that then FAILS restores the original entry byte-for-byte (branch/branches intact)", async () => {
+  const fx = makeFixture();
+  const bin = writeMockGitnexus(fx, "fail");
+  seedDevCloneStorage(fx);
+  const original = collidingEntry(fx);
+  seedRegistry(fx, [original]);
+
+  const result = await refreshGraph(fx.target, fx.cachePath, {
+    registryPath: fx.registryPath,
+    gitnexusBin: bin,
+  });
+
+  expect(result.status).toBe("failed");
+
+  // It really was dropped first (otherwise this proves nothing)...
+  expect(invocation(fx)!.registryAtInvoke.find((e) => e.name === "widget")).toBeUndefined();
+  // ...and a failed adoption is a no-op on the registry.
+  expect(await readRegistry(fx.registryPath)).toEqual([original]);
+  // The dev clone's index survives a failed adoption too.
+  expect(readFileSync(join(fx.devClonePath, ".gitnexus", "lbug"), "utf8")).toBe(
+    "PRECIOUS-DEV-CLONE-INDEX",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Self-healing: one aborted analyze must not wedge the graph forever
+//
+// gitnexus refuses to analyze a checkout that already carries a `.gitnexus` no
+// registry entry claims ("the on-disk index is incomplete and was not
+// registered" / a leftover lbug.wal). An aborted analyze leaves exactly that,
+// so every LATER sweep would fail the same way: a self-perpetuating failure.
+// ---------------------------------------------------------------------------
+
+test("a failed analyze REMOVES the cache storage it may have corrupted (self-heal)", async () => {
+  const fx = makeFixture();
+  const bin = writeMockGitnexus(fx, "fail");
+  const devStorage = seedDevCloneStorage(fx);
+  seedStorage(fx, fx.cachePath); // storage a previous run left in the cache
+  seedRegistry(fx, [
+    { name: "widget", path: fx.cachePath, storagePath: join(fx.cachePath, ".gitnexus") },
+  ]);
+
+  const result = await refreshGraph(fx.target, fx.cachePath, {
+    registryPath: fx.registryPath,
+    gitnexusBin: bin,
+  });
+
+  expect(result.status).toBe("failed");
+  // Cache storage is gone, so the NEXT sweep starts clean instead of failing
+  // forever on a leftover index.
+  expect(existsSync(join(fx.cachePath, ".gitnexus"))).toBe(false);
+  // ...and the self-heal is cache-only. It never reaches under ~/projects/**.
+  expect(existsSync(devStorage)).toBe(true);
+  expect(readFileSync(join(devStorage, "lbug"), "utf8")).toBe("PRECIOUS-DEV-CLONE-INDEX");
+});
+
+test("a leftover UNREGISTERED index in the cache heals in the SAME sweep, not the next one", async () => {
+  // What an interrupted analyze (SIGKILL, laptop lid, launchd timeout) leaves:
+  // storage on disk that no registry entry claims. gitnexus refuses to analyze
+  // over it, so this repo's graph would be wedged permanently.
+  const fx = makeFixture();
+  const bin = writeMockGitnexus(fx, "success");
+  seedStorage(fx, fx.cachePath);
+  seedRegistry(fx, []); // nothing vouches for that storage
+
+  const result = await refreshGraph(fx.target, fx.cachePath, {
+    registryPath: fx.registryPath,
+    gitnexusBin: bin,
+  });
+
+  expect(result.status).toBe("analyzed");
+  expect(existsSync(join(fx.cachePath, ".gitnexus", "meta.json"))).toBe(true);
+});
+
+// ---------------------------------------------------------------------------
+// Steady state: the entry we re-anchored at the dev clone must stay refreshable
+// ---------------------------------------------------------------------------
+
+test("steady state: an entry anchored at the dev clone is RECALLED, so re-analyze never collides", async () => {
+  // After run 1 the entry is path=<devClone>, storagePath=<cache>/.gitnexus.
+  // gitnexus keys its collision check on `path`, so a naive second run would be
+  // refused -- the graph would build exactly once and then go stale forever.
+  // The entry is OURS (its storage is the cache), so we recall it to the cache
+  // for the analyze rather than dropping it, which keeps the index incremental
+  // and lets gitnexus's own merge preserve the fields it owns.
+  const fx = makeFixture();
+  const bin = writeMockGitnexus(fx, "success");
+  const branches = [{ branch: "main", lastCommit: "abc", stats: {} }];
+  seedStorage(fx, fx.devClonePath);
+  seedRegistry(fx, [
+    {
+      name: "widget",
+      path: fx.devClonePath, // re-anchored by a previous run
+      storagePath: join(fx.cachePath, ".gitnexus"), // ...but the storage is ours
+      lastCommit: "0000000000000000000000000000000000000000", // HEAD has moved
+      branch: "main",
+      branches,
+    },
+  ]);
+
+  const result = await refreshGraph(fx.target, fx.cachePath, {
+    registryPath: fx.registryPath,
+    gitnexusBin: bin,
+  });
+
+  expect(result.status).toBe("analyzed");
+
+  // Recalled, not dropped: gitnexus saw an entry it could merge into.
+  const seen = invocation(fx)!.registryAtInvoke.find((e) => e.name === "widget")!;
+  expect(seen.path).toBe(fx.cachePath);
+  expect(seen.branches).toEqual(branches);
+
+  const entry = (await readRegistry(fx.registryPath)).find((e) => e.name === "widget")!;
+  expect(entry.path).toBe(fx.devClonePath); // re-anchored again
+  expect(entry.storagePath).toBe(join(fx.cachePath, ".gitnexus"));
+  expect(entry.lastCommit).toBe(fx.headSha);
+  expect(entry.branches).toEqual(branches); // survived the round trip
+});
 
 test("target.graph === false -> skipped: no analyze, and the registry is never touched", async () => {
   const fx = makeFixture();

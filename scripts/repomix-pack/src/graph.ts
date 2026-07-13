@@ -1,7 +1,7 @@
 import { $ } from "bun";
 import { existsSync } from "node:fs";
-import { chmod, mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { chmod, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { randomBytes } from "node:crypto";
 import { RepoTarget } from "./types";
@@ -46,6 +46,46 @@ function storageDir(cachePath: string): string {
  * proof that the cache storage actually exists on disk. */
 function metaPath(cachePath: string): string {
   return join(storageDir(cachePath), "meta.json");
+}
+
+/** Lexical containment: is `child` the same path as, or under, `parent`? */
+function isAtOrUnder(child: string, parent: string): boolean {
+  const rel = relative(resolve(parent), resolve(child));
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+/**
+ * Delete the CACHE's gitnexus storage so the next analyze starts clean.
+ *
+ * Why this has to exist (verified against gitnexus 1.6.9): storage that no
+ * registry entry vouches for is poison. Hand gitnexus a cache that already has
+ * a `.gitnexus` dir it did not just register and analyze dies with
+ * "Analysis did not finalize ... the on-disk index is incomplete and was not
+ * registered", every single time. One aborted analyze would otherwise wedge
+ * that repo's graph forever -- a self-perpetuating failure, which is precisely
+ * what a scheduled sweep must never have.
+ *
+ * Two hard guards, because this is the only rm in the module:
+ *  - the path must be a `.gitnexus` dir, and
+ *  - it must NOT be at or under the dev clone. Writing anything under
+ *    ~/projects/** is a hard invariant; deleting the user's real index there
+ *    would be unrecoverable. (`gitnexus remove`/`clean` are off-limits for the
+ *    same reason: both delete the index on disk.)
+ *
+ * Never throws: losing the self-heal must not cost us the sweep.
+ */
+async function clearCacheStorage(
+  cachePath: string,
+  devClonePath: string,
+): Promise<void> {
+  const dir = storageDir(cachePath);
+  if (!dir.endsWith(`${"/"}.gitnexus`)) return;
+  if (isAtOrUnder(dir, devClonePath)) return; // never touch the dev clone
+  try {
+    await rm(dir, { recursive: true, force: true });
+  } catch {
+    // best-effort; the failure path still reports the underlying analyze error
+  }
 }
 
 /**
@@ -146,6 +186,12 @@ async function dirBytes(dir: string): Promise<number> {
  * run: a spawn failure (gitnexus is a mise shim and may not resolve on PATH
  * under launchd) must not delete a healthy entry and orphan its storage. It is
  * restored exactly as it was found.
+ *
+ * This is also what undoes preflightAlias: `existing` is the pre-preflight
+ * snapshot, so an ADOPTed entry (not ours -> dropped) is put back byte-for-byte
+ * including branch/branches, and a RECALLed entry (ours -> `path` moved to the
+ * cache) is deregistered, which is the correct end state because the failure
+ * path has just cleared the cache storage it described.
  */
 async function rollbackFailedAnalyze(
   alias: string,
@@ -163,6 +209,67 @@ async function rollbackFailedAnalyze(
       return next;
     }
     return entries.filter((e) => e.name !== alias);
+  }, registryPath);
+}
+
+/**
+ * Make the alias analyzable. REGISTRY-ONLY (plus the cache's own storage).
+ *
+ * gitnexus REFUSES -- exit 1, "Registry name collision" -- to analyze under an
+ * alias whose registry entry points at a path OTHER than the one being
+ * analyzed. Our entries point at the dev clone by design while we analyze the
+ * cache, so without this the graph never builds for an already-indexed repo
+ * (the state all three of the user's real entries are in) and, once built,
+ * would never refresh again. Verified against gitnexus 1.6.9: the check keys on
+ * `path`, NOT on `storagePath`.
+ *
+ * `--allow-duplicate-name` is not an option: it leaves `-r <name>` ambiguous,
+ * which breaks the name-based resolution this whole design rests on.
+ *
+ * Two shapes:
+ *
+ *  - ADOPT (the entry is not ours -- its storage is somewhere else, typically
+ *    the dev clone's own index): drop the entry so the alias is free. The dev
+ *    clone's storage BYTES ARE NEVER TOUCHED -- they are left orphaned on disk
+ *    for the user to reclaim by hand. `gitnexus remove`/`clean` are off-limits
+ *    precisely because both delete the index on disk.
+ *
+ *  - RECALL (the entry is ours -- storagePath already IS the cache -- but it is
+ *    anchored at the dev clone, i.e. the steady state after any previous run):
+ *    point `path` back at the cache just for the analyze. gitnexus then merges
+ *    into the existing entry, which keeps the index incremental and lets the
+ *    fields it owns (branch/branches) survive via its own merge. reanchor()
+ *    moves `path` back onto the dev clone afterwards.
+ *
+ * The caller snapshots `existing` beforehand and rollbackFailedAnalyze restores
+ * it byte-for-byte if the analyze then fails, so a failed preflight is a no-op
+ * on the registry.
+ */
+async function preflightAlias(
+  alias: string,
+  existing: RegistryEntry | undefined,
+  cachePath: string,
+  devClonePath: string,
+  registryPath: string,
+): Promise<void> {
+  const ours = !!existing && existing.storagePath === storageDir(cachePath);
+
+  // Cache storage that no registry entry vouches for is poison to the next
+  // analyze (see clearCacheStorage). Clearing it here is what lets an adoption
+  // -- and a sweep following an aborted analyze -- succeed on the FIRST try
+  // rather than burning a run to heal.
+  if (!ours) await clearCacheStorage(cachePath, devClonePath);
+
+  if (!existing) return;
+
+  await updateRegistry((entries) => {
+    const idx = entries.findIndex((e) => e.name === alias);
+    if (idx === -1) return entries;
+    if (!ours) return entries.filter((e) => e.name !== alias); // ADOPT
+    if (entries[idx].path === cachePath) return entries; // already analyzable
+    const next = [...entries];
+    next[idx] = { ...next[idx], path: cachePath }; // RECALL
+    return next;
   }, registryPath);
 }
 
@@ -308,6 +415,16 @@ export async function refreshGraph(
     }
 
     // --- Step 2: analyze -----------------------------------------------------
+    // Free the alias first: gitnexus refuses to analyze under a name whose
+    // entry points elsewhere, and every entry we own points at the dev clone.
+    await preflightAlias(
+      alias,
+      existing,
+      cachePath,
+      target.devClonePath,
+      registryPath,
+    );
+
     // NEVER cwd into cachePath: it carries the repo's own mise.toml and the
     // mise shim dies on untrusted config dirs. Neutral cwd, checkout as ARG.
     await mkdir(neutralCwd, { recursive: true });
@@ -315,6 +432,12 @@ export async function refreshGraph(
 
     // --- Step 4: failure handling -------------------------------------------
     if (!run.ok) {
+      // Self-heal. An aborted analyze leaves an index that is on disk but
+      // unregistered, and gitnexus refuses to analyze over one ("the on-disk
+      // index is incomplete and was not registered" / a leftover lbug.wal), so
+      // a single failure would wedge this repo's graph FOREVER -- every later
+      // sweep failing the same way. Cache-only, never a dev clone.
+      await clearCacheStorage(cachePath, target.devClonePath);
       // A corrupt-but-registered graph is worse than no graph -- but only OUR
       // storage can be corrupt. See rollbackFailedAnalyze.
       try {
@@ -333,6 +456,7 @@ export async function refreshGraph(
     // re-anchor would silently no-op and we'd report a graph that isn't built.
     if (!existsSync(metaPath(cachePath))) {
       const error = `gitnexus analyze reported success but wrote no ${metaPath(cachePath)}`;
+      await clearCacheStorage(cachePath, target.devClonePath); // same self-heal
       try {
         await rollbackFailedAnalyze(alias, existing, cachePath, registryPath);
       } catch (e) {
