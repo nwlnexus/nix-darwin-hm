@@ -2,7 +2,17 @@ import { test, expect } from "bun:test";
 import { commitToBranch, isMissingLabelError } from "./git-pr";
 import { checkout } from "./checkout";
 import { packChanged } from "./pack";
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  existsSync,
+  appendFileSync,
+  lstatSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+} from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { $ } from "bun";
@@ -68,6 +78,64 @@ test("graph-only CLAUDE.md change (pack unchanged) still produces a commit", asy
 
   const show = await $`git -C ${bare} show automation/repomix-pack:CLAUDE.md`.text();
   expect(show.trim()).toBe("NEW CLAUDE FROM GRAPH STAGE");
+});
+
+/**
+ * nix-darwin-hm -- which is IN repos.toml, so the sweep really does publish it --
+ * tracks `CLAUDE.md` and `GEMINI.md` as SYMLINKS to `AGENTS.md` (mode 120000).
+ * commitToBranch reads and writes those paths with readFileSync/writeFileSync,
+ * which FOLLOW symlinks: a snapshot of `CLAUDE.md` is really the bytes of
+ * `AGENTS.md`, and writing it back writes THROUGH the link. So the publish path
+ * must never turn a tracked symlink into a regular file -- that would commit a
+ * 120000 -> 100644 conversion into the PR and quietly de-link the repo's agent
+ * docs for good.
+ *
+ * VERIFIED against the real thing (gitnexus 1.6.9, real analyze on the real
+ * nix-darwin-hm checkout, staged with commitToBranch's exact fs calls): gitnexus
+ * appends its `<!-- gitnexus:start -->` block THROUGH the symlink, so the staged
+ * diff was `.llm/repomix.xml` + `AGENTS.md` only, `git diff --cached --summary`
+ * was EMPTY (no mode changes), and CLAUDE.md/GEMINI.md stayed 120000. Keeping
+ * CLAUDE.md in the staged list is therefore safe -- and this test is what keeps
+ * it that way, because nothing else would notice the day it stops being true.
+ */
+test("a tracked CLAUDE.md SYMLINK survives the publish path as a symlink", async () => {
+  const { dir, target, bare } = await setupBaseRepo();
+
+  // Re-shape the repo the way nix-darwin-hm really is: AGENTS.md is the file,
+  // CLAUDE.md and GEMINI.md are symlinks to it.
+  rmSync(join(dir, "CLAUDE.md"));
+  symlinkSync("AGENTS.md", join(dir, "CLAUDE.md"));
+  symlinkSync("AGENTS.md", join(dir, "GEMINI.md"));
+  await $`git -C ${dir} add -A`;
+  await $`git -C ${dir} -c commit.gpgsign=false commit -qm symlinks`;
+  await $`git -C ${dir} push -q origin HEAD:main`;
+  expect(await $`git -C ${bare} ls-tree main CLAUDE.md`.text()).toContain("120000");
+
+  // What gitnexus analyze actually does: append to CLAUDE.md, which resolves
+  // through the link into AGENTS.md.
+  appendFileSync(join(dir, "CLAUDE.md"), "\n<!-- gitnexus:start -->\ngraph\n");
+  expect(lstatSync(join(dir, "CLAUDE.md")).isSymbolicLink()).toBe(true); // still a link
+  expect(readFileSync(join(dir, "AGENTS.md"), "utf8")).toContain("gitnexus:start"); // wrote through
+
+  const result = await commitToBranch(dir, target as any, target.defaultBranch, STAGE_FILES);
+  expect(result.committed).toBe(true);
+
+  // The COMMITTED tree: the symlinks are still symlinks (120000), the content
+  // landed in AGENTS.md, and no 120000 -> 100644 conversion was pushed.
+  const tree = await $`git -C ${bare} ls-tree automation/repomix-pack`.text();
+  expect(tree).toMatch(/120000 blob \w+\tCLAUDE\.md/);
+  expect(tree).toMatch(/120000 blob \w+\tGEMINI\.md/);
+  expect(tree).toMatch(/100644 blob \w+\tAGENTS\.md/);
+  expect(await $`git -C ${bare} show automation/repomix-pack:AGENTS.md`.text()).toContain(
+    "gitnexus:start",
+  );
+  // the symlink blob still says "AGENTS.md" -- it was never replaced by content
+  expect(
+    (await $`git -C ${bare} show automation/repomix-pack:CLAUDE.md`.text()).trim(),
+  ).toBe("AGENTS.md");
+  // ...and no mode change is in the published diff at all
+  const summary = await $`git -C ${bare} diff --summary main automation/repomix-pack`.text();
+  expect(summary.trim()).toBe("");
 });
 
 test("pack-only change produces a commit", async () => {

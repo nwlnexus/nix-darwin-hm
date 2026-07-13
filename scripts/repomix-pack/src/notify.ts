@@ -59,6 +59,27 @@ export function buildAdoptionPayload(a: Adoption): object {
   return { text: `:warning: gitnexus graph — ${formatAdoption(a)}` };
 }
 
+/**
+ * One post per sweep for a broken graph stage -- NOT one per repo. The failure
+ * mode this exists to catch is systemic (a binary that doesn't resolve under
+ * launchd breaks all 11 at once), so per-repo posts would be 11 copies of the
+ * same news. Each repo's own error is still listed, because "gitnexus analyze
+ * failed on marquee" and "gitnexus not found" want very different responses.
+ */
+export function buildGraphFailurePayload(g: {
+  failed: { slug: string; error: string }[];
+  pruneFailed?: string;
+}): object {
+  const lines = g.failed.map((f) => `• *${f.slug}*: ${f.error}`);
+  if (g.pruneFailed) lines.push(`• *prune*: ${g.pruneFailed}`);
+  const n = g.failed.length;
+  const head =
+    n > 0
+      ? `:rotating_light: gitnexus graph FAILED for ${n} repo${n === 1 ? "" : "s"} — packs unaffected, graphs are stale`
+      : ":rotating_light: gitnexus graph prune FAILED — packs unaffected";
+  return { text: [head, ...lines].join("\n") };
+}
+
 export async function resolveWebhook(): Promise<string> {
   if (process.env.SLACK_WEBHOOK) return process.env.SLACK_WEBHOOK;
   const op = await $`op read op://Dev/repomix-pipeline/slack_webhook`.text().catch(() => "");

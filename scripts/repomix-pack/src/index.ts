@@ -7,13 +7,14 @@ import { StagingSink, RepoMeta } from "./sink";
 import {
   buildSlackPayload,
   buildAdoptionPayload,
+  buildGraphFailurePayload,
   formatAdoption,
   humanBytes,
   resolveWebhook,
   notifySlack,
   type Adoption,
 } from "./notify";
-import { refreshGraph, dirBytes, isAtOrUnder } from "./graph";
+import { refreshGraph, dirBytes, isAtOrUnder, defaultGitnexusBin } from "./graph";
 import { readRegistry, updateRegistry, DEFAULT_REGISTRY_PATH } from "./registry";
 import { RepoTarget } from "./types";
 import { existsSync } from "node:fs";
@@ -29,6 +30,18 @@ export interface GraphSummary {
   adoptions: Adoption[];
   /** `owner/name` of cache dirs (checkout + graph) dropped because the repo left repos.toml. */
   prunedGraphs: string[];
+  /**
+   * `owner/name` of repos still in repos.toml but opted OUT of graphing
+   * (`graph = false`), whose stale `.gitnexus` + registry entry were dropped.
+   * Their CHECKOUT stays: the pack stage still needs it every sweep.
+   */
+  prunedOptOuts: string[];
+  /**
+   * Why the prune stage failed, if it did (corrupt registry, lock timeout).
+   * The prune is disk hygiene; it must never cost the sweep its packs -- so it
+   * is caught, recorded HERE, and reported like any other graph failure.
+   */
+  pruneFailed?: string;
   /** Total on-disk size of every graph in the pipeline cache, post-sweep. */
   cacheBytes: number;
 }
@@ -184,22 +197,44 @@ async function pruneGraphs(
   brainRoot: string,
   all: RepoTarget[],
   registryPath: string,
-): Promise<string[]> {
+): Promise<{ prunedGraphs: string[]; prunedOptOuts: string[] }> {
+  // Two different keeps, because `graph = false` is not the same as "gone".
+  //  - keepDirs: every repo still in repos.toml keeps its CHECKOUT, graph flag
+  //    or not -- the pack stage clones into it on every single sweep, so
+  //    deleting it would mean a full re-clone per sweep, forever.
+  //  - keepGraphs: only repos still being GRAPHED keep their `.gitnexus` and
+  //    their registry entry. A repo opted out AFTER it was graphed would
+  //    otherwise keep both for good: a stale graph that nothing ever refreshes,
+  //    and a registry entry pointing at it, which `gitnexus -r <name>` will
+  //    happily serve as if it were current.
   const keepDirs = new Set(all.map((t) => `${t.owner}/${t.name}`));
-  const keepAliases = new Set(all.map((t) => t.name));
+  const graphed = all.filter((t) => t.graph);
+  const keepGraphs = new Set(graphed.map((t) => `${t.owner}/${t.name}`));
+  const keepAliases = new Set(graphed.map((t) => t.name));
   const projectsRoot = join(homedir(), "projects");
-  const pruned: string[] = [];
+  const prunedGraphs: string[] = [];
+  const prunedOptOuts: string[] = [];
+
+  /** Every guard on the only rm -rf pair in this file. See the doc comment. */
+  const deletable = (p: string): boolean =>
+    isAtOrUnder(p, cacheRoot) && // must be OUR cache tree
+    !isAtOrUnder(cacheRoot, p) && // ...and STRICTLY under it
+    !isAtOrUnder(p, brainRoot) && // never the staged output
+    !isAtOrUnder(p, projectsRoot); // never a dev clone
 
   for (const s of await listCacheRepos(cacheRoot)) {
     const key = `${s.owner}/${s.name}`;
-    if (keepDirs.has(key)) continue;
-    if (!isAtOrUnder(s.path, cacheRoot)) continue; // must be OUR cache tree
-    if (isAtOrUnder(cacheRoot, s.path)) continue; // ...and STRICTLY under it
-    if (isAtOrUnder(s.path, brainRoot)) continue; // never the staged output
-    if (isAtOrUnder(s.path, projectsRoot)) continue; // never a dev clone
+    const target = keepDirs.has(key)
+      ? keepGraphs.has(key)
+        ? null // still graphed: nothing to prune
+        : s.graphPath // opted out: drop the stale graph, KEEP the checkout
+      : s.path; // gone from repos.toml: drop the whole cache dir
+    if (!target) continue;
+    if (!existsSync(target)) continue;
+    if (!deletable(target)) continue;
     try {
-      await rm(s.path, { recursive: true, force: true });
-      pruned.push(key);
+      await rm(target, { recursive: true, force: true });
+      (target === s.path ? prunedGraphs : prunedOptOuts).push(key);
     } catch {
       // best effort: a stale checkout costs disk, not correctness
     }
@@ -209,13 +244,13 @@ async function pruneGraphs(
   const stale = entries.filter((e) => {
     const sp = typeof e.storagePath === "string" ? e.storagePath : "";
     if (!sp || !isAtOrUnder(sp, cacheRoot)) return false; // not ours -> never touch
-    return !keepAliases.has(e.name);
+    return !keepAliases.has(e.name); // departed OR opted out
   });
   if (stale.length) {
     const drop = new Set(stale.map((e) => e.name));
     await updateRegistry((current) => current.filter((e) => !drop.has(e.name)), registryPath);
   }
-  return pruned;
+  return { prunedGraphs, prunedOptOuts };
 }
 
 export async function run(opts: RunOpts): Promise<RunSummary> {
@@ -239,6 +274,7 @@ export async function run(opts: RunOpts): Promise<RunSummary> {
       failed: [],
       adoptions: [],
       prunedGraphs: [],
+      prunedOptOuts: [],
       cacheBytes: 0,
     },
   };
@@ -268,14 +304,30 @@ export async function run(opts: RunOpts): Promise<RunSummary> {
   const graphEnabled = !opts.noGraph && !opts.dryRun;
 
   if (graphEnabled) {
+    // ISOLATED, exactly like a per-repo failure. pruneGraphs reads and writes
+    // the registry, so it throws on a corrupt registry.json and on a 10s lock
+    // timeout -- and it runs BEFORE the pack stage. Unguarded, either one would
+    // throw straight out of run() and take the whole sweep down, PACKS INCLUDED:
+    // a wedged registry lock would cost 11 repos their context packs and their
+    // PRs. Before the graph stage existed the registry had no bearing on the
+    // pack pipeline whatsoever, and it must not acquire one now. The prune is
+    // disk hygiene; its worst failure is disk left on disk.
+    //
     // Prune against the UNFILTERED toml: --group/--only narrow the sweep, not
     // the set of repos the user still wants graphs for.
-    summary.graph.prunedGraphs = await pruneGraphs(
-      opts.cacheRoot,
-      opts.brainRoot,
-      loadTargets(opts.tomlPath),
-      registryPath,
-    );
+    try {
+      const pruned = await pruneGraphs(
+        opts.cacheRoot,
+        opts.brainRoot,
+        loadTargets(opts.tomlPath),
+        registryPath,
+      );
+      summary.graph.prunedGraphs = pruned.prunedGraphs;
+      summary.graph.prunedOptOuts = pruned.prunedOptOuts;
+    } catch (e) {
+      // Recorded, not swallowed: it lands in the summary, the exit code and Slack.
+      summary.graph.pruneFailed = String(e);
+    }
   }
 
   const serial = serializer();
@@ -390,8 +442,36 @@ export async function run(opts: RunOpts): Promise<RunSummary> {
   }
   await Promise.all(Array.from({ length: limit }, worker));
 
+  // --- graph failures are LOUD ------------------------------------------------
+  // Per-repo isolation means a graph failure costs the graph and nothing else --
+  // not the sweep, not the repo's pack, not its PR. That is about CONTROL FLOW.
+  // It must not also mean the failure is INVISIBLE: a graph stage that is broken
+  // for every repo on every scheduled run (a binary that doesn't resolve under
+  // launchd, say) otherwise looks exactly like a clean sweep -- exit 0, no
+  // Slack, packs still flowing. The graphs quietly rot and nobody is told.
+  //
+  // So the failures get their own post, once per sweep (not per repo: a
+  // systemic breakage would mean 11 identical messages), and they get the exit
+  // code (see the CLI). Posted AFTER the workers, so it can never be on the
+  // critical path of any repo's publish.
+  if (graphFailed(summary)) {
+    await safePost(buildGraphFailurePayload(summary.graph), "graph failures");
+  }
+
   summary.graph.cacheBytes = await graphCacheBytes(opts.cacheRoot);
   return summary;
+}
+
+/**
+ * Did the graph stage break? The single source of truth for "this sweep must not
+ * exit 0", shared by the CLI exit code and the Slack post so the two can never
+ * disagree about what counts as broken.
+ *
+ * Pack failures are tracked separately (`summary.failed`) and already gate the
+ * exit code; this is the half that used to be silent.
+ */
+export function graphFailed(s: RunSummary): boolean {
+  return s.graph.failed.length > 0 || !!s.graph.pruneFailed;
 }
 
 /** The end-of-run table: one row per repo, pack + graph, then the disk budget. */
@@ -427,6 +507,12 @@ export function formatSummary(s: RunSummary): string {
   }
   if (s.graph.prunedGraphs.length) {
     lines.push(`pruned cache dirs (repo left repos.toml): ${s.graph.prunedGraphs.join(", ")}`);
+  }
+  if (s.graph.prunedOptOuts.length) {
+    lines.push(`pruned stale graphs (graph = false): ${s.graph.prunedOptOuts.join(", ")}`);
+  }
+  if (s.graph.pruneFailed) {
+    lines.push(`graph prune FAILED (sweep continued): ${s.graph.pruneFailed}`);
   }
   for (const f of s.graph.failed) lines.push(`graph FAILED ${f.slug}: ${f.error}`);
   // Never let an adoption pass silently: it is lossy and it left disk behind.
@@ -473,8 +559,19 @@ if (import.meta.main) {
     dryRun: has("--dry-run"), noPr: has("--no-pr"),
     brainOnly: has("--brain-only"), noNotify: has("--no-notify"),
     noGraph: has("--no-graph"), graphOnly: has("--graph-only"),
+    // ABSOLUTE path, resolved from HOME -- never a bare `gitnexus`. The binary is
+    // a mise global whose shims dir is on PATH only inside an interactive shell;
+    // the launchd agent has no such PATH, so a bare name is ENOENT on exactly the
+    // runs that matter. See defaultGitnexusBin. (The launchd agent's PATH is
+    // fixed too, in modules/repomix/repomix.nix -- `repomix` itself has the same
+    // problem. Both, because either alone still leaves a broken scheduled sweep.)
+    gitnexusBin: defaultGitnexusBin(home),
   });
   console.log(formatSummary(summary));
   console.log(JSON.stringify(summary, null, 2));
-  if (summary.failed.length) process.exit(1);
+  // A broken graph stage must NEVER exit 0. It is not fatal to the sweep (the
+  // packs shipped, per-repo isolation held) but it is not success either, and a
+  // silent exit 0 is what let a permanently-failing graph stage pass for a clean
+  // run. Slack gets the same news, from graphFailed, in run().
+  if (summary.failed.length || graphFailed(summary)) process.exit(1);
 }

@@ -44,7 +44,8 @@ export interface GraphResult {
 export interface GraphOpts {
   /** Injectable so tests never touch the real ~/.gitnexus/registry.json. */
   registryPath?: string;
-  /** Injectable so tests don't depend on this machine's mise install. */
+  /** Injectable so tests don't depend on this machine's mise install. See
+   * defaultGitnexusBin for why the default is an absolute path, never a bare name. */
   gitnexusBin?: string;
   /**
    * The pipeline's cache root (`~/.cache/repomix-pipeline`). This is the
@@ -68,6 +69,34 @@ const DEFAULT_TIMEOUT_MS = 15 * 60_000;
 
 /** Mirrors index.ts's `cacheRoot`. Every deletable path lives under this tree. */
 const DEFAULT_CACHE_ROOT = join(homedir(), ".cache", "repomix-pipeline");
+
+/**
+ * The gitnexus binary, as an ABSOLUTE PATH. Never a bare `gitnexus`.
+ *
+ * gitnexus is a mise global (npm:gitnexus), not a nixpkgs package, so its only
+ * PATH entry is `~/.local/share/mise/shims` -- and that dir is added by the
+ * INTERACTIVE shell profile, which a launchd job never sources. A bare name
+ * therefore resolves in a terminal and is ENOENT under the scheduled sweep:
+ * every graph would fail, forever, on exactly the runs nobody is watching.
+ * Verified:
+ *   env -i PATH=/usr/bin:/bin sh -c 'command -v gitnexus'  -> not found
+ *
+ * The SHIM is the path to use, NOT `installs/npm-gitnexus/latest/bin/gitnexus`.
+ * That install path is a `#!/usr/bin/env node` script whose symlink target is a
+ * plain .js file, so running it in a bare environment dies with
+ * `env: node: No such file or directory` (node is itself a mise global). The
+ * shim is the mise binary (a self-contained Mach-O executable at an absolute
+ * store path); it resolves its own node. Verified, both under `env -i`:
+ *   ~/.local/share/mise/installs/npm-gitnexus/latest/bin/gitnexus --version
+ *       -> env: node: No such file or directory
+ *   ~/.local/share/mise/shims/gitnexus --version   -> 1.6.9
+ *
+ * (The shim refuses to run in an untrusted mise config dir, which is why
+ * runAnalyze is invoked from a neutral cwd -- see GraphOpts.neutralCwd.)
+ */
+export function defaultGitnexusBin(home: string = homedir()): string {
+  return join(home, ".local", "share", "mise", "shims", "gitnexus");
+}
 
 /** Storage always stays in the cache, even after the entry is re-anchored. */
 function storageDir(cachePath: string): string {
@@ -449,7 +478,7 @@ export async function refreshGraph(
 ): Promise<GraphResult> {
   const registryPath = opts.registryPath ?? DEFAULT_REGISTRY_PATH;
   const cacheRoot = opts.cacheRoot ?? DEFAULT_CACHE_ROOT;
-  const bin = opts.gitnexusBin ?? "gitnexus";
+  const bin = opts.gitnexusBin ?? defaultGitnexusBin();
   const neutralCwd = opts.neutralCwd ?? tmpdir();
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const alias = target.name;
@@ -459,6 +488,22 @@ export async function refreshGraph(
   // would let a failure path touch the registry entry of a repo the user
   // explicitly opted out of.
   if (!target.graph) return { status: "skipped" };
+
+  // Fail LOUDLY on a missing binary, and BEFORE the commit gate.
+  //
+  // Loudly: the alternative -- falling back to a bare `gitnexus` -- is what made
+  // the launchd bug invisible in the first place. A graph pipeline whose binary
+  // is gone is broken, and must say so on every sweep (summary -> exit code ->
+  // Slack), not quietly serve last month's graph.
+  //
+  // Before the gate: a gate hit would otherwise report "skipped" and hide the
+  // breakage on precisely the repos that are up to date -- i.e. most of them.
+  if (bin.includes("/") && !existsSync(bin)) {
+    return {
+      status: "failed",
+      error: `gitnexus binary not found at ${bin} (mise global npm:gitnexus not installed?)`,
+    };
+  }
 
   try {
     // --- Step 1: commit gate -------------------------------------------------
@@ -476,8 +521,17 @@ export async function refreshGraph(
     //    would never re-anchor -- and gitnexus's `rename` would then write the
     //    user's refactor into the cache checkout, where checkout()'s
     //    `reset --hard` silently destroys it.
+    //
+    // ...and the entry must be OURS (its storage IS this cache's `.gitnexus`).
+    // Without that, an entry we have never built -- the user's own index of
+    // their dev clone, whose lastCommit tracks the same upstream HEAD and so
+    // matches ours routinely -- sails through the gate. We would then "skip",
+    // re-anchor storage we do not own, and never build a graph at all. The
+    // not-ours case is exactly what preflightAlias's ADOPT path is for; it must
+    // be reached, not gated out.
     if (
       existing &&
+      existing.storagePath === storagePath &&
       sameCommit(existing.lastCommit, head) &&
       existsSync(metaPath(cachePath))
     ) {

@@ -32,6 +32,37 @@ function fixture(): string {
   return p;
 }
 
+test("a duplicate repo NAME across groups is refused, loudly, at load", () => {
+  // The gitnexus registry alias is the BARE NAME, and pruneGraphs deletes
+  // registry entries BY NAME. Two owners with a same-named repo would share one
+  // alias and could prune each other's entry. All 11 names are unique today;
+  // this makes sure a 12th can never quietly collide. It must fail at LOAD --
+  // before anything is analyzed, registered or deleted.
+  const dir = mkdtempSync(join(tmpdir(), "repos-dup-"));
+  const p = join(dir, "repos.toml");
+  writeFileSync(
+    p,
+    `
+[groups.personal]
+base_dir = "~/projects/personal"
+ssh_host = "github.com"
+owner = "nwlnexus"
+repos = ["widget"]
+
+[groups.work]
+base_dir = "~/projects/work"
+ssh_host = "github.com-work"
+owner = "dtlr"
+repos = ["widget"]
+`,
+  );
+  expect(() => loadTargets(p)).toThrow(/duplicate repo name "widget"/i);
+  // ...and narrowing the sweep does not narrow the check: the collision is a
+  // property of the CONFIG, not of one run's filter.
+  expect(() => loadTargets(p, { group: "personal" })).toThrow(/duplicate/i);
+  expect(() => loadTargets(p, { only: ["nwlnexus/widget"] })).toThrow(/duplicate/i);
+});
+
 test("loads all targets with derived fields", () => {
   const targets = loadTargets(fixture());
   expect(targets.length).toBe(3);

@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { refreshGraph } from "./graph";
+import { refreshGraph, defaultGitnexusBin } from "./graph";
 import { readRegistry, type RegistryEntry } from "./registry";
 import { RepoTarget } from "./types";
 import {
@@ -12,7 +12,7 @@ import {
   chmodSync,
   statSync,
 } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { tmpdir } from "node:os";
 
 // ---------------------------------------------------------------------------
@@ -781,9 +781,9 @@ test("re-anchor preserves manifest permissions (0600, not widened to 0644)", asy
   expect(modeOf(join(storagePath, "gitnexus.json"))).toBe("600");
 });
 
-test("re-anchor changes only `path` -- it never asserts its own storagePath", async () => {
-  // storagePath is gitnexus's field: post-analyze it already IS the cache, so
-  // writing our assumption over it can only ever be wrong.
+test("re-anchor changes only `path` -- every other field gitnexus owns survives", async () => {
+  // storagePath/branch/branches/stats are gitnexus's fields. reanchor spreads
+  // the entry and touches `path` alone, so none of them may be clobbered.
   const fx = makeFixture();
   const bin = writeMockGitnexus(fx, "success");
   seedStorage(fx, fx.cachePath);
@@ -791,8 +791,11 @@ test("re-anchor changes only `path` -- it never asserts its own storagePath", as
     {
       name: "widget",
       path: fx.cachePath,
-      storagePath: "/custom/store", // gitnexus's value, whatever it is
+      storagePath: join(fx.cachePath, ".gitnexus"),
       lastCommit: fx.headSha,
+      branch: "main",
+      branches: [{ name: "release/v2", storagePath: "/wherever/release-v2" }],
+      stats: { nodes: 41 },
     },
   ]);
 
@@ -801,10 +804,88 @@ test("re-anchor changes only `path` -- it never asserts its own storagePath", as
     gitnexusBin: bin,
   });
 
-  expect(result.status).toBe("skipped");
+  expect(result.status).toBe("skipped"); // gate hit: ours, and HEAD hasn't moved
   const after = (await readRegistry(fx.registryPath)).find((e) => e.name === "widget")!;
-  expect(after.path).toBe(fx.devClonePath); // re-anchored
-  expect(after.storagePath).toBe("/custom/store"); // preserved, not asserted
+  expect(after.path).toBe(fx.devClonePath); // re-anchored...
+  expect(after.storagePath).toBe(join(fx.cachePath, ".gitnexus")); // ...and nothing else moved
+  expect(after.branch).toBe("main");
+  expect(after.branches).toEqual([{ name: "release/v2", storagePath: "/wherever/release-v2" }]);
+  expect(after.stats).toEqual({ nodes: 41 });
+});
+
+test("commit gate MISS: the entry is NOT ours, even at the same commit -> analyze + adopt", async () => {
+  // The dangerous shape, and the reason the gate checks STORAGE OWNERSHIP and
+  // not just the SHA: the user's own entry for this repo points at the index in
+  // their dev clone, and its lastCommit tracks the same upstream HEAD as ours
+  // does -- so it matches routinely, not exceptionally. On a SHA-only gate we
+  // would "skip" every sweep, re-anchor storage we never built, and never build
+  // a graph in the cache at all: a repo that looks permanently up to date and
+  // has no graph. Not-ours must fall through to the ADOPT path.
+  const fx = makeFixture();
+  const bin = writeMockGitnexus(fx, "success");
+  const foreignStorage = join(fx.devClonePath, ".gitnexus");
+  mkdirSync(foreignStorage, { recursive: true });
+  writeFileSync(join(foreignStorage, "lbug"), "x".repeat(2048));
+  seedStorage(fx, fx.cachePath); // meta.json present, so ONLY ownership can gate
+  seedRegistry(fx, [
+    {
+      name: "widget",
+      path: fx.devClonePath,
+      storagePath: foreignStorage, // NOT ours
+      lastCommit: fx.headSha, // ...and the SHA matches exactly
+    },
+  ]);
+
+  const result = await refreshGraph(fx.target, fx.cachePath, {
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
+    gitnexusBin: bin,
+  });
+
+  expect(result.status).toBe("analyzed");
+  expect(result.adopted?.orphanedStorage).toBe(foreignStorage); // ...and it is disclosed
+  const after = (await readRegistry(fx.registryPath)).find((e) => e.name === "widget")!;
+  expect(after.storagePath).toBe(join(fx.cachePath, ".gitnexus")); // the graph is OURS now
+  expect(after.path).toBe(fx.devClonePath);
+  expect(existsSync(join(foreignStorage, "lbug"))).toBe(true); // never deleted under ~/projects
+});
+
+test("a missing gitnexus binary FAILS LOUDLY -- it never silently skips", async () => {
+  // The launchd bug: a bare `gitnexus` resolves in an interactive shell and is
+  // ENOENT under launchd, so every scheduled graph failed while the sweep
+  // reported success. An absolute path that isn't there must be a FAILURE, and
+  // it must beat the commit gate -- a gate hit would report "skipped" and hide
+  // the breakage on exactly the repos that are up to date, i.e. most of them.
+  const fx = makeFixture();
+  seedStorage(fx, fx.cachePath);
+  seedRegistry(fx, [
+    {
+      name: "widget",
+      path: fx.cachePath,
+      storagePath: join(fx.cachePath, ".gitnexus"),
+      lastCommit: fx.headSha, // the gate would otherwise HIT
+    },
+  ]);
+
+  const result = await refreshGraph(fx.target, fx.cachePath, {
+    registryPath: fx.registryPath, cacheRoot: fx.cacheRoot,
+    gitnexusBin: join(fx.root, "nowhere", "gitnexus"),
+  });
+
+  expect(result.status).toBe("failed");
+  expect(result.error).toMatch(/not found/i);
+  expect(result.error).toContain(join(fx.root, "nowhere", "gitnexus"));
+});
+
+test("the default binary is an absolute mise SHIM path, never a bare name", async () => {
+  // Bare `gitnexus` only resolves via ~/.local/share/mise/shims, which the
+  // INTERACTIVE shell profile puts on PATH -- launchd never does. And the mise
+  // INSTALLS path is a `#!/usr/bin/env node` script whose node is itself a mise
+  // global, so it dies under a bare environment too. The shim (the mise binary)
+  // is the only thing that resolves everywhere.
+  const bin = defaultGitnexusBin("/home/x");
+  expect(bin).toBe("/home/x/.local/share/mise/shims/gitnexus");
+  expect(isAbsolute(bin)).toBe(true);
+  expect(bin).not.toContain("/installs/");
 });
 
 // ---------------------------------------------------------------------------

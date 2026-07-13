@@ -1,6 +1,6 @@
 import { test, expect, mock } from "bun:test";
 import * as packModule from "./pack";
-import { run, formatSummary } from "./index";
+import { run, formatSummary, graphFailed } from "./index";
 import { readRegistry, type RegistryEntry } from "./registry";
 import { formatAdoption } from "./notify";
 import {
@@ -487,6 +487,126 @@ test("prune is not fooled by --only/--group narrowing the sweep", async () => {
   expect(existsSync(gadgetGraph)).toBe(true);
   const names = (await readRegistry(fx.registryPath)).map((e) => e.name).sort();
   expect(names).toEqual(["gadget", "widget"]);
+});
+
+test("graph = false AFTER a graph was built prunes the stale graph + entry -- but keeps the checkout", async () => {
+  const fx = await makeFixture();
+  writeMockGitnexus(fx);
+
+  await run(baseOpts(fx)); // sweep 1: graphed
+  const graphDir = join(fx.cacheRoot, "acme", "widget", ".gitnexus");
+  expect(existsSync(graphDir)).toBe(true);
+  expect((await readRegistry(fx.registryPath)).map((e) => e.name)).toEqual(["widget"]);
+
+  // The user opts the repo out. Before this fix, the graph, the registry entry
+  // and the whole cache dir simply stayed -- forever, with nothing left in the
+  // pipeline that would ever revisit them, while `gitnexus -r widget` went on
+  // serving the entry as if it were current.
+  //
+  // (A NEW toml path, not an edit in place: loadTargets goes through `require`,
+  // which caches by path for the life of the process. A real sweep is a fresh
+  // process every time, so this is a test artifact -- but editing fx.toml here
+  // would silently re-load the OLD config and the test would prove nothing.)
+  const optedOut = join(fx.root, "repos-opted-out.toml");
+  writeFileSync(optedOut, `${readFileSync(fx.toml, "utf8")}\n[repo."acme/widget"]\ngraph = false\n`);
+  const second = await run({ ...baseOpts(fx), tomlPath: optedOut });
+
+  expect(second.graph.prunedOptOuts).toContain("acme/widget");
+  expect(existsSync(graphDir)).toBe(false); // the stale graph is gone...
+  expect(await readRegistry(fx.registryPath)).toEqual([]); // ...and so is its entry
+  expect(formatSummary(second)).toContain("graph = false");
+
+  // ...but the CHECKOUT stays: the repo is still IN repos.toml and is still
+  // packed on every sweep. Dropping it would mean a full re-clone every run.
+  expect(existsSync(join(fx.cacheRoot, "acme", "widget", ".git"))).toBe(true);
+  expect(existsSync(join(fx.brainRoot, "acme/widget.xml"))).toBe(true);
+});
+
+// --- graph failures are visible ---------------------------------------------
+
+test("a broken graph stage is LOUD: it posts to Slack and it is not exit 0", async () => {
+  // The safety net for the launchd bug. A graph stage that fails for every repo
+  // on every scheduled run used to look EXACTLY like a clean sweep: exit 0, no
+  // Slack, packs still flowing. Isolation is about control flow, not silence.
+  const fx = await makeFixture();
+  writeMockGitnexus(fx, "fail");
+
+  const posted: object[] = [];
+  const summary = await run({
+    ...baseOpts(fx),
+    noNotify: false,
+    webhook: "https://example.invalid/hook",
+    postSlack: async (_w, p) => {
+      posted.push(p);
+    },
+  });
+
+  // isolation still holds: the repo packed, and its branch was published.
+  expect(summary.failed).toEqual([]);
+  expect(summary.succeeded).toContain("acme/widget");
+  expect(existsSync(join(fx.brainRoot, "acme/widget.xml"))).toBe(true);
+
+  // ...and the failure is impossible to miss.
+  expect(summary.graph.failed.map((f) => f.slug)).toEqual(["acme/widget"]);
+  expect(graphFailed(summary)).toBe(true); // -> the CLI exits 1
+  const slack = JSON.stringify(posted);
+  expect(slack).toContain("acme/widget");
+  expect(slack).toMatch(/FAILED/i);
+  expect(slack).toContain("database is corrupt"); // the real error, not a generic one
+});
+
+test("one Slack post for a graph failure, not one per repo", async () => {
+  // A systemic breakage (the binary doesn't resolve) fails all N at once. N
+  // identical messages is how a channel gets muted.
+  const fx = await makeFixture(["widget", "gadget", "sprocket"]);
+  writeMockGitnexus(fx, "fail");
+
+  const posted: object[] = [];
+  const summary = await run({
+    ...baseOpts(fx),
+    noNotify: false,
+    webhook: "https://example.invalid/hook",
+    postSlack: async (_w, p) => {
+      posted.push(p);
+    },
+  });
+
+  expect(summary.graph.failed).toHaveLength(3);
+  expect(posted).toHaveLength(1);
+  const text = JSON.stringify(posted[0]);
+  for (const slug of ["acme/widget", "acme/gadget", "acme/sprocket"]) {
+    expect(text).toContain(slug); // every repo still named
+  }
+});
+
+// --- prune isolation --------------------------------------------------------
+
+test("a corrupt registry costs the graph, never the packs", async () => {
+  // pruneGraphs reads AND writes the registry, and it runs BEFORE the pack
+  // stage. Unguarded it threw straight out of run(): a corrupt registry.json --
+  // or a wedged 10s lock -- would have taken down the entire sweep, packs and
+  // PRs included, for all 11 repos. Before the graph stage existed the registry
+  // had NO bearing on the pack pipeline; it must not acquire one now.
+  const fx = await makeFixture();
+  writeMockGitnexus(fx);
+  mkdirSync(join(fx.root, "gitnexus"), { recursive: true });
+  writeFileSync(fx.registryPath, "{ this is not json");
+
+  const summary = await run(baseOpts(fx));
+
+  // the sweep SURVIVED, and everything the pack pipeline owes still happened
+  expect(summary.failed).toEqual([]);
+  expect(summary.succeeded).toContain("acme/widget");
+  expect(existsSync(join(fx.brainRoot, "acme/widget.xml"))).toBe(true);
+  const tree = await $`git -C ${fx.bare} ls-tree -r --name-only ${"automation/repomix-pack"}`.text();
+  expect(tree).toContain(".llm/repomix.xml");
+
+  // ...and the prune failure is recorded, reported, and not exit 0
+  expect(summary.graph.pruneFailed).toMatch(/corrupt/i);
+  expect(formatSummary(summary)).toMatch(/prune FAILED/i);
+  expect(graphFailed(summary)).toBe(true);
+  // a registry we cannot parse is never rewritten -- least of all emptied
+  expect(readFileSync(fx.registryPath, "utf8")).toBe("{ this is not json");
 });
 
 // --- adoption disclosure ----------------------------------------------------

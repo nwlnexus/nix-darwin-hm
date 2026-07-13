@@ -15,6 +15,38 @@ function expandHome(p: string): string {
   return p.startsWith("~") ? join(homedir(), p.slice(1)) : p;
 }
 
+/**
+ * The gitnexus registry alias is the BARE REPO NAME (`target.name`), not the
+ * `owner/name` slug -- gitnexus's own `-r <name>` resolution is name-keyed, and
+ * `--allow-duplicate-name` would make it ambiguous.
+ *
+ * So the name is a primary key across the whole toml, and the pipeline treats it
+ * as one: refreshGraph registers under it, and pruneGraphs DELETES registry
+ * entries BY NAME. Two repos sharing a name under different owners
+ * (`acme/widget` + `globex/widget`) would silently fight over one alias, and a
+ * prune could drop the wrong one's entry. No collision exists today (all 11
+ * names are unique), and this makes sure one can never be introduced quietly:
+ * a duplicate is a config error and stops the sweep at load, before anything
+ * has been analyzed, registered or deleted.
+ *
+ * Checked against the WHOLE toml, never the --group/--only subset: a collision
+ * is a property of the config, not of one run's filter.
+ */
+function assertUniqueAliases(all: RepoTarget[]): void {
+  const seen = new Map<string, string>();
+  for (const t of all) {
+    const prev = seen.get(t.name);
+    if (prev) {
+      throw new Error(
+        `repos.toml: duplicate repo name "${t.name}" (${prev} and ${t.slug}). ` +
+          `The gitnexus registry alias is the bare repo name, so names must be ` +
+          `unique across ALL groups.`,
+      );
+    }
+    seen.set(t.name, t.slug);
+  }
+}
+
 export function loadTargets(
   tomlPath: string,
   opts: { group?: string; only?: string[] } = {},
@@ -24,14 +56,12 @@ export function loadTargets(
   const branchDefault = cfg.defaults?.branch ?? "automation/repomix-pack";
   const only = opts.only ? new Set(opts.only) : null;
 
-  const out: RepoTarget[] = [];
+  const all: RepoTarget[] = [];
   for (const [group, g] of Object.entries(cfg.groups ?? {})) {
-    if (opts.group && opts.group !== group) continue;
     for (const name of g.repos) {
       const slug = `${g.owner}/${name}`;
-      if (only && !only.has(slug)) continue;
       const override = cfg.repo?.[slug] ?? {};
-      out.push({
+      all.push({
         owner: g.owner,
         name,
         slug,
@@ -46,5 +76,9 @@ export function loadTargets(
       });
     }
   }
-  return out;
+  assertUniqueAliases(all);
+
+  return all.filter(
+    (t) => (!opts.group || opts.group === t.group) && (!only || only.has(t.slug)),
+  );
 }
