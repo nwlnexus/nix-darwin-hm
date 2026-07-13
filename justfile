@@ -38,7 +38,7 @@ fetch-personal-ssh-key:
 materialize-nix-github-token:
     #!/usr/bin/env bash
     set -euo pipefail
-    pat="$(grep -E '^GITHUB_PERSONAL_ACCESS_TOKEN=' ~/projects/personal/.env | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'")"
+    pat="$(/usr/bin/grep -E '^GITHUB_PERSONAL_ACCESS_TOKEN=' ~/projects/personal/.env | /usr/bin/head -n1 | /usr/bin/cut -d= -f2- | tr -d '"' | tr -d "'")"
     [ -n "$pat" ] || { echo "no GITHUB_PERSONAL_ACCESS_TOKEN in ~/projects/personal/.env (rebuild home-manager first)"; exit 1; }
     printf 'access-tokens = github.com=%s\n' "$pat" | sudo tee /etc/nix/github-token.conf >/dev/null
     sudo chmod 600 /etc/nix/github-token.conf && sudo chown root:wheel /etc/nix/github-token.conf
@@ -51,3 +51,26 @@ materialize-nix-github-token:
     echo '  sudo NIX_CONFIG="$(sudo cat /etc/nix/github-token.conf)" darwin-rebuild switch --flake .'
     echo
     echo "Subsequent rebuilds need no prefix."
+
+# Bump the locked mnemosyne flake input (private repo — needs github-token.conf).
+# Run `just materialize-nix-github-token` first if you haven't on this host.
+update-mnemosyne-flake:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ ! -f /etc/nix/github-token.conf ]; then
+      echo "missing /etc/nix/github-token.conf — run: just materialize-nix-github-token" >&2
+      exit 1
+    fi
+    nix_conf="$(sudo cat /etc/nix/github-token.conf)"
+    NIX_CONFIG="$nix_conf" nix flake update mnemosyne
+    echo "Updated flake.lock — commit if intentional, then darwin-rebuild."
+
+# First darwin-rebuild after materialize-nix-github-token (before !include is live).
+darwin-rebuild-bootstrap:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ ! -f /etc/nix/github-token.conf ]; then
+      echo "missing /etc/nix/github-token.conf — run: just materialize-nix-github-token" >&2
+      exit 1
+    fi
+    sudo NIX_CONFIG="$(sudo cat /etc/nix/github-token.conf)" darwin-rebuild switch --flake .
