@@ -87,9 +87,9 @@ Test files live beside their module as `*.test.ts`.
 **Interfaces:**
 - Produces: gitnexus skills + hooks + MCP registration present on **every** nix-darwin host after rebuild. Consumed by Task 3's `--skip-skills`.
 
-- [ ] **Step 1: Resolve the gitnexus binary in nix.** It is a mise global (`npm:gitnexus`), not a nixpkgs package, so it is not on the activation script's `PATH` by default. Resolve it from the mise install prefix (`~/.local/share/mise/installs/npm-gitnexus/latest/bin/gitnexus`). Guard on existence — if mise has not installed it yet on a fresh host, the activation must **no-op, not fail**.
+- [x] **Step 1: Resolve the gitnexus binary in nix.** It is a mise global (`npm:gitnexus`), not a nixpkgs package, so it is not on the activation script's `PATH` by default. Resolve it from the mise install prefix (`~/.local/share/mise/installs/npm-gitnexus/latest/bin/gitnexus`). Guard on existence — if mise has not installed it yet on a fresh host, the activation must **no-op, not fail**.
 
-- [ ] **Step 2: Add the activation entry**, following the existing `home.activation.mem0Enable` precedent (same file, ~line 91) — imperative, idempotent, fail-soft:
+- [x] **Step 2: Add the activation entry**, following the existing `home.activation.mem0Enable` precedent (same file, ~line 91) — imperative, idempotent, fail-soft:
 
 ```nix
 # gitnexus ships its own installer; it is idempotent and non-interactive.
@@ -104,15 +104,15 @@ home.activation.gitnexusSetup = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
 
 The `-c claude` token is verified against `SUPPORTED_CODING_AGENTS` in gitnexus 1.6.9 (valid set: `claude`, `cursor`, `opencode`, `codex`).
 
-- [ ] **Step 3: Verify the flake evaluates.**
+- [x] **Step 3: Verify the flake evaluates.**
 
 Run: `darwin-rebuild build --flake .#$(hostname -s) 2>&1 | tail -5`
 Expected: evaluation succeeds; no error referencing `home.activation.gitnexusSetup`.
 
-- [ ] **Step 4: Verify idempotency.** Run the activation twice (`darwin-rebuild switch` twice, or invoke `gitnexus setup -c claude` twice).
+- [x] **Step 4: Verify idempotency.** Run the activation twice (`darwin-rebuild switch` twice, or invoke `gitnexus setup -c claude` twice).
 Expected: second run makes no destructive change; `~/.claude/skills/gitnexus-*` and `~/.claude/hooks/gitnexus/` still present; `settings.json` still valid JSON.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ```bash
 git add home/cli/claude/default.nix
@@ -144,21 +144,21 @@ export function updateRegistry(fn: (entries: RegistryEntry[]) => RegistryEntry[]
 
 - Consumed by Task 3 (`graph.ts`) and Task 6 (prune).
 
-- [ ] **Step 1: Write the failing tests first** (TDD — see superpowers:test-driven-development):
+- [x] **Step 1: Write the failing tests first** (TDD — see superpowers:test-driven-development):
   - reads a well-formed registry;
   - a **missing** registry file yields `[]`, not a throw (fresh host);
   - a **corrupt/truncated** registry is surfaced as a clear error, never silently overwritten;
   - `updateRegistry` writes atomically — a killed write must not leave a truncated file;
   - **concurrency:** N concurrent `updateRegistry` calls each appending one entry all land (this test must **fail** without the lock — that failure is the point).
 
-- [ ] **Step 2: Implement** with an exclusive lockfile and temp-write + `rename(2)`.
+- [x] **Step 2: Implement** with an exclusive lockfile and temp-write + `rename(2)`.
 
-- [ ] **Step 3: Run tests.**
+- [x] **Step 3: Run tests.**
 
 Run: `cd scripts/repomix-pack && bun test src/registry.test.ts`
 Expected: all pass, including the concurrent-append test.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
 ---
 
@@ -171,9 +171,9 @@ Expected: all pass, including the concurrent-append test.
 - Consumes: `RepoTarget` (Task 4), `registry.ts` (Task 2).
 - Produces: `export async function refreshGraph(target: RepoTarget, cachePath: string): Promise<GraphResult>` where `GraphResult = { status: "analyzed" | "skipped" | "failed"; nodes?: number; bytes?: number; error?: string }`.
 
-- [ ] **Step 1: Commit gate.** Skip `analyze` when the registry entry's `lastCommit` equals the origin HEAD of the cache checkout. Mirrors the pack's content-hash gate. Test both branches.
+- [x] **Step 1: Commit gate.** Skip `analyze` when the registry entry's `lastCommit` equals the origin HEAD of the cache checkout. Mirrors the pack's content-hash gate. Test both branches.
 
-- [ ] **Step 2: Invoke `analyze`.** Command:
+- [x] **Step 2: Invoke `analyze`.** Command:
 
 ```
 gitnexus analyze --no-stats --skip-skills --name <alias> <cache-path>
@@ -183,18 +183,18 @@ gitnexus analyze --no-stats --skip-skills --name <alias> <cache-path>
 
 > **UNVERIFIED, verify here:** it is not proven that gitnexus does not internally `chdir` into the target path, which would re-trigger the mise trust failure. **Verify option 1 works; if it does not, fall back** to invoking the binary by absolute path from the mise install prefix (same resolution as Task 1, Step 1). Record which option was used in the sub-issue.
 
-- [ ] **Step 3: Re-anchor.** After a successful analyze, update the registry entry via `updateRegistry`:
+- [x] **Step 3: Re-anchor.** After a successful analyze, update the registry entry via `updateRegistry`:
   - `path` → the **dev clone** (`target.devClonePath`);
   - `storagePath` → stays in the cache (`<cache>/.gitnexus`);
   - and rewrite `repoPath` in `<cache>/.gitnexus/meta.json` **and** `gitnexus.json`.
 
   If `devClonePath` does not exist on this machine, **skip the re-anchor** and leave the entry anchored at the cache. Not an error — the graph stays queryable; only the working-tree tools are moot.
 
-- [ ] **Step 4: Failure handling.** On analyze timeout or non-zero exit, **remove the registry entry** rather than leave a half-written LadybugDB registered. A corrupt-but-registered graph is worse than no graph. Return `{status: "failed"}`; never throw into the sweep.
+- [x] **Step 4: Failure handling.** On analyze timeout or non-zero exit, **remove the registry entry** rather than leave a half-written LadybugDB registered. A corrupt-but-registered graph is worse than no graph. Return `{status: "failed"}`; never throw into the sweep.
 
-- [ ] **Step 5: Tests.** Gate hit/miss; re-anchor rewrites all three locations (registry + `meta.json` + `gitnexus.json`); missing dev clone skips re-anchor without error; failed analyze deregisters. Mock the gitnexus binary.
+- [x] **Step 5: Tests.** Gate hit/miss; re-anchor rewrites all three locations (registry + `meta.json` + `gitnexus.json`); missing dev clone skips re-anchor without error; failed analyze deregisters. Mock the gitnexus binary.
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
 ---
 
@@ -203,13 +203,13 @@ gitnexus analyze --no-stats --skip-skills --name <alias> <cache-path>
 **Files:**
 - Modify: `scripts/repomix-pack/src/types.ts`, `src/config.ts`, `src/config.test.ts`, `modules/repomix/repos.toml`
 
-- [ ] **Step 1: Extend `RepoTarget`** with `graph: boolean` (default `true`) and `devClonePath: string` (derived from the group's existing `base_dir` + repo name, with `~` expanded).
+- [x] **Step 1: Extend `RepoTarget`** with `graph: boolean` (default `true`) and `devClonePath: string` (derived from the group's existing `base_dir` + repo name, with `~` expanded).
 
-- [ ] **Step 2: Parse the per-repo `graph = false` opt-out** from the existing `[repo."owner/name"]` override tables. Default `true` when absent.
+- [x] **Step 2: Parse the per-repo `graph = false` opt-out** from the existing `[repo."owner/name"]` override tables. Default `true` when absent.
 
-- [ ] **Step 3: Tests.** Default is `true`; explicit `false` is honored; `devClonePath` expands `~` and composes `base_dir` + name correctly for both the `personal` and `work` groups.
+- [x] **Step 3: Tests.** Default is `true`; explicit `false` is honored; `devClonePath` expands `~` and composes `base_dir` + name correctly for both the `personal` and `work` groups.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
 ---
 
@@ -220,13 +220,13 @@ gitnexus analyze --no-stats --skip-skills --name <alias> <cache-path>
 **Files:**
 - Modify: `scripts/repomix-pack/src/git-pr.ts`, `src/git-pr.test.ts`
 
-- [ ] **Step 1: Write the regression test first** — it must fail against current `main`: pack unchanged + `CLAUDE.md` changed ⇒ a PR is still created/updated.
+- [x] **Step 1: Write the regression test first** — it must fail against current `main`: pack unchanged + `CLAUDE.md` changed ⇒ a PR is still created/updated.
 
-- [ ] **Step 2: Replace the pack-hash gate with "any staged diff against base."** Stage `CLAUDE.md` and `AGENTS.md` in addition to the pack and the `.gitignore` fix. Preserve the existing no-op behavior when **nothing** changed (no empty PRs, no Slack spam — a phase 1 invariant).
+- [x] **Step 2: Replace the pack-hash gate with "any staged diff against base."** Stage `CLAUDE.md` and `AGENTS.md` in addition to the pack and the `.gitignore` fix. Preserve the existing no-op behavior when **nothing** changed (no empty PRs, no Slack spam — a phase 1 invariant).
 
-- [ ] **Step 3: Tests.** Pack-only change → PR. Graph-only change → PR. Both → one PR. Neither → **no** PR, no notification.
+- [x] **Step 3: Tests.** Pack-only change → PR. Graph-only change → PR. Both → one PR. Neither → **no** PR, no notification.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
 ---
 
