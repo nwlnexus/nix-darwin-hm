@@ -85,9 +85,9 @@ materialize-r2-cache-creds:
     #!/usr/bin/env bash
     set -euo pipefail
     read_ref() { op read "$1" 2>/dev/null || { echo "op read failed for $1 — fix the op:// ref in this recipe to match your vault item fields" >&2; exit 1; }; }
-    account_id="$(read_ref "op://Dev/cloudflare-account-id/account-id")"
-    key_id="$(read_ref "op://Dev/cloudflare-r2-access/access-key-id")"
-    secret="$(read_ref "op://Dev/cloudflare-r2-access/secret-access-key")"
+    account_id="$(read_ref "op://Dev/nwlnexus-nix-cache/account-id")"
+    key_id="$(read_ref "op://Dev/nwlnexus-nix-cache/access-key-id")"
+    secret="$(read_ref "op://Dev/nwlnexus-nix-cache/secret-access-key")"
     printf 'extra-substituters = s3://nwlnexus-nix-cache?endpoint=https://%s.r2.cloudflarestorage.com&region=auto&profile=nwlnexus-r2\n' "$account_id" \
       | sudo tee /etc/nix/r2-cache.conf >/dev/null
     sudo chmod 600 /etc/nix/r2-cache.conf && sudo chown root:wheel /etc/nix/r2-cache.conf
