@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import { loadTargets } from "./config";
 import { writeFileSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 
 const TOML = `
 [defaults]
@@ -20,6 +20,9 @@ base_dir = "~/projects/work"
 ssh_host = "github.com-work"
 owner = "dtlr"
 repos = ["marquee"]
+
+[repo."dtlr/marquee"]
+graph = false
 `;
 
 function fixture(): string {
@@ -48,4 +51,28 @@ test("filters by group", () => {
 test("filters by explicit slug list", () => {
   const targets = loadTargets(fixture(), { only: ["nwlnexus/moneta"] });
   expect(targets.map((t) => t.slug)).toEqual(["nwlnexus/moneta"]);
+});
+
+test("graph defaults to true when absent", () => {
+  const targets = loadTargets(fixture());
+  const sdk = targets.find((t) => t.name === "olympus-sdk")!;
+  expect(sdk.graph).toBe(true);
+});
+
+test("explicit graph = false is honored", () => {
+  const targets = loadTargets(fixture());
+  const marquee = targets.find((t) => t.name === "marquee")!;
+  expect(marquee.graph).toBe(false);
+});
+
+test("devClonePath expands ~ and composes base_dir + name for the personal group", () => {
+  const targets = loadTargets(fixture());
+  const moneta = targets.find((t) => t.name === "moneta")!;
+  expect(moneta.devClonePath).toBe(join(homedir(), "projects/personal/moneta"));
+});
+
+test("devClonePath expands ~ and composes base_dir + name for the work group", () => {
+  const targets = loadTargets(fixture());
+  const marquee = targets.find((t) => t.name === "marquee")!;
+  expect(marquee.devClonePath).toBe(join(homedir(), "projects/work/marquee"));
 });

@@ -1,9 +1,18 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { RepoTarget } from "./types";
 
 interface Toml {
   defaults?: { pack_path?: string; branch?: string };
-  groups?: Record<string, { ssh_host: string; owner: string; repos: string[] }>;
-  repo?: Record<string, { pack_path?: string; branch?: string; ci?: boolean }>;
+  groups?: Record<string, { base_dir: string; ssh_host: string; owner: string; repos: string[] }>;
+  repo?: Record<
+    string,
+    { pack_path?: string; branch?: string; ci?: boolean; graph?: boolean }
+  >;
+}
+
+function expandHome(p: string): string {
+  return p.startsWith("~") ? join(homedir(), p.slice(1)) : p;
 }
 
 export function loadTargets(
@@ -32,6 +41,8 @@ export function loadTargets(
         packPath: override.pack_path ?? packDefault,
         branch: override.branch ?? branchDefault,
         group,
+        graph: override.graph ?? true,
+        devClonePath: join(expandHome(g.base_dir), name),
       });
     }
   }

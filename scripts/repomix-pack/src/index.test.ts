@@ -22,6 +22,7 @@ test("run packs a repo and stages to brain (no PR)", async () => {
 pack_path = ".llm/repomix.xml"
 branch = "automation/repomix-pack"
 [groups.personal]
+base_dir = "~/projects/personal"
 ssh_host = "github.com"
 owner = "acme"
 repos = ["widget"]
