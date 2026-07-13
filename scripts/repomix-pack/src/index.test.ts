@@ -1,4 +1,5 @@
-import { test, expect } from "bun:test";
+import { test, expect, mock } from "bun:test";
+import * as packModule from "./pack";
 import { run, formatSummary } from "./index";
 import { readRegistry, type RegistryEntry } from "./registry";
 import { formatAdoption } from "./notify";
@@ -24,6 +25,8 @@ import { $ } from "bun";
 interface Fixture {
   root: string;
   bare: string;
+  /** The working clone the last bare origin was made from; push to move HEAD. */
+  work: string;
   toml: string;
   cacheRoot: string;
   brainRoot: string;
@@ -36,6 +39,9 @@ interface Fixture {
 
 const CONFIG_PATH = join(import.meta.dir, "..", "..", "..", "modules/repomix/repomix.config.json");
 
+/** Snapshot of the REAL ./pack exports, taken before any mock.module call. */
+const REAL_PACK = { ...packModule };
+
 /**
  * A bare origin for each repo, plus a repos.toml whose `base_dir` points INSIDE
  * the temp root -- so `devClonePath` can never resolve under the real
@@ -47,9 +53,11 @@ async function makeFixture(repos: string[] = ["widget"]): Promise<Fixture> {
   mkdirSync(devRoot, { recursive: true });
 
   let bare = "";
+  let lastWork = "";
   const origins: Record<string, string> = {};
   for (const name of repos) {
     const work = join(root, `work-${name}`);
+    lastWork = work;
     mkdirSync(work, { recursive: true });
     await $`git -C ${work} init -q -b main`;
     writeFileSync(join(work, "app.ts"), `export const ${name.replace(/\W/g, "_")} = 1;\n`);
@@ -78,6 +86,7 @@ repos = [${repos.map((r) => JSON.stringify(r)).join(", ")}]
   const fx: Fixture = {
     root,
     bare,
+    work: lastWork,
     toml,
     cacheRoot: join(root, "cache"),
     brainRoot: join(root, "brain"),
@@ -158,6 +167,46 @@ appendFileSync(logPath, "end " + alias + "\\n");
   chmodSync(fx.binPath, 0o755);
 }
 
+/**
+ * Run `fn` with the REAL `runPack` wrapped in an in-flight counter, and report
+ * the peak number of packs that were running at the same time.
+ *
+ * This is what makes the serialization test falsifiable. Strict start/end
+ * pairing in the analyze log proves the graph stage never overlapped -- but on
+ * its own it would hold just as well for a sweep accidentally forced to
+ * concurrency 1. `peak > 1` proves the parallelism the graph stage is serialized
+ * AGAINST actually existed.
+ */
+async function withPackTrace<T>(fn: () => Promise<T>): Promise<{ result: T; peak: number }> {
+  let open = 0;
+  let peak = 0;
+  mock.module("./pack", () => ({
+    ...REAL_PACK,
+    runPack: async (dir: string, configPath: string) => {
+      peak = Math.max(peak, ++open);
+      try {
+        // REAL_PACK, not packModule: the module namespace is a LIVE binding, so
+        // after mock.module `packModule.runPack` IS this wrapper -- and calling
+        // it here would recurse forever.
+        return await REAL_PACK.runPack(dir, configPath);
+      } finally {
+        open--;
+      }
+    },
+  }));
+  try {
+    return { result: await fn(), peak };
+  } finally {
+    mock.module("./pack", () => ({ ...REAL_PACK })); // never leak the wrapper
+  }
+}
+
+/** The file paths repomix actually packed (its `<directory_structure>` block). */
+function packedPaths(xml: string): string[] {
+  const m = xml.match(/<directory_structure>([\s\S]*?)<\/directory_structure>/);
+  return (m?.[1] ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+}
+
 function seedRegistry(fx: Fixture, entries: RegistryEntry[]): void {
   mkdirSync(join(fx.root, "gitnexus"), { recursive: true });
   writeFileSync(fx.registryPath, JSON.stringify(entries, null, 2));
@@ -185,6 +234,34 @@ test("run packs a repo and stages to brain (no PR)", async () => {
   const summary = await run({ ...baseOpts(fx), noGraph: true });
   expect(summary.succeeded).toContain("acme/widget");
   expect(existsSync(join(fx.brainRoot, "acme/widget.xml"))).toBe(true);
+});
+
+test("the graph storage is never packed, even on the sweep that finds it there", async () => {
+  const fx = await makeFixture();
+  writeMockGitnexus(fx);
+
+  // Sweep 1 packs a tree with no .gitnexus (the graph is written AFTER the pack).
+  await run(baseOpts(fx));
+  // Sweep 2 packs a tree that HAS one -- `git clean -e /.gitnexus` keeps it.
+  await run(baseOpts(fx));
+
+  const checkout = join(fx.cacheRoot, "acme", "widget");
+  // The pessimistic case, deliberately: the mock writes NO self-ignoring
+  // `.gitnexus/.gitignore`. Real gitnexus 1.6.9 happens to, but relying on that
+  // means any version that stops doing it silently balloons every pack (a 200 KB
+  // WAL alone was 186k tokens) and force-pushes it as a PR. Only repomix's own
+  // ignore list may stand between us and that.
+  expect(existsSync(join(checkout, ".gitnexus", "lbug"))).toBe(true);
+  expect(existsSync(join(checkout, ".gitnexus", ".gitignore"))).toBe(false);
+
+  const pack = readFileSync(join(checkout, ".llm", "repomix.xml"), "utf8");
+  expect(packedPaths(pack)).toEqual(["app.ts"]); // nothing from .gitnexus, nothing else
+  expect(pack).not.toContain('path=".gitnexus'); // no graph file was inlined...
+  expect(pack).not.toContain("x".repeat(64)); // ...and neither was the WAL payload
+  expect(pack).toContain(".gitnexus/**"); // repomix's OWN ignore list is what did it
+
+  const staged = readFileSync(join(fx.brainRoot, "acme/widget.xml"), "utf8");
+  expect(packedPaths(staged)).toEqual(["app.ts"]);
 });
 
 // --- wiring -----------------------------------------------------------------
@@ -223,7 +300,9 @@ test("graph stage is serialized even while packs run in parallel", async () => {
   const fx = await makeFixture(["widget", "gadget", "sprocket"]);
   writeMockGitnexus(fx);
 
-  const summary = await run({ ...baseOpts(fx), concurrency: 3 });
+  const { result: summary, peak } = await withPackTrace(() =>
+    run({ ...baseOpts(fx), concurrency: 3 }),
+  );
   expect(summary.graph.analyzed).toHaveLength(3);
 
   const lines = readFileSync(fx.logPath, "utf8").trim().split("\n");
@@ -236,6 +315,11 @@ test("graph stage is serialized even while packs run in parallel", async () => {
     expect(eVerb).toBe("end");
     expect(eAlias).toBe(sAlias);
   }
+
+  // ...and the packs it is serialized AGAINST really did overlap. Without this
+  // the pairing above is vacuous: it would hold just as well for a sweep
+  // accidentally forced to concurrency 1.
+  expect(peak).toBeGreaterThan(1);
 });
 
 // --- flags ------------------------------------------------------------------
@@ -256,6 +340,40 @@ test("--graph-only skips packing but still runs the graph", async () => {
   const summary = await run({ ...baseOpts(fx), graphOnly: true });
   expect(summary.graph.analyzed).toContain("acme/widget");
   expect(existsSync(join(fx.brainRoot, "acme/widget.xml"))).toBe(false); // no pack
+});
+
+test("--graph-only implies --no-pr: it never rewrites a pending pack PR", async () => {
+  const fx = await makeFixture();
+  writeMockGitnexus(fx);
+  const branch = "automation/repomix-pack";
+
+  // sweep 1 (full) publishes the pack onto the automation branch == the open PR.
+  await run(baseOpts(fx));
+  const beforeSha = (await $`git -C ${fx.bare} rev-parse ${branch}`.text()).trim();
+  expect(await $`git -C ${fx.bare} ls-tree -r --name-only ${branch}`.text()).toContain(
+    ".llm/repomix.xml",
+  );
+
+  // The repo moves on: the graph is now stale (so a --graph-only sweep really
+  // re-analyzes, and gitnexus rewrites CLAUDE.md) while the pack PR is still open.
+  writeFileSync(join(fx.work, "next.ts"), "export const next = 2;\n");
+  await $`git -C ${fx.work} add -A`.quiet();
+  await $`git -C ${fx.work} -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit -qm next`.quiet();
+  await $`git -C ${fx.work} push -q ${fx.bare} main`.quiet();
+
+  const summary = await run({ ...baseOpts(fx), graphOnly: true });
+
+  expect(summary.graph.analyzed).toContain("acme/widget"); // the graph DID refresh
+  expect(summary.publishSkipped).toBe(true); // ...and it is SAID so
+  expect(formatSummary(summary)).toContain("--graph-only");
+  expect(summary.prs).toEqual([]);
+  // The open PR's branch is byte-identical: no force-push, so the pending pack
+  // commit is still in it (pre-fix the branch was rewritten from base and the
+  // pack silently dropped).
+  expect((await $`git -C ${fx.bare} rev-parse ${branch}`.text()).trim()).toBe(beforeSha);
+  expect(await $`git -C ${fx.bare} ls-tree -r --name-only ${branch}`.text()).toContain(
+    ".llm/repomix.xml",
+  );
 });
 
 test("--dry-run runs neither analyze nor a registry write", async () => {
@@ -319,6 +437,38 @@ test("prunes graphs + registry entries for repos no longer in repos.toml, and no
   const names = (await readRegistry(fx.registryPath)).map((e) => e.name).sort();
   expect(names).toEqual(["moneta", "widget"]); // ghost gone, foreign entry untouched
   expect(existsSync(foreignStorage)).toBe(true); // its STORAGE is never touched
+});
+
+test("prune drops the departed repo's whole cache dir, checkout included", async () => {
+  const fx = await makeFixture();
+  writeMockGitnexus(fx);
+
+  // A repo that has since left repos.toml: a full checkout AND its graph.
+  const ghost = join(fx.cacheRoot, "acme", "ghost");
+  mkdirSync(join(ghost, ".git"), { recursive: true });
+  mkdirSync(join(ghost, ".gitnexus"), { recursive: true });
+  writeFileSync(join(ghost, "big.bin"), "x".repeat(8192));
+
+  const summary = await run(baseOpts(fx));
+
+  expect(summary.graph.prunedGraphs).toContain("acme/ghost");
+  expect(existsSync(ghost)).toBe(false); // the CHECKOUT goes too, not just .gitnexus
+  // ...and the live repo's cache dir is untouched.
+  expect(existsSync(join(fx.cacheRoot, "acme", "widget", ".git"))).toBe(true);
+});
+
+test("prune never eats the brain staging dir that lives inside the cache root", async () => {
+  const fx = await makeFixture();
+  writeMockGitnexus(fx);
+  const brainRoot = join(fx.cacheRoot, "brain-staging"); // the PRODUCTION shape
+
+  await run({ ...baseOpts(fx), brainRoot });
+  const staged = join(brainRoot, "acme", "widget.xml");
+  expect(existsSync(staged)).toBe(true);
+
+  const second = await run({ ...baseOpts(fx), brainRoot });
+  expect(second.graph.prunedGraphs).toEqual([]);
+  expect(existsSync(staged)).toBe(true);
 });
 
 test("prune is not fooled by --only/--group narrowing the sweep", async () => {
@@ -386,6 +536,37 @@ test("adoption is surfaced in the summary and in Slack", async () => {
   expect(existsSync(join(orphaned, "lbug"))).toBe(true);
 });
 
+test("a Slack failure costs the notification, never the repo or its PR", async () => {
+  const fx = await makeFixture();
+  writeMockGitnexus(fx);
+  // Set up an adoption, so the sweep posts to Slack from INSIDE the per-repo try,
+  // before the publish stage.
+  const devClone = join(fx.devRoot, "widget");
+  const orphaned = join(devClone, ".gitnexus");
+  mkdirSync(orphaned, { recursive: true });
+  writeFileSync(join(orphaned, "lbug"), "x".repeat(2048));
+  seedRegistry(fx, [{ name: "widget", path: devClone, storagePath: orphaned }]);
+
+  const summary = await run({
+    ...baseOpts(fx),
+    noNotify: false,
+    webhook: "https://example.invalid/hook",
+    // exactly what a bare `await fetch()` does on a DNS/connection blip
+    postSlack: async () => {
+      throw new Error("getaddrinfo ENOTFOUND hooks.slack.com");
+    },
+  });
+
+  expect(summary.failed).toEqual([]); // the REPO did not fail
+  expect(summary.succeeded).toContain("acme/widget");
+  expect(summary.graph.analyzed).toContain("acme/widget");
+  expect(summary.graph.adoptions).toHaveLength(1); // the disclosure still lands in the summary
+  // ...and the publish stage that FOLLOWS the post still ran: the pack reached
+  // the automation branch. A notification outage must never cost a repo its PR.
+  const tree = await $`git -C ${fx.bare} ls-tree -r --name-only ${"automation/repomix-pack"}`.text();
+  expect(tree).toContain(".llm/repomix.xml");
+});
+
 test("formatAdoption states the loss plainly", () => {
   const one = formatAdoption({
     slug: "nwlnexus/olympus-sdk",
@@ -448,6 +629,7 @@ test("a second sweep at the same commit re-analyzes nothing and notifies nobody"
   expect(second.graph.skipped).toContain("acme/widget");
   expect(readFileSync(fx.logPath, "utf8").trim().split("\n")).toHaveLength(2);
   expect(second.graph.adoptions).toEqual([]);
-  expect(second.prs).toEqual([]);
+  // (no PR assertion here: baseOpts sets noPr, so `prs` could never be populated
+  // and asserting on it would be vacuous. The Slack half is the real invariant.)
   expect(posted).toEqual([]);
 });

@@ -27,7 +27,7 @@ export interface GraphSummary {
   failed: { slug: string; error: string }[];
   /** Lossy first-sweep adoptions. MUST be surfaced -- see formatAdoption. */
   adoptions: Adoption[];
-  /** `owner/name` of graphs dropped because the repo left repos.toml. */
+  /** `owner/name` of cache dirs (checkout + graph) dropped because the repo left repos.toml. */
   prunedGraphs: string[];
   /** Total on-disk size of every graph in the pipeline cache, post-sweep. */
   cacheBytes: number;
@@ -38,6 +38,13 @@ export interface RunSummary {
   skipped: string[];
   failed: { slug: string; error: string }[];
   prs: { slug: string; url: string }[];
+  /**
+   * True when the publish stage (commit -> force-push -> PR -> Slack) was
+   * suppressed because the sweep ran with --graph-only. Surfaced so a sweep that
+   * deliberately published nothing is never mistaken for one that had nothing to
+   * publish. See the publish block in `run` for why --graph-only implies --no-pr.
+   */
+  publishSkipped: boolean;
   graph: GraphSummary;
 }
 
@@ -54,7 +61,12 @@ export interface RunOpts {
   noNotify?: boolean;
   /** Skip the graph stage entirely (phase-1 behaviour). */
   noGraph?: boolean;
-  /** Refresh graphs only; skip packing. */
+  /**
+   * Refresh graphs only; skip packing. IMPLIES `noPr`: the whole publish stage
+   * (commit, force-push, PR, Slack) is skipped, because with no pack staged a
+   * commit would rewrite the automation branch off base and strip a pending
+   * pack out of an already-open PR.
+   */
   graphOnly?: boolean;
   originOverride?: Record<string, string>;
   concurrency?: number;
@@ -90,15 +102,26 @@ function serializer(): <T>(fn: () => Promise<T>) => Promise<T> {
   };
 }
 
-interface GraphStorage {
+interface CacheRepo {
   owner: string;
   name: string;
+  /** `<cacheRoot>/<owner>/<name>` -- the checkout. */
   path: string;
+  /** `<cacheRoot>/<owner>/<name>/.gitnexus` -- the graph storage. */
+  graphPath: string;
 }
 
-/** Every `<cacheRoot>/<owner>/<name>/.gitnexus` that exists right now. */
-async function listGraphStorages(cacheRoot: string): Promise<GraphStorage[]> {
-  const out: GraphStorage[] = [];
+/**
+ * Every `<cacheRoot>/<owner>/<name>` this pipeline created.
+ *
+ * "Created by us" means it carries one of our two markers -- a git checkout
+ * (`.git`) or a graph storage (`.gitnexus`). Anything else under the cache root
+ * is not ours to enumerate, let alone delete: in production `brainRoot` is
+ * `<cacheRoot>/brain-staging`, whose `<owner>/` children have the same SHAPE as
+ * a repo dir and none of the markers.
+ */
+async function listCacheRepos(cacheRoot: string): Promise<CacheRepo[]> {
+  const out: CacheRepo[] = [];
   let owners;
   try {
     owners = await readdir(cacheRoot, { withFileTypes: true });
@@ -115,9 +138,10 @@ async function listGraphStorages(cacheRoot: string): Promise<GraphStorage[]> {
     }
     for (const r of repos) {
       if (!r.isDirectory()) continue;
-      const path = join(cacheRoot, o.name, r.name, ".gitnexus");
-      if (!existsSync(path)) continue;
-      out.push({ owner: o.name, name: r.name, path });
+      const path = join(cacheRoot, o.name, r.name);
+      const graphPath = join(path, ".gitnexus");
+      if (!existsSync(graphPath) && !existsSync(join(path, ".git"))) continue;
+      out.push({ owner: o.name, name: r.name, path, graphPath });
     }
   }
   return out;
@@ -125,17 +149,26 @@ async function listGraphStorages(cacheRoot: string): Promise<GraphStorage[]> {
 
 async function graphCacheBytes(cacheRoot: string): Promise<number> {
   let total = 0;
-  for (const s of await listGraphStorages(cacheRoot)) total += await dirBytes(s.path);
+  for (const s of await listCacheRepos(cacheRoot)) total += await dirBytes(s.graphPath);
   return total;
 }
 
 /**
- * Drop graphs + registry entries for repos that are no longer in repos.toml.
+ * Drop the CACHE DIR (checkout + graph) and registry entries for repos that are
+ * no longer in repos.toml.
  *
- * Two guards on the delete, because this is destructive:
- *  - the path must be at or under the pipeline's cache root, and
- *  - it must not be under ~/projects (a dev clone's own index is the user's,
- *    never ours to delete -- the same invariant graph.ts holds).
+ * The whole `<cacheRoot>/<owner>/<name>` goes, not just its `.gitnexus`: the
+ * checkout is the bulk of the disk (a full clone per repo) and, left behind, it
+ * would linger forever with nothing in repos.toml to ever revisit it.
+ *
+ * Guards on the delete, because this is destructive:
+ *  - the path must be STRICTLY under the pipeline's cache root (never the root
+ *    itself),
+ *  - it must not be at or under the brain-staging root (which in production
+ *    lives INSIDE the cache root and holds the sweep's real output),
+ *  - it must carry one of our markers (.git / .gitnexus -- see listCacheRepos),
+ *  - it must not be under ~/projects (a dev clone is the user's, never ours to
+ *    delete -- the same invariant graph.ts holds).
  *
  * The registry side only ever drops entries whose storage lives in OUR cache
  * tree. The user's own entries (the ones pointing at their own indexes) are
@@ -148,6 +181,7 @@ async function graphCacheBytes(cacheRoot: string): Promise<number> {
  */
 async function pruneGraphs(
   cacheRoot: string,
+  brainRoot: string,
   all: RepoTarget[],
   registryPath: string,
 ): Promise<string[]> {
@@ -156,17 +190,18 @@ async function pruneGraphs(
   const projectsRoot = join(homedir(), "projects");
   const pruned: string[] = [];
 
-  for (const s of await listGraphStorages(cacheRoot)) {
+  for (const s of await listCacheRepos(cacheRoot)) {
     const key = `${s.owner}/${s.name}`;
     if (keepDirs.has(key)) continue;
     if (!isAtOrUnder(s.path, cacheRoot)) continue; // must be OUR cache tree
+    if (isAtOrUnder(cacheRoot, s.path)) continue; // ...and STRICTLY under it
+    if (isAtOrUnder(s.path, brainRoot)) continue; // never the staged output
     if (isAtOrUnder(s.path, projectsRoot)) continue; // never a dev clone
-    if (!s.path.endsWith("/.gitnexus")) continue;
     try {
       await rm(s.path, { recursive: true, force: true });
       pruned.push(key);
     } catch {
-      // best effort: a stale graph costs disk, not correctness
+      // best effort: a stale checkout costs disk, not correctness
     }
   }
 
@@ -197,6 +232,7 @@ export async function run(opts: RunOpts): Promise<RunSummary> {
     skipped: [],
     failed: [],
     prs: [],
+    publishSkipped: !!opts.graphOnly,
     graph: {
       analyzed: [],
       skipped: [],
@@ -208,6 +244,25 @@ export async function run(opts: RunOpts): Promise<RunSummary> {
   };
   const limit = opts.concurrency ?? 4;
 
+  /**
+   * A notification is a side effect of the sweep, NEVER a gate on it.
+   *
+   * `notifySlack` does a bare `await fetch(...)`, which REJECTS on a DNS or
+   * connection failure. Called inside the per-repo `try`, one transient Slack
+   * blip would throw into the outer catch: the repo lands in `summary.failed`,
+   * its commit/PR is skipped entirely, and the CLI exits 1 -- a notification
+   * outage costing a repo its pack PR. Everything a post carries is already in
+   * the summary (which is printed regardless), so a failed post is worth a
+   * warning and nothing more.
+   */
+  const safePost = async (payload: object, what: string): Promise<void> => {
+    try {
+      await post(webhook, payload);
+    } catch (e) {
+      console.warn(`WARN slack notify failed (${what}): ${String(e)}`);
+    }
+  };
+
   // A dry run must not analyze, must not write the registry, and must not
   // delete anything -- so the prune, which does two of those three, is off too.
   const graphEnabled = !opts.noGraph && !opts.dryRun;
@@ -217,6 +272,7 @@ export async function run(opts: RunOpts): Promise<RunSummary> {
     // the set of repos the user still wants graphs for.
     summary.graph.prunedGraphs = await pruneGraphs(
       opts.cacheRoot,
+      opts.brainRoot,
       loadTargets(opts.tomlPath),
       registryPath,
     );
@@ -287,20 +343,26 @@ export async function run(opts: RunOpts): Promise<RunSummary> {
             // Loud on purpose. This permanently dropped registrations and left
             // hundreds of MB orphaned; the user must not find out by accident.
             console.warn(`WARN ${formatAdoption(adoption)}`);
-            await post(webhook, buildAdoptionPayload(adoption));
+            await safePost(buildAdoptionPayload(adoption), `adoption ${t.slug}`);
           }
         } else {
           summary.graph.skipped.push(t.slug);
         }
 
-        // --- PR --------------------------------------------------------------
+        // --- publish (commit -> force-push -> PR -> Slack) ---------------------
+        // --graph-only publishes NOTHING -- it implies --no-pr, and more: it
+        // skips commitToBranch too. commitToBranch cuts the automation branch
+        // fresh from `origin/<base>` and FORCE-pushes it. Under --graph-only the
+        // pack was never regenerated and is not staged, so any staged diff at all
+        // (gitnexus rewriting CLAUDE.md/AGENTS.md is exactly that) would rewrite
+        // the branch to base + docs: a pack commit sitting in an OPEN, unmerged
+        // PR is silently dropped from it, and the PR body is relabelled
+        // "0 bytes" (gate.bytes never left 0). --graph-only refreshes graphs; it
+        // does not touch anyone's pending PR. Reported via summary.publishSkipped.
         let committed = false;
-        if (!opts.brainOnly && !opts.dryRun) {
-          const files = [".gitignore", "CLAUDE.md", "AGENTS.md"];
-          if (!opts.graphOnly) {
-            await ensureTracked(dir, t.packPath);
-            files.unshift(t.packPath);
-          }
+        if (!opts.brainOnly && !opts.dryRun && !opts.graphOnly) {
+          const files = [t.packPath, ".gitignore", "CLAUDE.md", "AGENTS.md"];
+          await ensureTracked(dir, t.packPath);
           const result = await commitToBranch(dir, t, defaultBranch, files);
           committed = result.committed;
           if (committed && !opts.noPr) {
@@ -309,10 +371,10 @@ export async function run(opts: RunOpts): Promise<RunSummary> {
               `Automated repomix context pack refresh.\n\nCloses the paired tracking sub-issue.\nPack: \`${t.packPath}\` (${gate.bytes} bytes).`,
             );
             summary.prs.push({ slug: t.slug, url: pr.url });
-            await post(webhook, buildSlackPayload({
+            await safePost(buildSlackPayload({
               slug: t.slug, base: defaultBranch, prUrl: pr.url,
               created: pr.created, bytes: gate.bytes,
-            }));
+            }), `pr ${t.slug}`);
           }
         }
 
@@ -358,8 +420,13 @@ export function formatSummary(s: RunSummary): string {
 
   lines.push("");
   lines.push(`graph cache: ${humanBytes(s.graph.cacheBytes)}`);
+  if (s.publishSkipped) {
+    lines.push(
+      "--graph-only: publish stage skipped (implies --no-pr: no commit, no push, no PR, no Slack)",
+    );
+  }
   if (s.graph.prunedGraphs.length) {
-    lines.push(`pruned graphs (repo left repos.toml): ${s.graph.prunedGraphs.join(", ")}`);
+    lines.push(`pruned cache dirs (repo left repos.toml): ${s.graph.prunedGraphs.join(", ")}`);
   }
   for (const f of s.graph.failed) lines.push(`graph FAILED ${f.slug}: ${f.error}`);
   // Never let an adoption pass silently: it is lossy and it left disk behind.
@@ -368,9 +435,30 @@ export function formatSummary(s: RunSummary): string {
   return lines.join("\n");
 }
 
+const USAGE = `repomix-pack -- refresh repomix context packs + gitnexus graphs
+
+  --group <name|all>   only this repos.toml group (default: all)
+  --only <slug>...     only these owner/name slugs
+  --dry-run            no analyze, no registry write, no prune, no publish
+  --no-pr              commit + push, but never open/update a PR
+  --brain-only         stage the pack to the brain; never touch git
+  --no-notify          never post to Slack
+  --no-graph           skip the gitnexus graph stage entirely
+  --graph-only         refresh graphs only; skip packing.
+                       IMPLIES --no-pr, and publishes nothing at all: with no
+                       pack staged, a commit would cut the automation branch
+                       from base and force-push, stripping a pending pack out of
+                       an already-open PR. Use a full sweep to publish.
+  --help               this text
+`;
+
 if (import.meta.main) {
   const args = process.argv.slice(2);
   const has = (f: string) => args.includes(f);
+  if (has("--help") || has("-h")) {
+    console.log(USAGE);
+    process.exit(0);
+  }
   const val = (f: string) => { const i = args.indexOf(f); return i >= 0 ? args[i + 1] : undefined; };
   const home = process.env.HOME!;
   const groupArg = val("--group");

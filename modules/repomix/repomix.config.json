@@ -8,6 +8,6 @@
   "ignore": {
     "useGitignore": true,
     "useDefaultPatterns": true,
-    "customPatterns": [".llm/**"]
+    "customPatterns": [".llm/**", ".gitnexus/**"]
   }
 }
