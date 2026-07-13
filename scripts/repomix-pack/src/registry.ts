@@ -1,4 +1,4 @@
-import { mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { randomBytes } from "node:crypto";
@@ -64,10 +64,6 @@ async function writeRegistryAtomic(
 
 const LOCK_RETRY_MS = 25;
 const LOCK_TIMEOUT_MS = 10_000;
-// A lock older than this is assumed to belong to a dead holder (killed
-// process, crashed sweep worker) and is stolen rather than waited out
-// forever -- the sweep must not deadlock because one worker got SIGKILLed.
-const LOCK_STALE_MS = 30_000;
 
 async function acquireLock(lockPath: string): Promise<void> {
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
@@ -78,25 +74,11 @@ async function acquireLock(lockPath: string): Promise<void> {
       return;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-      const age = await lockAgeMs(lockPath);
-      if (age !== null && age > LOCK_STALE_MS) {
-        await rm(lockPath, { force: true });
-        continue;
-      }
       if (Date.now() > deadline) {
         throw new Error(`timed out waiting for registry lock at ${lockPath}`);
       }
       await new Promise((r) => setTimeout(r, LOCK_RETRY_MS));
     }
-  }
-}
-
-async function lockAgeMs(lockPath: string): Promise<number | null> {
-  try {
-    const st = await stat(lockPath);
-    return Date.now() - st.mtimeMs;
-  } catch {
-    return null; // lock disappeared between the failed open and this stat
   }
 }
 
