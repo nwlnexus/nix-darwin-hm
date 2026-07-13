@@ -202,6 +202,8 @@ set is `claude`, `cursor`, `opencode`, `codex`).
 
 ## 10. Out of scope (remaining Project 2 seams)
 
-- Where packs + the graph ultimately flow to build the second brain.
-- openwiki adopt/reject.
-- Replacing or retiring mnemosyne / Obsidian / moneta.
+Filed and labelled `needs-brainstorm`. Each requires a design session before it is planned or built:
+
+- **[#39](https://github.com/nwlnexus/nix-darwin-hm/issues/39)** — the brain destination: where packs + the graph ultimately flow.
+- **[#40](https://github.com/nwlnexus/nix-darwin-hm/issues/40)** — openwiki: adopt or reject.
+- **[#41](https://github.com/nwlnexus/nix-darwin-hm/issues/41)** — mnemosyne / Obsidian / moneta: replace, retire, or re-layer. Should *fall out of* #39 and #40 rather than precede them.
