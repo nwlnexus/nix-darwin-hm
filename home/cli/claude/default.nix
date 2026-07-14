@@ -27,13 +27,13 @@ let
       runHook preInstall
       mkdir -p "$out/share/mem0ctl" "$out/bin"
       cp ${./mem0ctl.sh}            "$out/share/mem0ctl/mem0ctl.sh"
-      cp ${./mem0-recall-hook.sh}   "$out/share/mem0ctl/mem0-recall-hook.sh"
-      cp ${./mem0_recall_format.py} "$out/share/mem0ctl/mem0_recall_format.py"
+      cp ${./moneta-recall-hook.sh}   "$out/share/mem0ctl/moneta-recall-hook.sh"
+      cp ${./moneta_recall_format.py} "$out/share/mem0ctl/moneta_recall_format.py"
       cp ${./mem0-add.sh}           "$out/share/mem0ctl/mem0-add.sh"
       cp ${./mnemosyne-drain.sh}    "$out/share/mem0ctl/mnemosyne-drain.sh"
       cp ${./mnemosyne-enqueue.sh}  "$out/share/mem0ctl/mnemosyne-enqueue.sh"
       cp -R ${./mem0-migrate}       "$out/share/mem0ctl/mem0-migrate"
-      chmod +x "$out/share/mem0ctl/mem0ctl.sh" "$out/share/mem0ctl/mem0-recall-hook.sh" \
+      chmod +x "$out/share/mem0ctl/mem0ctl.sh" "$out/share/mem0ctl/moneta-recall-hook.sh" \
                "$out/share/mem0ctl/mem0-add.sh" "$out/share/mem0ctl/mnemosyne-drain.sh" \
                "$out/share/mem0ctl/mnemosyne-enqueue.sh"
       makeWrapper "$out/share/mem0ctl/mem0ctl.sh" "$out/bin/mem0ctl" \
@@ -69,10 +69,10 @@ in
 
   # Declarative recall hook + formatter, and the mnemosyne capture hooks
   # (store symlinks). `mem0ctl enable` wires them into settings.json.
-  home.file.".claude/hooks/mem0-recall-hook.sh".source =
-    "${mem0ctlPkg}/share/mem0ctl/mem0-recall-hook.sh";
-  home.file.".claude/hooks/mem0_recall_format.py".source =
-    "${mem0ctlPkg}/share/mem0ctl/mem0_recall_format.py";
+  home.file.".claude/hooks/moneta-recall-hook.sh".source =
+    "${mem0ctlPkg}/share/mem0ctl/moneta-recall-hook.sh";
+  home.file.".claude/hooks/moneta_recall_format.py".source =
+    "${mem0ctlPkg}/share/mem0ctl/moneta_recall_format.py";
   home.file.".claude/hooks/mnemosyne-drain.sh".source =
     "${mem0ctlPkg}/share/mem0ctl/mnemosyne-drain.sh";
   home.file.".claude/hooks/mnemosyne-enqueue.sh".source =

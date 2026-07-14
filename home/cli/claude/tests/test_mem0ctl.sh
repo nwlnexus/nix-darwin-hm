@@ -70,9 +70,9 @@ setup
 MEM0_URL="http://127.0.0.1:1" bash "$MEM0CTL" enable --no-verify >/dev/null 2>&1
 n1="$(jq '.hooks.SessionStart | length' "$CLAUDE_DIR/settings.json")"
 keep_existing="$(jq '[.hooks.SessionStart[].hooks[].command] | any(. == "/existing/other-hook.sh")' "$CLAUDE_DIR/settings.json")"
-has_recall="$(jq '[.hooks.SessionStart[].hooks[].command] | any(endswith("mem0-recall-hook.sh"))' "$CLAUDE_DIR/settings.json")"
+has_recall="$(jq '[.hooks.SessionStart[].hooks[].command] | any(endswith("moneta-recall-hook.sh"))' "$CLAUDE_DIR/settings.json")"
 drain_first="$(jq '.hooks.SessionStart[0].hooks[0].command | endswith("mnemosyne-drain.sh")' "$CLAUDE_DIR/settings.json")"
-recall_last="$(jq '.hooks.SessionStart[-1].hooks[0].command | endswith("mem0-recall-hook.sh")' "$CLAUDE_DIR/settings.json")"
+recall_last="$(jq '.hooks.SessionStart[-1].hooks[0].command | endswith("moneta-recall-hook.sh")' "$CLAUDE_DIR/settings.json")"
 { [ "$n1" = 3 ] && [ "$keep_existing" = true ] && [ "$has_recall" = true ] && [ "$drain_first" = true ] && [ "$recall_last" = true ]; } \
   && ok "enable adds drain(first)+recall(last), keeps existing group" \
   || no "enable SessionStart merge (len=$n1 keep=$keep_existing recall=$has_recall drainFirst=$drain_first recallLast=$recall_last)"

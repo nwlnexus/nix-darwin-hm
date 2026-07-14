@@ -10,7 +10,7 @@ CLAUDE_MEM_DIR="${CLAUDE_MEM_DIR:-$HOME/.claude-mem}"
 CLAUDE_JSON="${CLAUDE_JSON:-$HOME/.claude.json}"
 SETTINGS="$CLAUDE_DIR/settings.json"
 INSTALLED="$CLAUDE_DIR/plugins/installed_plugins.json"
-HOOK_DEST="$CLAUDE_DIR/hooks/mem0-recall-hook.sh"
+HOOK_DEST="$CLAUDE_DIR/hooks/moneta-recall-hook.sh"
 DRAIN_DEST="$CLAUDE_DIR/hooks/mnemosyne-drain.sh"       # SessionStart (before recall)
 ENQUEUE_DEST="$CLAUDE_DIR/hooks/mnemosyne-enqueue.sh"   # SessionEnd + PreCompact
 RES="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"   # resources dir (siblings live here)
@@ -115,8 +115,8 @@ enable() {
     log "recall hook is nix-managed — skipping copy"
   else
     mkdir -p "$(dirname "$HOOK_DEST")"
-    cp "$RES/mem0-recall-hook.sh"   "$HOOK_DEST"
-    cp "$RES/mem0_recall_format.py" "$(dirname "$HOOK_DEST")/mem0_recall_format.py"
+    cp "$RES/moneta-recall-hook.sh"   "$HOOK_DEST"
+    cp "$RES/moneta_recall_format.py" "$(dirname "$HOOK_DEST")/moneta_recall_format.py"
     chmod +x "$HOOK_DEST"
     log "installed recall hook → $HOOK_DEST"
   fi
@@ -126,8 +126,8 @@ enable() {
   jq_inplace "$SETTINGS" --arg cmd "$HOOK_DEST" '
     .hooks //= {} | .hooks.SessionStart //= [] |
     .hooks.SessionStart |=
-      ( map(select(any(.hooks[]?; (.command // "") | endswith("mem0-recall-hook.sh")) | not))
-        + [ { hooks: [ { type: "command", command: $cmd, timeout: 5 } ] } ] )'
+      ( map(select(any(.hooks[]?; (.command // "") | endswith("moneta-recall-hook.sh") or endswith("mem0-recall-hook.sh")) | not))
+        + [ { hooks: [ { type: "command", command: $cmd, timeout: 12 } ] } ] )'
   log "wired SessionStart recall hook into settings.json"
 
   # --- mnemosyne capture hooks (drain + enqueue) ---
