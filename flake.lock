@@ -240,11 +240,11 @@
         "nixpkgs": "nixpkgs_6"
       },
       "locked": {
-        "lastModified": 1783990405,
-        "narHash": "sha256-gK0P6VTuVruaQQxVySP1ULHWSlz/RtPjgPyQYYCocJE=",
+        "lastModified": 1783990993,
+        "narHash": "sha256-1zPDR1zXQcsptoh0dQcXbDqQRTFvjDRctdXEYW0SeF0=",
         "owner": "nwlnexus",
         "repo": "mnemosyne",
-        "rev": "e7e2c7ce2ca9019c834049dba0bca9fa51cf2e54",
+        "rev": "017207a4c42714e80b2e4b37bcf4dc2b2961ef38",
         "type": "github"
       },
       "original": {
