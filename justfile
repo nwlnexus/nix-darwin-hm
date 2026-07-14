@@ -103,3 +103,34 @@ materialize-r2-cache-creds:
     sudo chmod 600 /var/root/.aws/credentials && sudo chown root:wheel /var/root/.aws/credentials
     echo "Wrote /etc/nix/r2-cache.conf and root AWS profile [nwlnexus-r2]."
     echo "The !include lands in /etc/nix/nix.conf on the next darwin-rebuild switch."
+
+# Flush this machine's parked mnemosyne backlog through moneta /capture-session.
+# Idempotent + resumable (moneta dedupes by session receipt; brain by ledger;
+# queue entries removed only on success). Run after `git pull` +
+# `darwin-rebuild switch` so the current mnemosyne build is installed.
+# See docs/mnemosyne-catchup.md. Override throughput with
+# `MNEMOSYNE_DRAIN_CONCURRENCY=12 just mnemosyne-catchup`.
+mnemosyne-catchup:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    command -v mnemosyne >/dev/null 2>&1 || { echo "mnemosyne not on PATH — run: sudo darwin-rebuild switch --flake ." >&2; exit 1; }
+    # moneta capture needs the token + CF Access creds from the personal bundle.
+    PERSONAL_ENV="${PERSONAL_ENV:-$HOME/projects/personal/.env}"
+    if [ -f "$PERSONAL_ENV" ]; then set -a; . "$PERSONAL_ENV"; set +a; fi
+    HOME_DIR="${MNEMOSYNE_HOME:-$HOME/.claude/mnemosyne}"
+    # Stop stale pre-rebuild drains squatting the lock, then take it fresh.
+    pkill -f 'dist/cli.js drain' 2>/dev/null || true
+    sleep 1
+    rm -rf "$HOME_DIR/drain.lock"
+    echo "Draining $(ls "$HOME_DIR/queue" 2>/dev/null | grep -c '\.json$') queued transcript(s) at concurrency ${MNEMOSYNE_DRAIN_CONCURRENCY:-8}…"
+    MNEMOSYNE_DRAIN_CONCURRENCY="${MNEMOSYNE_DRAIN_CONCURRENCY:-8}" mnemosyne drain
+    echo "---"
+    mnemosyne status
+
+# Show the local mnemosyne spool + moneta totals.
+mnemosyne-status:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    PERSONAL_ENV="${PERSONAL_ENV:-$HOME/projects/personal/.env}"
+    if [ -f "$PERSONAL_ENV" ]; then set -a; . "$PERSONAL_ENV"; set +a; fi
+    mnemosyne status
