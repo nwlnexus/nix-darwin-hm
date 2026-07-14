@@ -52,3 +52,9 @@ Or if you don't have `darwin-rebuild` in your path:
 ```bash
 nix run nix-darwin -- switch --flake .#<hostname>
 ```
+
+## Runbooks
+
+- [Mnemosyne backlog catch-up](docs/mnemosyne-catchup.md) — flush a machine's
+  parked mnemosyne queue through moneta (`just mnemosyne-catchup`). Use when a
+  dev machine was offline/behind and has a large `~/.claude/mnemosyne/queue`.
