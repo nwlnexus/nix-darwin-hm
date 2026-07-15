@@ -42,8 +42,19 @@
   # package from `programs.mise.enable`, unlike the npm-global tools it
   # manages, so this one call IS safe to resolve via PATH-free absolute
   # path without the shim dance). Idempotent/fast when already installed.
+  #
+  # Confirmed live (2nd attempt, DTLR-NWLMMINI): a bare absolute-path call
+  # to `mise` isn't enough — mise's OWN npm-install machinery shells out to
+  # a bare `mise` command internally (its bundled node's npm wrapper does
+  # this, per the observed "line 76: mise: command not found" / exit 127),
+  # and that nested subprocess doesn't inherit anything beyond this one
+  # command's own env unless `mise`'s directory is actually ON PATH for the
+  # whole invocation (not just the literal binary I called) — env vars set
+  # as a command prefix DO propagate to that command's entire subprocess
+  # tree, so prepending PATH here (rather than only resolving the one
+  # top-level binary by absolute path) fixes the nested lookup too.
   home.activation.mnemosyneSetup = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    ${pkgs.mise}/bin/mise install npm:@nwlnexus/mnemosyne 2>&1 || true
+    PATH="${pkgs.mise}/bin:$PATH" ${pkgs.mise}/bin/mise install npm:@nwlnexus/mnemosyne 2>&1 || true
     MNEMOSYNE_BIN="${config.home.homeDirectory}/.local/share/mise/shims/mnemosyne"
     if [ -x "$MNEMOSYNE_BIN" ]; then
       "$MNEMOSYNE_BIN" install-hooks || true
