@@ -1,5 +1,6 @@
 # home/cli/claude/default.nix
 {
+  pkgs,
   lib,
   config,
   ...
@@ -30,10 +31,19 @@
   # shell profile adds — home-manager's activation script sources no shell
   # profile, so a bare `mnemosyne install-hooks` would fail with "command not
   # found" (the exact gitnexusSetup/repomix-pack footgun already documented
-  # elsewhere in this repo: modules/repomix/repomix.nix, this file's prior
-  # revision). Fail-soft: a fresh host may not have the mise global installed
-  # yet.
+  # elsewhere in this repo: modules/repomix/repomix.nix).
+  #
+  # Confirmed live on a real switch: merely declaring a tool in
+  # programs.mise.globalConfig.tools does NOT install it — nothing in this
+  # repo runs `mise install` anywhere, so a newly-added global's shim simply
+  # doesn't exist yet after activation (gitnexusSetup below has this same
+  # latent gap; not fixed here, out of scope for this pass). Explicitly
+  # install it first, via mise's own nix-store path (mise is a real nixpkgs
+  # package from `programs.mise.enable`, unlike the npm-global tools it
+  # manages, so this one call IS safe to resolve via PATH-free absolute
+  # path without the shim dance). Idempotent/fast when already installed.
   home.activation.mnemosyneSetup = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    ${pkgs.mise}/bin/mise install npm:@nwlnexus/mnemosyne 2>&1 || true
     MNEMOSYNE_BIN="${config.home.homeDirectory}/.local/share/mise/shims/mnemosyne"
     if [ -x "$MNEMOSYNE_BIN" ]; then
       "$MNEMOSYNE_BIN" install-hooks || true
