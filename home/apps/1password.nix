@@ -130,6 +130,28 @@ in
           dest = "${config.home.homeDirectory}/projects/personal/.op-connect";
           mode = "0600";
         };
+        # File-backed moneta/CF-Access credentials for mnemosyne (nwlnexus/mnemosyne#30),
+        # replacing the retired nix wrapper's `.env`-sourcing trick — hook commands run
+        # as children of the agent process, not a login shell, so these three files are
+        # the only way the credentials reliably reach them. See home/cli/claude/default.nix.
+        moneta-token = {
+          account = "my.1password.com";
+          template = ../secrets/moneta-token.tpl;
+          dest = "${config.home.homeDirectory}/.config/moneta/token";
+          mode = "0600";
+        };
+        moneta-cf-access-client-id = {
+          account = "my.1password.com";
+          template = ../secrets/moneta-cf-access-client-id.tpl;
+          dest = "${config.home.homeDirectory}/.config/moneta/cf-access-client-id";
+          mode = "0600";
+        };
+        moneta-cf-access-client-secret = {
+          account = "my.1password.com";
+          template = ../secrets/moneta-cf-access-client-secret.tpl;
+          dest = "${config.home.homeDirectory}/.config/moneta/cf-access-client-secret";
+          mode = "0600";
+        };
       };
     };
   };

@@ -1,83 +1,10 @@
 # home/cli/claude/default.nix
 {
-  pkgs,
   lib,
   config,
-  inputs,
   ...
 }:
-let
-  runtimeDeps = with pkgs; [
-    curl
-    jq
-    python3
-    uv
-    gnugrep
-    coreutils
-    procps
-  ];
-  mem0ctlPkg = pkgs.stdenv.mkDerivation {
-    pname = "mem0ctl";
-    version = "1.3.0";
-    src = ./.;
-    nativeBuildInputs = [ pkgs.makeWrapper ];
-    dontConfigure = true;
-    dontBuild = true;
-    installPhase = ''
-      runHook preInstall
-      mkdir -p "$out/share/mem0ctl" "$out/bin"
-      cp ${./mem0ctl.sh}            "$out/share/mem0ctl/mem0ctl.sh"
-      cp ${./moneta-recall-hook.sh}   "$out/share/mem0ctl/moneta-recall-hook.sh"
-      cp ${./moneta_recall_format.py} "$out/share/mem0ctl/moneta_recall_format.py"
-      cp ${./mem0-add.sh}           "$out/share/mem0ctl/mem0-add.sh"
-      cp ${./mnemosyne-drain.sh}    "$out/share/mem0ctl/mnemosyne-drain.sh"
-      cp ${./mnemosyne-enqueue.sh}  "$out/share/mem0ctl/mnemosyne-enqueue.sh"
-      cp -R ${./mem0-migrate}       "$out/share/mem0ctl/mem0-migrate"
-      chmod +x "$out/share/mem0ctl/mem0ctl.sh" "$out/share/mem0ctl/moneta-recall-hook.sh" \
-               "$out/share/mem0ctl/mem0-add.sh" "$out/share/mem0ctl/mnemosyne-drain.sh" \
-               "$out/share/mem0ctl/mnemosyne-enqueue.sh"
-      makeWrapper "$out/share/mem0ctl/mem0ctl.sh" "$out/bin/mem0ctl" \
-        --prefix PATH : ${lib.makeBinPath runtimeDeps}
-      # mem0-add.sh on PATH — the mnemosyne worker (spawnMem0Add) and the drain
-      # replay both invoke it by name; ensure curl is available to it.
-      makeWrapper "$out/share/mem0ctl/mem0-add.sh" "$out/bin/mem0-add.sh" \
-        --prefix PATH : ${lib.makeBinPath runtimeDeps}
-      runHook postInstall
-    '';
-  };
-
-  # The mnemosyne CLI now comes from the nix-built `mnemosyne` flake input
-  # (no manual clone/build). Wrapped so `mem0-add.sh` is on PATH — the CLI's
-  # spawnMem0Add execs it by name at runtime.
-  mnemosynePkg = inputs.mnemosyne.packages.${pkgs.stdenv.hostPlatform.system}.default;
-  mnemosyneBin = pkgs.symlinkJoin {
-    name = "mnemosyne";
-    paths = [ mnemosynePkg ];
-    nativeBuildInputs = [ pkgs.makeWrapper ];
-    postBuild = ''
-      wrapProgram "$out/bin/mnemosyne" \
-        --prefix PATH : ${lib.makeBinPath [ mem0ctlPkg ]} \
-        --run 'if [ -f "$HOME/projects/personal/.env" ]; then set -a; . "$HOME/projects/personal/.env"; set +a; fi'
-    '';
-  };
-in
 {
-  home.packages = [
-    mem0ctlPkg
-    mnemosyneBin
-  ];
-
-  # Declarative recall hook + formatter, and the mnemosyne capture hooks
-  # (store symlinks). `mem0ctl enable` wires them into settings.json.
-  home.file.".claude/hooks/moneta-recall-hook.sh".source =
-    "${mem0ctlPkg}/share/mem0ctl/moneta-recall-hook.sh";
-  home.file.".claude/hooks/moneta_recall_format.py".source =
-    "${mem0ctlPkg}/share/mem0ctl/moneta_recall_format.py";
-  home.file.".claude/hooks/mnemosyne-drain.sh".source =
-    "${mem0ctlPkg}/share/mem0ctl/mnemosyne-drain.sh";
-  home.file.".claude/hooks/mnemosyne-enqueue.sh".source =
-    "${mem0ctlPkg}/share/mem0ctl/mnemosyne-enqueue.sh";
-
   # /brain slash command (consult + ingest the second-brain wiki).
   home.file.".claude/commands/brain.md".source = ./commands/brain.md;
 
@@ -88,10 +15,29 @@ in
     MNEMOSYNE_MODEL = "qwen3.5:9b";
   };
 
-  # Imperative settings.json merge on every rebuild — fail-soft, no network.
-  home.activation.mem0Enable = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    PATH="${lib.makeBinPath runtimeDeps}:$PATH" \
-      "${mem0ctlPkg}/bin/mem0ctl" enable --no-verify || true
+  # mnemosyne is an `npm:@nwlnexus/mnemosyne` mise global (home/default.nix) —
+  # same pattern as gitnexus/repomix, and for the same reason: it isn't in
+  # nixpkgs. Credentials (moneta token + CF Access) are file-provisioned by
+  # op-secrets (home/apps/1password.nix) rather than shell-sourced, since
+  # hook commands run as children of the agent process, not a login shell —
+  # see nwlnexus/mnemosyne#30. This replaces the old mem0ctl/flake apparatus
+  # entirely (nix-darwin-hm#58/#61, nwlnexus/mnemosyne#33).
+  #
+  # `mnemosyne install-hooks` is itself idempotent (keyed replace-or-skip
+  # merge into each agent's config, per its own design) — safe to rerun on
+  # every activation. Resolved by absolute mise-shim path, not PATH lookup:
+  # a mise global's only PATH entry is the shims dir, which the INTERACTIVE
+  # shell profile adds — home-manager's activation script sources no shell
+  # profile, so a bare `mnemosyne install-hooks` would fail with "command not
+  # found" (the exact gitnexusSetup/repomix-pack footgun already documented
+  # elsewhere in this repo: modules/repomix/repomix.nix, this file's prior
+  # revision). Fail-soft: a fresh host may not have the mise global installed
+  # yet.
+  home.activation.mnemosyneSetup = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    MNEMOSYNE_BIN="${config.home.homeDirectory}/.local/share/mise/shims/mnemosyne"
+    if [ -x "$MNEMOSYNE_BIN" ]; then
+      "$MNEMOSYNE_BIN" install-hooks || true
+    fi
   '';
 
   # gitnexus ships its own installer; it is idempotent and non-interactive.

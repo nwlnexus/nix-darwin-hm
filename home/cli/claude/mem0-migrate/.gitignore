@@ -1,9 +1,0 @@
-__pycache__/
-*.pyc
-.pytest_cache/
-.venv/
-# Generated deterministically by tests/conftest.py; not committed.
-tests/fixtures/mini.db
-# Run-local migration state.
-*.mem0-migrate-checkpoint.json
-.mem0-migrate-checkpoint.json

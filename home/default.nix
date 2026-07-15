@@ -225,6 +225,11 @@ in
         terraform-ls = "0.38.8";
         packer = "1.15.4";
         "npm:repomix" = "latest";
+        # Zero runtime dependencies beyond Node itself (no native postinstall,
+        # unlike gitnexus below) — see home/cli/claude/default.nix for the
+        # install-hooks activation and nwlnexus/mnemosyne#33 for why this
+        # replaced the nix flake package.
+        "npm:@nwlnexus/mnemosyne" = "latest";
         # gitnexus needs native postinstall (tree-sitter grammars, onnxruntime, etc.).
         # mise passes --ignore-scripts=true for npm globals by default; with npm 11.16+
         # allow_builds becomes --allow-scripts=<pkgs> so only reviewed deps run scripts.
