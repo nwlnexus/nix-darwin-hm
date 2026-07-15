@@ -26,6 +26,10 @@
       "libkrun/krun/libkrun"
       "libkrun/krun/libkrunfw"
       "libkrun/krun/gvproxy"
+
+      # Secrets scanner (homebrew-core, no tap needed). Used as a pre-commit
+      # gate on repos handling credentials — see home/cli/git/default.nix.
+      "betterleaks"
     ];
 
     # Casks installed on all macOS hosts.

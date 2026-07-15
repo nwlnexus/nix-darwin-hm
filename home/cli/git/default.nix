@@ -63,6 +63,21 @@ in
     git-ignore
   ];
 
+  # Scope betterleaks' pre-commit secret scan to this repo's own committed
+  # .githooks/pre-commit — deliberately NOT a global core.hooksPath, since
+  # that would silently override any other repo's own hook mechanism (e.g.
+  # moneta's husky-managed .husky, which sets its own local core.hooksPath
+  # and would be unaffected by this either way, but a global default would
+  # still change behavior for every other repo on the machine that doesn't
+  # opt in via its own local override). Fail-soft: no-op if this repo isn't
+  # checked out yet on a fresh host (mirrors gitnexusSetup below).
+  home.activation.nixDarwinHmGitHooks = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    REPO="${config.home.homeDirectory}/projects/personal/nix-darwin-hm"
+    if [ -d "$REPO/.git" ]; then
+      ${pkgs.git}/bin/git -C "$REPO" config core.hooksPath .githooks || true
+    fi
+  '';
+
   d.shell.aliases = aliases;
 
   programs = {

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Secret scan on staged changes. Installed via home/cli/git/default.nix
+# (home.activation sets core.hooksPath = .githooks for this repo specifically —
+# not globally, so it doesn't affect any other repo's own hook mechanism).
+set -euo pipefail
+
+if ! command -v betterleaks >/dev/null 2>&1; then
+	echo "betterleaks not found on PATH — skipping secret scan (brew install betterleaks, or rebuild via darwin-rebuild switch)" >&2
+	exit 0
+fi
+
+betterleaks git . --staged --no-banner
