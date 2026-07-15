@@ -21,7 +21,10 @@ let
 
     sourceRoot = "mvmctl-aarch64-apple-darwin";
 
-    nativeBuildInputs = [ pkgs.darwin.sigtool pkgs.darwin.cctools ];
+    nativeBuildInputs = [
+      pkgs.darwin.sigtool
+      pkgs.darwin.cctools
+    ];
 
     dontConfigure = true;
     dontBuild = true;
