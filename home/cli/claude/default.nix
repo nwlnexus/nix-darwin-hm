@@ -53,7 +53,37 @@
   # as a command prefix DO propagate to that command's entire subprocess
   # tree, so prepending PATH here (rather than only resolving the one
   # top-level binary by absolute path) fixes the nested lookup too.
+  #
+  # Confirmed live (3rd attempt, DTLR-NWLMMINI): the shim now installs fine,
+  # but `install-hooks` silently no-ops — settings.json still shows the OLD
+  # mnemosyne-drain.sh/mnemosyne-enqueue.sh/moneta-recall-hook.sh entries.
+  # This is mnemosyne's OWN idempotency working exactly as documented, just
+  # against state this migration never cleaned up: its NEEDLES check treats
+  # any hook command mentioning these legacy filenames as "already wired"
+  # (intentionally, so a machine still running the real nix-managed scripts
+  # doesn't get double-installed over) — but this migration deleted those
+  # script files outright rather than replacing them, so the stale entries
+  # now point at nothing, and mnemosyne skips writing its own real ones
+  # because it (reasonably) assumes they're redundant. Strip the dead
+  # entries first so install-hooks sees a clean slate and actually writes.
   home.activation.mnemosyneSetup = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    SETTINGS="${config.home.homeDirectory}/.claude/settings.json"
+    if [ -f "$SETTINGS" ]; then
+      TMP="$(mktemp)"
+      if ${pkgs.jq}/bin/jq '
+        .hooks |= with_entries(
+          .value |= map(
+            select(
+              (.hooks // []) | all(.command // "" | test("mnemosyne-drain\\.sh|mnemosyne-enqueue\\.sh|moneta-recall-hook\\.sh|mem0ctl|mem0-recall-hook\\.sh") | not)
+            )
+          )
+        )
+      ' "$SETTINGS" > "$TMP" 2>/dev/null; then
+        mv "$TMP" "$SETTINGS"
+      else
+        rm -f "$TMP"
+      fi
+    fi
     PATH="${pkgs.mise}/bin:$PATH" ${pkgs.mise}/bin/mise install npm:@nwlnexus/mnemosyne 2>&1 || true
     MNEMOSYNE_BIN="${config.home.homeDirectory}/.local/share/mise/shims/mnemosyne"
     if [ -x "$MNEMOSYNE_BIN" ]; then
