@@ -182,7 +182,8 @@ Per repo, into the central brain:
 | Optional thin `cluster-*` supplements | GitNexus facets | only if openwiki taxonomy underserves a repo |
 
 Richer process/route pages are explicitly v2+. Source-repo clones must not retain openwiki’s
-side effects (`AGENTS.md` / `CLAUDE.md` / `.github/workflows/openwiki-*.yml`) in the brain PR.
+side effects (`AGENTS.md` / `CLAUDE.md` / `GEMINI.md` / `.github/workflows/openwiki-*.yml`) in the
+brain PR.
 
 ### 4.5 Moneta ingestion
 
@@ -346,12 +347,37 @@ Rationale: machine artifacts before human-visible docs; PR implies sinks already
 
 ## 10. Open implementation choices (not blocking design approval)
 
-1. Exact central brain repository name and Astro content collection path layout.
-2. Whether Job packages `repomix-pack` as a library vs shelling a published CLI.
-3. Argo Events deployment home in olympus-gitops (namespace, ExternalSecrets).
-4. R2 bucket naming and retention (how many historical shas).
-5. Pinned Anthropic model id and openwiki CLI version in the Job image.
-6. Exact strip/ignore list for openwiki side effects (`AGENTS.md`, `CLAUDE.md`, workflow files).
+**Implemented (2026-07-17):** Phases 1–2 of the on-prem Job live in
+[`scripts/codebase-brain/`](../../../scripts/codebase-brain/) — see
+[`2026-07-17-codebase-brain-job-phases-1-2.md`](../plans/2026-07-17-codebase-brain-job-phases-1-2.md)
+and the Argo operator checklist
+[`2026-07-17-codebase-brain-argo-checklist.md`](../plans/2026-07-17-codebase-brain-argo-checklist.md).
+Job README: [`scripts/codebase-brain/README.md`](../../../scripts/codebase-brain/README.md).
+
+| Choice | Status |
+| --- | --- |
+| Central brain repo (`second-brain`) + content root `docs/codebases/{repo}/` | **Decided** (provisional; override `--brain-repo`) |
+| Narrative LLM path (Anthropic-only via openwiki code mode) | **Decided** |
+| Skip-LLM digest marker (`latest-digests.json` in R2 + local; fields include `templateVersion: openwiki-0.2`) | **Decided** |
+| Strip list: `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.github/workflows/openwiki-*.yml` | **Decided** (Job `strip-side-effects.ts`) |
+| Argo namespace / ExternalSecrets placement | **Open** |
+| Pinned Anthropic `OPENWIKI_MODEL_ID` and repomix/gitnexus/syft image pins | **Open** (Containerfile uses `latest` for first build) |
+| R2 retention (how many historical shas) | **Open** |
+| Workflow activeDeadlineSeconds / prod timeout tuning | **Open** |
+| Job packages `repomix-pack` as library vs standalone CLIs | **Open** (Job shells `repomix` / `gitnexus` CLIs today) |
+
+1. Exact central brain repository name and Astro content collection path layout — **brain repo
+   `second-brain` and `docs/codebases/` layout decided**; Astro collection wiring in that repo
+   remains follow-up.
+2. Whether Job packages `repomix-pack` as a library vs shelling a published CLI — **still open**
+   (implementation shells global CLIs).
+3. Argo Events deployment home in olympus-gitops (namespace, ExternalSecrets) — **still open**.
+4. R2 bucket naming and retention (how many historical shas) — **default bucket
+   `nwl-codebase-brain` decided**; retention policy **still open**.
+5. Pinned Anthropic model id and openwiki CLI version in the Job image — **template
+   `openwiki-0.2` decided**; model id pin and repomix/gitnexus/syft pins **still open**.
+6. Exact strip/ignore list for openwiki side effects — **decided** (`AGENTS.md`, `CLAUDE.md`,
+   `GEMINI.md`, `.github/workflows/openwiki-*.yml`).
 
 ---
 
