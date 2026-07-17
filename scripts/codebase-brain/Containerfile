@@ -1,0 +1,53 @@
+# Codebase Brain Job image
+#
+# Build context MUST be the repo root (not scripts/codebase-brain) so
+# modules/repomix/repomix.config.json can be copied in.
+#
+# Build:
+#   podman build -f scripts/codebase-brain/Containerfile -t codebase-brain:dev .
+#   # or: docker build -f scripts/codebase-brain/Containerfile -t codebase-brain:dev .
+#
+# Verify tools:
+#   podman run --rm codebase-brain:dev sh -c 'which bun git tar syft repomix gitnexus openwiki'
+#
+# Run (secrets via runtime env — never baked into the image):
+#   podman run --rm \
+#     -e ANTHROPIC_API_KEY \
+#     -e AWS_ENDPOINT_URL -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
+#     -e BRAIN_R2_BUCKET -e OPENWIKI_MODEL_ID -e GH_TOKEN \
+#     codebase-brain:dev --owner nwlnexus --repo MY_REPO --sha COMMIT_SHA
+#
+# Optional overrides: --phase 1|2|all --dry-run --config-path /etc/codebase-brain/repomix.config.json
+
+FROM oven/bun:1.2-debian
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git ca-certificates curl tar gzip nodejs npm \
+ && rm -rf /var/lib/apt/lists/*
+
+# Global CLIs — pin versions via build args
+ARG REPOMIX_VERSION=latest
+ARG GITNEXUS_VERSION=latest
+ARG OPENWIKI_VERSION=0.2.0
+RUN npm install -g repomix@${REPOMIX_VERSION} gitnexus@${GITNEXUS_VERSION} openwiki@${OPENWIKI_VERSION}
+
+# syft SBOM scanner
+RUN curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+
+WORKDIR /app
+
+# Dependency layer (cached when only src/config change)
+COPY scripts/codebase-brain/package.json scripts/codebase-brain/bun.lock scripts/codebase-brain/tsconfig.json ./
+RUN bun install --frozen-lockfile
+
+COPY scripts/codebase-brain/src ./src
+
+# Repomix config: canonical copy + symlink so default --config-path
+# (../../../modules/repomix/repomix.config.json from src/index.ts → /modules/repomix/...) resolves.
+COPY modules/repomix/repomix.config.json /etc/codebase-brain/repomix.config.json
+RUN mkdir -p /modules/repomix \
+ && ln -sf /etc/codebase-brain/repomix.config.json /modules/repomix/repomix.config.json
+
+ENV REPOMIX_CONFIG=/etc/codebase-brain/repomix.config.json
+
+ENTRYPOINT ["bun", "run", "src/index.ts"]
