@@ -1,10 +1,16 @@
 import YAML from "yaml";
 import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
-import { join, basename } from "node:path";
+import { join, basename, dirname } from "node:path";
 import { NwlDocSchema } from "../schema/frontmatter";
 import type { Digests, GraphRef, JobContext } from "../types";
 
 const FM_RE = /^---\n([\s\S]*?)\n---\n?/;
+
+function normalizeRel(rel: string): string {
+  let r = rel.replace(/\\/g, "/");
+  if (r.startsWith("./")) r = r.slice(2);
+  return r;
+}
 
 export function splitFrontmatter(md: string): { fm: Record<string, unknown>; body: string } {
   const m = md.match(FM_RE);
@@ -26,6 +32,7 @@ export function stampNwlExtensions(
   ctx: JobContext,
   digests: Digests,
   graph: GraphRef,
+  paths?: { slug: string; brainPath: string },
 ): string {
   const { fm, body } = splitFrontmatter(md);
   const slugBase = basename(fileName, ".md").toLowerCase().replace(/\s+/g, "-");
@@ -36,7 +43,7 @@ export function stampNwlExtensions(
     docType,
     repo: ctx.repo,
     owner: ctx.owner,
-    slug: `${ctx.repo}/${slugBase}`,
+    slug: paths?.slug ?? `${ctx.repo}/${slugBase}`,
     source: {
       sha: ctx.sha,
       packHash: digests.packHash,
@@ -44,7 +51,7 @@ export function stampNwlExtensions(
       graphUri: graph.r2Uri,
       templateVersion: digests.templateVersion,
     },
-    brainPath: `${ctx.brainContentRoot}/${ctx.repo}/${slugBase}.md`,
+    brainPath: paths?.brainPath ?? `${ctx.brainContentRoot}/${ctx.repo}/${slugBase}.md`,
     status: "generated" as const,
   };
   NwlDocSchema.parse(stamped);
@@ -57,17 +64,19 @@ export async function normalizeWikiDir(
   digests: Digests,
   graph: GraphRef,
 ): Promise<string[]> {
-  const outDir = join(ctx.outDir, "brain-docs", ctx.repo);
-  await mkdir(outDir, { recursive: true });
   const written: string[] = [];
   const entries = await readdir(wikiDir, { recursive: true });
   for (const rel of entries) {
     if (typeof rel !== "string" || !rel.endsWith(".md")) continue;
     if (rel.includes("_plan") || rel.startsWith("_")) continue;
+    const posixRel = normalizeRel(rel);
+    const relNoExt = posixRel.replace(/\.md$/, "");
+    const slug = `${ctx.repo}/${relNoExt}`;
+    const brainPath = `${ctx.brainContentRoot}/${ctx.repo}/${posixRel}`;
     const raw = await readFile(join(wikiDir, rel), "utf8");
-    const stamped = stampNwlExtensions(raw, rel, ctx, digests, graph);
-    const destName = basename(rel);
-    const dest = join(outDir, destName);
+    const stamped = stampNwlExtensions(raw, rel, ctx, digests, graph, { slug, brainPath });
+    const dest = join(ctx.outDir, "brain-docs", ctx.repo, ...posixRel.split("/"));
+    await mkdir(dirname(dest), { recursive: true });
     await writeFile(dest, stamped);
     written.push(dest);
   }

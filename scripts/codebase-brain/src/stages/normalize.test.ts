@@ -89,4 +89,52 @@ title: moneta
 
     await rm(root, { recursive: true, force: true });
   });
+
+  test("preserves nested subdirs so same leaf names do not collide", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cb-normalize-nested-"));
+    const wikiDir = join(root, "wiki");
+    const outDir = join(root, "out");
+    await mkdir(join(wikiDir, "a"), { recursive: true });
+    await mkdir(join(wikiDir, "b"), { recursive: true });
+    await writeFile(
+      join(wikiDir, "a", "overview.md"),
+      `---
+title: Service A
+---
+
+# A Overview
+`,
+    );
+    await writeFile(
+      join(wikiDir, "b", "overview.md"),
+      `---
+title: Service B
+---
+
+# B Overview
+`,
+    );
+
+    const jobCtx = { ...ctx, outDir };
+    const written = await normalizeWikiDir(wikiDir, jobCtx, digests, graph);
+
+    expect(written).toHaveLength(2);
+    const destA = join(outDir, "brain-docs", ctx.repo, "a", "overview.md");
+    const destB = join(outDir, "brain-docs", ctx.repo, "b", "overview.md");
+    expect(written).toContain(destA);
+    expect(written).toContain(destB);
+
+    const contentA = await readFile(destA, "utf8");
+    const contentB = await readFile(destB, "utf8");
+    const { fm: fmA } = splitFrontmatter(contentA);
+    const { fm: fmB } = splitFrontmatter(contentB);
+
+    expect(NwlDocSchema.parse(fmA).slug).toBe(`${ctx.repo}/a/overview`);
+    expect(NwlDocSchema.parse(fmB).slug).toBe(`${ctx.repo}/b/overview`);
+    expect(fmA).not.toEqual(fmB);
+    expect(contentA).toContain("# A Overview");
+    expect(contentB).toContain("# B Overview");
+
+    await rm(root, { recursive: true, force: true });
+  });
 });
