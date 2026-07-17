@@ -1,6 +1,12 @@
 # OpenWiki Spike — Summary
 
-**Recommendation:** **Hybrid — adopt Path O (openwiki code + OKF) as narrative producer on Anthropic (or equivalent cloud LLM); keep Path C-style syft inventory; keep gitnexus + repomix. Do not use Studio Ollama for openwiki wiki generation.**
+**Decision (accepted 2026-07-17):** **Path O wins** — adopt openwiki code + OKF as Layer 1
+narrative producer on Anthropic; keep Path C-style **syft inventory** only; keep gitnexus +
+repomix; shared GitNexus MCP remains canonical (parent contract C). Do **not** use Studio Ollama
+for openwiki wiki generation. OpenWiki personal mode stays rejected.
+
+**Recommendation (from scorecards):** **Hybrid in the inventory sense** — Path O for narrative;
+syft for deterministic inventory. Parent plan updated accordingly.
 
 ## Evidence
 - **moneta:** Path O produced coherent OKF wiki (9 pages, 72 Moneta dry-run nuggets). Path C overview is fine but thin; syft inventory is the deterministic win.
