@@ -225,7 +225,10 @@ export async function openOrUpdatePr(
     .nothrow();
   const url0 = existing.stdout.toString().trim();
   if (url0) {
-    await $`gh pr edit ${url0} --title ${title} --body ${body}`.quiet().nothrow();
+    const edit = await $`gh pr edit ${url0} --title ${title} --body ${body}`.quiet().nothrow();
+    if (edit.exitCode !== 0) {
+      throw new Error(`gh pr edit failed (${edit.exitCode}): ${edit.stderr.toString()}`);
+    }
     return { url: url0, created: false };
   }
   const url = await createGhPr(slug, branch, base, title, body);
