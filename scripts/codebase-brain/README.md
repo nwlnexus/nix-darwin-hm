@@ -52,7 +52,10 @@ bun run src/index.ts --repo nix-darwin-hm --sha abc1234 --phase 1 --dry-run
 ## Phases and LLM skip gate
 
 Every run executes the **structural pipeline** (clone → pack → analyze → facets → SBOM → R2 graph
-publish → write `manifest.json` and digests marker), regardless of `--phase`.
+publish → write `manifest.json`), regardless of `--phase`. The digests marker (`latest-digests.json`)
+is written only after openwiki + normalize + inventory + brain PR succeed (phase `2`/`all` success
+path) — not on `--phase 1` or the skip path. Local dry-run of `--phase all` still writes the local
+marker so a second dry-run can skip.
 
 | `--phase` | After structural stages |
 | --- | --- |
@@ -84,9 +87,8 @@ Runtime secrets — never commit. The Containerfile lists the same set.
 | `GH_TOKEN` | Brain PR (non–dry-run) | `gh` auth for push and PR create/edit |
 | `OPENWIKI_MODEL_ID` | Optional | Override openwiki model (otherwise openwiki default) |
 
-Without R2 creds, graph upload and remote digest fetch are skipped; local `out/` and
-`latest-digests.json` still update (unless `--dry-run` blocks uploads only for R2/git — local
-artifacts are always written).
+Without R2 creds, graph upload and remote digest fetch are skipped; local `out/` artifacts are always
+written. `latest-digests.json` is written only after phase `2`/`all` succeeds (local dry-run included).
 
 ## Outputs
 

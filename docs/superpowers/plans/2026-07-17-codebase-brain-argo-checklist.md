@@ -253,14 +253,14 @@ CLI: `--phase 1 | 2 | all` (default **`all`**).
 
 | Phase | Behavior |
 | --- | --- |
-| **`1`** | Deterministic only: clone → repomix pack → gitnexus analyze → facets → syft SBOM → R2 graph tarball + `latest-digests.json`. **No** openwiki, inventory page, or brain PR. |
+| **`1`** | Deterministic only: clone → repomix pack → gitnexus analyze → facets → syft SBOM → R2 graph tarball. **No** openwiki, inventory page, brain PR, or digests marker. |
 | **`2`** / **`all`** | Runs phase 1 stages, then (unless skipped) openwiki narrative → normalize OKF → syft inventory page → brain PR to `second-brain`. **`2` and `all` are equivalent** in current Job code. |
 
 **LLM skip gate** (phase 2 / all only):
 
 - [ ] Job fetches previous digests from R2 key `graphs/{owner}/{repo}/latest-digests.json`.
 - [ ] If `(packHash, graphDigest, sbomDigest, templateVersion)` unchanged vs marker, openwiki is **skipped** (logs `skip LLM: digests unchanged`); brain PR step is also skipped.
-- [ ] After every successful phase-1 section, Job writes updated `latest-digests.json` locally and to R2.
+- [ ] `latest-digests.json` is written locally and to R2 **only** after openwiki + normalize + inventory + brain PR succeed (phase `2`/`all` success path). `--phase 1` does not write the marker; skip path (unchanged digests) does not rewrite it. Local dry-run of `--phase all` still writes the local marker so a second dry-run can skip.
 
 Operational split (optional):
 
