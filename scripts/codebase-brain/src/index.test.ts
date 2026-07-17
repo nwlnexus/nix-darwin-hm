@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { TEMPLATE_VERSION, shouldSkipLlm } from "./digests";
 import type { GraphRef, JobContext } from "./types";
 import {
@@ -168,5 +169,32 @@ describe("loadPreviousDigests", () => {
     expect(shouldSkipLlm({ ...sampleDigests, sbomDigest: "sha256:other" }, prev)).toBe(false);
 
     await rm(root, { recursive: true, force: true });
+  });
+});
+
+describe("runJob orchestration order", () => {
+  // runJob itself can't be unit-tested end-to-end without cloning a real repo
+  // and shelling out to repomix/gitnexus/syft, so this locks the contract at
+  // the source level: publishDigestsMarker must mean "narrative + brain PR
+  // succeeded", so it may only appear once, after publishBrainPr, and after
+  // the phase-1/skip early-return guard (so phase "1" and the skip path never
+  // reach it).
+  test("publishDigestsMarker is called exactly once, after publishBrainPr and after the early-return guard", async () => {
+    const src = await readFile(fileURLToPath(new URL("./index.ts", import.meta.url)), "utf8");
+
+    const markerCalls = [...src.matchAll(/publishDigestsMarker\(ctx, digests\)/g)];
+    expect(markerCalls).toHaveLength(1);
+    const markerIdx = markerCalls[0]!.index!;
+
+    const guardIdx = src.indexOf("if (!shouldRunLlmSection(ctx.phase, skipLlm))");
+    const brainPrIdx = src.indexOf("await publishBrainPr(ctx)");
+    expect(guardIdx).toBeGreaterThan(-1);
+    expect(brainPrIdx).toBeGreaterThan(-1);
+
+    // Unreachable from the phase-1 / skip-LLM early return, which happens
+    // strictly before this point in the function body.
+    expect(markerIdx).toBeGreaterThan(guardIdx);
+    // Only runs once the brain PR publish step has completed.
+    expect(markerIdx).toBeGreaterThan(brainPrIdx);
   });
 });

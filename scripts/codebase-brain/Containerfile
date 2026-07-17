@@ -48,6 +48,4 @@ COPY modules/repomix/repomix.config.json /etc/codebase-brain/repomix.config.json
 RUN mkdir -p /modules/repomix \
  && ln -sf /etc/codebase-brain/repomix.config.json /modules/repomix/repomix.config.json
 
-ENV REPOMIX_CONFIG=/etc/codebase-brain/repomix.config.json
-
 ENTRYPOINT ["bun", "run", "src/index.ts"]

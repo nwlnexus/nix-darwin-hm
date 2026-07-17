@@ -7,7 +7,7 @@ export const NwlDocSchema = z.object({
   tags: z.array(z.string()).optional(),
   resource: z.unknown().optional(),
   timestamp: z.string().optional(),
-  docType: z.enum(["overview", "inventory", "cluster"]).or(z.string()),
+  docType: z.enum(["overview", "inventory", "cluster"]),
   repo: z.string(),
   owner: z.string(),
   slug: z.string(),

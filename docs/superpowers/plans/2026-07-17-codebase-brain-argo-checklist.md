@@ -241,9 +241,9 @@ Default CLI flag: `--work-root /tmp/codebase-brain-job`.
 - [ ] Mount a PVC (or hostPath if single-node dev) at `/tmp/codebase-brain-job` so **git clone cache** and **gitnexus analyze cache** persist across runs for the same repo.
 - [ ] Understand layout the mutex protects:
   - `repos/{owner}/{repo}/` — reused clone; `openwiki` mutates under here
-  - `brain/` — clone of `second-brain` for PR publishing
+  - `brain/{owner}/{repo}/` — clone of `second-brain` for PR publishing, scoped per source repo (not a single shared `brain/` dir) so concurrent jobs for different repos never race on the same checkout
   - `out/{owner}/{repo}/latest-digests.json` — local digests marker (dry-run / fallback)
-- [ ] PVC can be **per-repo** (strongest isolation) or **shared** (mutex still required for concurrent safety on `repos/` subtree).
+- [ ] PVC can be **per-repo** (strongest isolation) or **shared** (mutex still required for concurrent safety on `repos/` subtree). Because the brain clone is now per-repo, a global brain-push mutex is unnecessary — the existing per-repo `brain-{owner}-{repo}` mutex already serializes everything that touches a given repo's `brain/{owner}/{repo}` dir.
 
 ---
 

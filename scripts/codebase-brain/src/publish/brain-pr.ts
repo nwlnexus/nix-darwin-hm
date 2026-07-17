@@ -24,7 +24,11 @@ export function brainBranchName(repo: string): string {
 }
 
 export function brainRepoDir(ctx: JobContext): string {
-  return join(ctx.workDir, "..", "..", "..", "brain");
+  // ctx.workDir is workRoot/repos/{owner}/{repo}; mirror that shape under
+  // workRoot/brain/{owner}/{repo} so concurrent jobs for different source
+  // repos never share a checkout (each is still serialized by its own
+  // brain-{owner}-{repo} mutex).
+  return join(ctx.workDir, "..", "..", "..", "brain", ctx.owner, ctx.repo);
 }
 
 export function brainRepoSlug(ctx: JobContext): string {
@@ -223,6 +227,11 @@ export async function openOrUpdatePr(
   const existing = await $`gh pr list --repo ${slug} --head ${branch} --state open --json url --jq ".[0].url"`
     .quiet()
     .nothrow();
+  if (existing.exitCode !== 0) {
+    throw new Error(
+      `gh pr list failed (${existing.exitCode}): ${existing.stderr.toString() || existing.stdout.toString()}`,
+    );
+  }
   const url0 = existing.stdout.toString().trim();
   if (url0) {
     const edit = await $`gh pr edit ${url0} --title ${title} --body ${body}`.quiet().nothrow();

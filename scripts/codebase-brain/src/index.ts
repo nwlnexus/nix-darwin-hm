@@ -109,7 +109,6 @@ export async function runJob(ctx: JobContext): Promise<void> {
   const graph = await publishGraph(ctx, tarballPath, graphDigest);
   const skipLlm = shouldSkipLlm(digests, prev);
   await Bun.write(manifestPath(ctx), JSON.stringify(buildManifest(digests, skipLlm, graph), null, 2));
-  await publishDigestsMarker(ctx, digests);
 
   if (!shouldRunLlmSection(ctx.phase, skipLlm)) {
     if (ctx.phase !== "1" && skipLlm) {
@@ -122,6 +121,9 @@ export async function runJob(ctx: JobContext): Promise<void> {
   await normalizeWikiDir(wikiDir, ctx, digests, graph);
   await writeInventoryPage(ctx, sbomPath, digests, graph);
   await publishBrainPr(ctx);
+  // Marker means "narrative + brain PR completed for these digests" — write it
+  // only after the LLM section succeeds, never on the phase-1 or skip paths.
+  await publishDigestsMarker(ctx, digests);
 }
 
 if (import.meta.main) {

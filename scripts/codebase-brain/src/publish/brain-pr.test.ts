@@ -37,8 +37,17 @@ describe("brainBranchName", () => {
 });
 
 describe("brainRepoDir", () => {
-  test("resolves workRoot/brain from workDir", () => {
-    expect(brainRepoDir(baseCtx)).toBe("/tmp/codebase-brain-job/brain");
+  test("resolves workRoot/brain/{owner}/{repo} from workDir", () => {
+    expect(brainRepoDir(baseCtx)).toBe("/tmp/codebase-brain-job/brain/nwlnexus/moneta");
+  });
+
+  test("scopes different source repos to distinct brain dirs", () => {
+    const otherCtx = {
+      ...baseCtx,
+      repo: "hermes",
+      workDir: "/tmp/codebase-brain-job/repos/nwlnexus/hermes",
+    };
+    expect(brainRepoDir(baseCtx)).not.toBe(brainRepoDir(otherCtx));
   });
 });
 
