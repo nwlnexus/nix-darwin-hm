@@ -12,7 +12,7 @@
 
 - Spike root: `/tmp/codebase-brain-openwiki-spike/` (all writes stay here; override with `SPIKE_ROOT`).
 - Repos: `nwlnexus/moneta` and `nwlnexus/olympus-sdk`, cloned over `git@github.com:`.
-- LLM: Studio Ollama over tailnet for BOTH paths. Base URL env `STUDIO_OLLAMA_URL`, default `http://ai-hub.raptor-mimosa.ts.net:11434` (confirm this is the Mac Studio host, not the mnemosyne hub, before relying on results).
+- LLM: Studio Ollama over tailnet for BOTH paths. Base URL env `STUDIO_OLLAMA_URL`, default `http://ai-hub.raptor-mimosa.ts.net:11434` (**confirmed** — this is the Mac Studio host).
 - OpenWiki wiring: `OPENWIKI_PROVIDER=openai-compatible`, `OPENAI_COMPATIBLE_BASE_URL=$STUDIO_OLLAMA_URL/v1`, `OPENAI_COMPATIBLE_API_KEY=ollama`, `OPENWIKI_MODEL_ID=qwen3.6:27b-mlx` (fallback `qwen2.5:7b-instruct`).
 - OpenWiki **code mode only** — never `openwiki personal`.
 - Syft owns dependency truth. No LLM-authored dependency rows in any inventory doc.
@@ -32,7 +32,7 @@
 - Consumes: nothing.
 - Produces: `$SPIKE_ROOT/repos/{moneta,olympus-sdk}` clones; `$SPIKE_ROOT/artifacts/{moneta,olympus-sdk}/` dirs; `$SPIKE_ROOT/.env.spike` with shared env.
 
-- [ ] **Step 1: Write the bootstrap script**
+- [x] **Step 1: Write the bootstrap script**
 
 ```bash
 #!/usr/bin/env bash
@@ -69,12 +69,12 @@ done
 echo "bootstrap OK: $SPIKE_ROOT"
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run: `bash /tmp/codebase-brain-openwiki-spike/bin/00-bootstrap.sh`
 Expected: `bootstrap OK: /tmp/codebase-brain-openwiki-spike`, and both clones exist.
 
-- [ ] **Step 3: Verify clones and env**
+- [x] **Step 3: Verify clones and env**
 
 Run: `source /tmp/codebase-brain-openwiki-spike/.env.spike && ls "$SPIKE_ROOT/repos" && cat "$SPIKE_ROOT"/artifacts/*/sha.txt`
 Expected: `moneta` and `olympus-sdk` listed; two 40-char SHAs printed.
@@ -91,12 +91,12 @@ Expected: `moneta` and `olympus-sdk` listed; two 40-char SHAs printed.
 - Consumes: `$SPIKE_ROOT/repos/<repo>` (Task 1).
 - Produces per repo: `artifacts/<repo>/repomix.xml`, `artifacts/<repo>/graph/` (gitnexus `.gitnexus/`), `artifacts/<repo>/sbom.cdx.json`.
 
-- [ ] **Step 1: Ensure syft is available**
+- [x] **Step 1: Ensure syft is available**
 
 Run: `command -v syft || brew install syft`
 Expected: a `syft` path prints (install if missing).
 
-- [ ] **Step 2: Write the producers script**
+- [x] **Step 2: Write the producers script**
 
 ```bash
 #!/usr/bin/env bash
@@ -124,12 +124,12 @@ for r in moneta olympus-sdk; do
 done
 ```
 
-- [ ] **Step 3: Run it**
+- [x] **Step 3: Run it**
 
 Run: `source /tmp/codebase-brain-openwiki-spike/.env.spike && bash "$SPIKE_ROOT/bin/10-producers.sh"`
 Expected: `producers OK: moneta` and `producers OK: olympus-sdk`.
 
-- [ ] **Step 4: Verify artifacts exist and SBOM is valid JSON**
+- [x] **Step 4: Verify artifacts exist and SBOM is valid JSON**
 
 Run: `for r in moneta olympus-sdk; do echo "== $r =="; ls -la "$SPIKE_ROOT/artifacts/$r/repomix.xml" "$SPIKE_ROOT/artifacts/$r/sbom.cdx.json"; jq '.bomFormat,(.components|length)' "$SPIKE_ROOT/artifacts/$r/sbom.cdx.json"; done`
 Expected: files present; `"CycloneDX"` printed and a non-negative component count for each repo.
@@ -145,12 +145,12 @@ Expected: files present; `"CycloneDX"` printed and a non-negative component coun
 - Consumes: `$SPIKE_ROOT/.env.spike`.
 - Produces: `artifacts/_llm/model.txt` (resolved model id that answered), verified openwiki binary.
 
-- [ ] **Step 1: Ensure openwiki is installed**
+- [x] **Step 1: Ensure openwiki is installed**
 
 Run: `command -v openwiki || npm install -g openwiki@latest`
 Expected: an `openwiki` path prints.
 
-- [ ] **Step 2: Write the connectivity check**
+- [x] **Step 2: Write the connectivity check**
 
 ```bash
 #!/usr/bin/env bash
@@ -180,7 +180,7 @@ curl -sf "$OPENAI_COMPATIBLE_BASE_URL/chat/completions" \
 echo "llm OK: $MODEL"
 ```
 
-- [ ] **Step 3: Run it**
+- [x] **Step 3: Run it**
 
 Run: `source /tmp/codebase-brain-openwiki-spike/.env.spike && bash "$SPIKE_ROOT/bin/20-llm-check.sh"`
 Expected: `llm OK: qwen3.6:27b-mlx` (or the fallback). If it errors, confirm `STUDIO_OLLAMA_URL` points at the Mac Studio and the model is pulled (`ollama pull qwen3.6:27b-mlx` on the Studio).
@@ -196,7 +196,7 @@ Expected: `llm OK: qwen3.6:27b-mlx` (or the fallback). If it errors, confirm `ST
 - Consumes: `$SPIKE_ROOT/repos/<repo>`, resolved model (Task 3).
 - Produces per repo: `artifacts/<repo>/openwiki-okf/` (copied OKF wiki), `artifacts/<repo>/openwiki-okf/_raw-tree.txt` (record of what openwiki generated).
 
-- [ ] **Step 1: Write the Path O script**
+- [x] **Step 1: Write the Path O script**
 
 ```bash
 #!/usr/bin/env bash
@@ -225,12 +225,12 @@ for r in moneta olympus-sdk; do
 done
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run: `source /tmp/codebase-brain-openwiki-spike/.env.spike && bash "$SPIKE_ROOT/bin/30-path-o.sh"`
 Expected: `path-o OK: moneta` and `path-o OK: olympus-sdk`.
 
-- [ ] **Step 3: Verify OKF output exists with frontmatter**
+- [x] **Step 3: Verify OKF output exists with frontmatter**
 
 Run: `for r in moneta olympus-sdk; do echo "== $r =="; find "$SPIKE_ROOT/artifacts/$r/openwiki-okf" -name '*.md' | head; grep -l '^type:' "$SPIKE_ROOT/artifacts/$r/openwiki-okf"/*.md 2>/dev/null | head; done`
 Expected: at least one `.md` per repo; at least one file with a `type:` frontmatter key (OKF). For `olympus-sdk`, note whether packages get distinct pages/sections (record in the scorecard).
@@ -251,7 +251,7 @@ Expected: at least one `.md` per repo; at least one file with a `type:` frontmat
 - Produces per repo: `artifacts/<repo>/custom-mdx/overview.md`, `artifacts/<repo>/custom-mdx/tech-inventory.md`.
 - Exposes for Task 6: `renderInventory(sbom): string`, `chatComplete(baseUrl, model, prompt): Promise<string>`.
 
-- [ ] **Step 1: Write `package.json`**
+- [x] **Step 1: Write `package.json`**
 
 ```json
 {
@@ -262,7 +262,7 @@ Expected: at least one `.md` per repo; at least one file with a `type:` frontmat
 }
 ```
 
-- [ ] **Step 2: Write the failing test for the deterministic inventory renderer**
+- [x] **Step 2: Write the failing test for the deterministic inventory renderer**
 
 ```ts
 // gen/src/inventory.test.ts
@@ -286,12 +286,12 @@ test("renderInventory lists components from a CycloneDX SBOM, no invention", () 
 });
 ```
 
-- [ ] **Step 3: Run the test to verify it fails**
+- [x] **Step 3: Run the test to verify it fails**
 
 Run: `cd /tmp/codebase-brain-openwiki-spike/gen && bun test`
 Expected: FAIL — `Cannot find module "./inventory"`.
 
-- [ ] **Step 4: Implement the inventory renderer**
+- [x] **Step 4: Implement the inventory renderer**
 
 ```ts
 // gen/src/inventory.ts
@@ -316,12 +316,12 @@ export function renderInventory(sbom: Sbom): string {
 }
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `cd /tmp/codebase-brain-openwiki-spike/gen && bun test`
 Expected: PASS (1 pass).
 
-- [ ] **Step 6: Write the LLM client**
+- [x] **Step 6: Write the LLM client**
 
 ```ts
 // gen/src/llm.ts
@@ -348,7 +348,7 @@ export async function chatComplete(
 }
 ```
 
-- [ ] **Step 7: Write the Path C generator**
+- [x] **Step 7: Write the Path C generator**
 
 ```ts
 // gen/src/path-c.ts
@@ -406,12 +406,12 @@ for (const repo of REPOS) {
 }
 ```
 
-- [ ] **Step 8: Run the generator**
+- [x] **Step 8: Run the generator**
 
 Run: `source /tmp/codebase-brain-openwiki-spike/.env.spike && cd "$SPIKE_ROOT/gen" && bun run src/path-c.ts`
 Expected: `path-c OK: moneta` and `path-c OK: olympus-sdk`.
 
-- [ ] **Step 9: Verify Path C artifacts**
+- [x] **Step 9: Verify Path C artifacts**
 
 Run: `for r in moneta olympus-sdk; do echo "== $r =="; head -20 "$SPIKE_ROOT/artifacts/$r/custom-mdx/overview.md"; grep -c '^|' "$SPIKE_ROOT/artifacts/$r/custom-mdx/tech-inventory.md"; done`
 Expected: overview has OKF+extended frontmatter then `## TL;DR`; inventory has table rows (count ≥ 2 for a repo with deps).
@@ -429,7 +429,7 @@ Expected: overview has OKF+extended frontmatter then `## TL;DR`; inventory has t
 - Produces per repo: `artifacts/<repo>/moneta-dry-run.openwiki.json`, `artifacts/<repo>/moneta-dry-run.custom.json`.
 - Exposes: `nuggetsFromMarkdown(md, {repo, docType, sha, brainPath}): Nugget[]`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // gen/src/nuggets.test.ts
@@ -459,12 +459,12 @@ test("splits by heading into heading-sized nuggets with provenance", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd /tmp/codebase-brain-openwiki-spike/gen && bun test src/nuggets.test.ts`
 Expected: FAIL — `Cannot find module "./nuggets"`.
 
-- [ ] **Step 3: Implement the nugget splitter**
+- [x] **Step 3: Implement the nugget splitter**
 
 ```ts
 // gen/src/nuggets.ts
@@ -524,12 +524,12 @@ export function nuggetsFromMarkdown(md: string, ctx: Ctx): Nugget[] {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd /tmp/codebase-brain-openwiki-spike/gen && bun test src/nuggets.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Write the dry-run emitter (uses the splitter over both paths)**
+- [x] **Step 5: Write the dry-run emitter (uses the splitter over both paths)**
 
 ```ts
 // append to gen/src/nuggets.ts
@@ -575,12 +575,12 @@ if (import.meta.main) {
 }
 ```
 
-- [ ] **Step 6: Run the emitter**
+- [x] **Step 6: Run the emitter**
 
 Run: `source /tmp/codebase-brain-openwiki-spike/.env.spike && cd "$SPIKE_ROOT/gen" && bun run src/nuggets.ts`
 Expected: printed nugget counts per repo/path; four `moneta-dry-run.*.json` files across the two repos.
 
-- [ ] **Step 7: Verify no production Moneta calls and valid JSON**
+- [x] **Step 7: Verify no production Moneta calls and valid JSON**
 
 Run: `grep -rn "mem.nwlnexus.io\|/capture" /tmp/codebase-brain-openwiki-spike/gen/src || echo "no capture calls"; jq 'length' /tmp/codebase-brain-openwiki-spike/artifacts/*/moneta-dry-run.*.json`
 Expected: `no capture calls`; each JSON reports an integer length.
@@ -598,7 +598,7 @@ Expected: `no capture calls`; each JSON reports an integer length.
 - Consumes: all artifacts from Tasks 2–6.
 - Produces: filled scorecards + a recommendation (adopt / keep / hybrid).
 
-- [ ] **Step 1: Write the per-repo scorecard template (repeat for each repo)**
+- [x] **Step 1: Write the per-repo scorecard template (repeat for each repo)**
 
 ```markdown
 # Scorecard — <repo>
@@ -619,12 +619,12 @@ Expected: `no capture calls`; each JSON reports an integer length.
 **Artifact pointers:** openwiki-okf/, custom-mdx/, moneta-dry-run.*.json
 ```
 
-- [ ] **Step 2: Fill both scorecards by inspecting artifacts**
+- [x] **Step 2: Fill both scorecards by inspecting artifacts**
 
 Run: `ls -R /tmp/codebase-brain-openwiki-spike/artifacts/moneta /tmp/codebase-brain-openwiki-spike/artifacts/olympus-sdk`
 Then read the generated docs and dry-run JSON and fill each cell with observations (not guesses).
 
-- [ ] **Step 3: Write the summary + recommendation**
+- [x] **Step 3: Write the summary + recommendation**
 
 ```markdown
 # OpenWiki Spike — Summary
@@ -648,7 +648,7 @@ Then read the generated docs and dry-run JSON and fill each cell with observatio
 - <bullet list mapped to §4.3, §4.4, §5.1; and #40 disposition>
 ```
 
-- [ ] **Step 4: Verify the decision packet is complete**
+- [x] **Step 4: Verify the decision packet is complete**
 
 Run: `test -s /tmp/codebase-brain-openwiki-spike/artifacts/scorecard-summary.md && grep -q "Recommendation:" /tmp/codebase-brain-openwiki-spike/artifacts/scorecard-summary.md && echo "summary OK"`
 Expected: `summary OK`, and both per-repo scorecards have no empty required cells.
