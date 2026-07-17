@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TEMPLATE_VERSION } from "./digests";
+import { TEMPLATE_VERSION, shouldSkipLlm } from "./digests";
 import type { GraphRef, JobContext } from "./types";
 import {
   buildContext,
@@ -151,6 +151,21 @@ describe("loadPreviousDigests", () => {
     );
 
     await expect(loadPreviousDigests(ctx)).resolves.toEqual(sampleDigests);
+
+    await rm(root, { recursive: true, force: true });
+  });
+
+  test("round-trip via publishDigestsMarker enables skip on unchanged digests", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cb-prev-rt-"));
+    const outDir = join(root, "out", "nwlnexus", "moneta", "abc123");
+    await mkdir(outDir, { recursive: true });
+    const ctx = { ...baseCtx, outDir, dryRun: true };
+
+    const { publishDigestsMarker } = await import("./publish/r2-graph");
+    await publishDigestsMarker(ctx, sampleDigests);
+    const prev = await loadPreviousDigests(ctx);
+    expect(shouldSkipLlm(sampleDigests, prev)).toBe(true);
+    expect(shouldSkipLlm({ ...sampleDigests, sbomDigest: "sha256:other" }, prev)).toBe(false);
 
     await rm(root, { recursive: true, force: true });
   });

@@ -23,3 +23,23 @@ export function shouldSkipLlm(current: Digests, previous: Digests | null): boole
     current.templateVersion === previous.templateVersion
   );
 }
+
+export async function parseDigestsMarker(raw: unknown): Promise<Digests | null> {
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw as Record<string, unknown>;
+  const candidate = (obj.digests ?? obj) as Record<string, unknown>;
+  if (
+    typeof candidate.packHash === "string" &&
+    typeof candidate.graphDigest === "string" &&
+    typeof candidate.sbomDigest === "string" &&
+    typeof candidate.templateVersion === "string"
+  ) {
+    return {
+      packHash: candidate.packHash,
+      graphDigest: candidate.graphDigest,
+      sbomDigest: candidate.sbomDigest,
+      templateVersion: candidate.templateVersion,
+    };
+  }
+  return null;
+}

@@ -2,8 +2,18 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { TEMPLATE_VERSION, shouldSkipLlm } from "../digests";
 import type { JobContext } from "../types";
-import { buildGraphRef, graphRefOutPath, publishGraph } from "./r2-graph";
+import {
+  buildGraphRef,
+  graphRefOutPath,
+  latestDigestsObjectKey,
+  localDigestsMarkerPath,
+  publishDigestsMarker,
+  publishGraph,
+  readLocalDigestsMarker,
+} from "./r2-graph";
+import { loadPreviousDigests } from "../index";
 
 const INTENT =
   "shared MCP canonical (parent C); Moneta refs only; mnemosyne convenience later";
@@ -22,6 +32,13 @@ const baseCtx: JobContext = {
   r2Prefix: "graphs",
   dryRun: false,
   phase: "all",
+};
+
+const sampleDigests = {
+  packHash: "sha256:pack",
+  graphDigest: "sha256:graph",
+  sbomDigest: "sha256:sbom",
+  templateVersion: TEMPLATE_VERSION,
 };
 
 describe("buildGraphRef", () => {
@@ -98,5 +115,68 @@ describe("publishGraph", () => {
       else delete process.env.AWS_SECRET_ACCESS_KEY;
       await rm(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe("publishDigestsMarker", () => {
+  test("dry-run writes local marker with exact Digests JSON and skips upload", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cb-digests-"));
+    const outDir = join(root, "out", "nwlnexus", "moneta", "abc123");
+    const ctx = { ...baseCtx, outDir, dryRun: true };
+
+    const saved = {
+      endpoint: process.env.AWS_ENDPOINT_URL,
+      accessKey: process.env.AWS_ACCESS_KEY_ID,
+      secretKey: process.env.AWS_SECRET_ACCESS_KEY,
+    };
+    delete process.env.AWS_ENDPOINT_URL;
+    delete process.env.AWS_ACCESS_KEY_ID;
+    delete process.env.AWS_SECRET_ACCESS_KEY;
+
+    try {
+      const { localPath, r2Key } = await publishDigestsMarker(ctx, sampleDigests);
+
+      expect(localPath).toBe(localDigestsMarkerPath(ctx));
+      expect(r2Key).toBe(latestDigestsObjectKey(ctx));
+      expect(r2Key).toBe("graphs/nwlnexus/moneta/latest-digests.json");
+      expect(JSON.parse(await readFile(localPath, "utf8"))).toEqual(sampleDigests);
+    } finally {
+      if (saved.endpoint !== undefined) process.env.AWS_ENDPOINT_URL = saved.endpoint;
+      else delete process.env.AWS_ENDPOINT_URL;
+      if (saved.accessKey !== undefined) process.env.AWS_ACCESS_KEY_ID = saved.accessKey;
+      else delete process.env.AWS_ACCESS_KEY_ID;
+      if (saved.secretKey !== undefined) process.env.AWS_SECRET_ACCESS_KEY = saved.secretKey;
+      else delete process.env.AWS_SECRET_ACCESS_KEY;
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("digests marker round-trip", () => {
+  test("dry-run write then loadPreviousDigests enables shouldSkipLlm", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cb-digests-rt-"));
+    const outDir = join(root, "out", "nwlnexus", "moneta", "abc123");
+    const ctx = { ...baseCtx, outDir, dryRun: true };
+
+    await publishDigestsMarker(ctx, sampleDigests);
+    const prev = await loadPreviousDigests(ctx);
+    expect(prev).toEqual(sampleDigests);
+    expect(shouldSkipLlm(sampleDigests, prev)).toBe(true);
+
+    const changed = { ...sampleDigests, packHash: "sha256:changed" };
+    expect(shouldSkipLlm(changed, prev)).toBe(false);
+
+    await rm(root, { recursive: true, force: true });
+  });
+
+  test("readLocalDigestsMarker reads marker written by publishDigestsMarker", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cb-digests-local-"));
+    const outDir = join(root, "out", "nwlnexus", "moneta", "sha456");
+    const ctx = { ...baseCtx, outDir, dryRun: true };
+
+    await publishDigestsMarker(ctx, sampleDigests);
+    await expect(readLocalDigestsMarker(ctx)).resolves.toEqual(sampleDigests);
+
+    await rm(root, { recursive: true, force: true });
   });
 });
