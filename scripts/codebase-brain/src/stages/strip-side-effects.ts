@@ -1,6 +1,7 @@
 export const SIDE_EFFECT_PATTERNS = [
   /^AGENTS\.md$/i,
   /^CLAUDE\.md$/i,
+  /^GEMINI\.md$/i,
   /^\.github\/workflows\/openwiki-.*\.yml$/i,
 ];
 

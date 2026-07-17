@@ -14,6 +14,8 @@ describe("isPublishableWikiRel", () => {
     "agents.md",
     "CLAUDE.md",
     "claude.md",
+    "GEMINI.md",
+    "gemini.md",
     ".github/workflows/openwiki-update.yml",
     ".github/workflows/openwiki-sync.yml",
     "README.txt",
