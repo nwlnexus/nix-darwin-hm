@@ -24,7 +24,7 @@ export function buildContext(argv: string[]): JobContext {
   });
   if (!values.repo || !values.sha) throw new Error("--repo and --sha are required");
   const phase = values.phase as Phase;
-  if (phase !== 1 && phase !== 2 && phase !== "all") {
+  if (phase !== "1" && phase !== "2" && phase !== "all") {
     throw new Error("--phase must be 1 | 2 | all");
   }
   const workRoot = values["work-root"]!;

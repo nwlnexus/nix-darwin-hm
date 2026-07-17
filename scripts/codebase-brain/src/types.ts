@@ -1,4 +1,4 @@
-export type Phase = 1 | 2 | "all";
+export type Phase = "1" | "2" | "all";
 
 export interface Digests {
   packHash: string;
