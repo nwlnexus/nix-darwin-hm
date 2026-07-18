@@ -56,25 +56,64 @@ podman run --rm ghcr.io/nwlnexus/codebase-brain:<tag> \
 
 ## 3. Secrets (runtime env only — NEVER in the image)
 
-Mount via Kubernetes `Secret` + ExternalSecrets (or sealed secrets). The Job reads **environment variables** at runtime.
+**Principle:** secrets live in **1Password**; the cluster reads them via **ExternalSecrets** into a
+namespaced Kubernetes `Secret`. Do **not** paste tokens into ConfigMaps, image layers, Flux
+plaintext, or long-lived “manual” `kubectl create secret` as the source of truth. Sealed-secrets
+are not the preferred path for this Job.
 
-| Secret key / env var | Required when | Source (example) |
+The Job reads **environment variables** at runtime (`envFrom: secretRef` on the Workflow container).
+
+| Secret key / env var | Required when | 1Password → ExternalSecret (example) |
 | --- | --- | --- |
-| `ANTHROPIC_API_KEY` | `--phase 2`, `all` (openwiki) | 1Password `op://Dev/docs-api-key` → ExternalSecret, or cluster secret |
-| `AWS_ENDPOINT_URL` | R2 publish / skip-gate fetch | R2 account endpoint |
-| `AWS_ACCESS_KEY_ID` | R2 publish / skip-gate fetch | R2 API token |
-| `AWS_SECRET_ACCESS_KEY` | R2 publish / skip-gate fetch | R2 API token |
-| `BRAIN_R2_BUCKET` | optional | default `nwl-codebase-brain` if unset |
-| `GH_TOKEN` | brain PR push + `gh pr` (phase 2 / all) | GitHub PAT or App installation token with repo contents + PR scope |
-| `OPENWIKI_MODEL_ID` | optional | openwiki model override |
+| `ANTHROPIC_API_KEY` | `--phase 2`, `all` (openwiki) | `op://Dev/docs-api-key` (or dedicated item) |
+| `AWS_ENDPOINT_URL` | R2 publish / skip-gate fetch | R2 item in 1Password Dev vault |
+| `AWS_ACCESS_KEY_ID` | R2 publish / skip-gate fetch | same R2 item |
+| `AWS_SECRET_ACCESS_KEY` | R2 publish / skip-gate fetch | same R2 item |
+| `BRAIN_R2_BUCKET` | optional | default `nwl-codebase-brain` if unset (non-secret ConfigMap/env OK) |
+| `GH_TOKEN` | private source clone + brain PR / `gh` | **minted** from GitHub App creds (see §3.1) — not a personal PAT |
+| `OPENWIKI_MODEL_ID` | optional | non-secret; ConfigMap/env OK |
 
-- [ ] Create ExternalSecret(s) in `codebase-brain` namespace for the above (split or single secret — operator choice).
-- [ ] Wire Workflow container `envFrom: secretRef` (or explicit `env:` entries) — **no secrets in ConfigMap or image layers**.
-- [ ] Confirm `gh` and `git` inside the pod can authenticate via `GH_TOKEN` for `nwlnexus/second-brain` and source repos (HTTPS clone uses public read; push/PR needs token).
+- [ ] ExternalSecrets Operator + 1Password Connect / Secrets Automation already installed (or add in olympus-gitops).
+- [ ] Create ExternalSecret(s) in `codebase-brain` namespace that sync from 1Password into `codebase-brain-secrets` (split or single Secret — operator choice).
+- [ ] Wire Workflow container `envFrom: secretRef: name: codebase-brain-secrets` — **no secrets in ConfigMap or image layers**.
+- [ ] Confirm `gh` and `git` inside the pod authenticate via `GH_TOKEN` for allowlisted source clones **and** `nwlnexus/second-brain` push/PR.
 
-> **Brief note:** Task brief lists “GitHub App creds”; the Job uses `gh`/`git` with **`GH_TOKEN`**. A GitHub App installation token synced into `GH_TOKEN` satisfies both.
+- [ ] (Recommended) ExternalSecret for **Slack webhook** (or reuse existing notify 1Password item / pattern) for failure alerts — see §10.
 
-- [ ] (Recommended) ExternalSecret for **Slack webhook** (or reuse existing notify secret pattern) for failure alerts — see §10.
+### 3.1 GitHub App → `GH_TOKEN` (1Password + ExternalSecrets)
+
+Use a dedicated org App (e.g. `codebase-brain`) for clone + brain PR — bounded, auditable bot
+identity. The Job still consumes a short-lived token as **`GH_TOKEN`** (HTTPS
+`x-access-token:…@github.com/…` clone and `gh`/`git` push).
+
+**Store in 1Password (Dev vault), never in git:**
+
+Item: **`codebase-docs-pipeline-gh-app`** (path shape: `op://Dev/codebase-docs-pipeline-gh-app/…`)
+
+| Field (as stored) | Purpose |
+| --- | --- |
+| `app-id` | GitHub App ID (numeric) |
+| `client-id` | GitHub App Client ID |
+| `client-secret` | App client secret (OAuth-style; not required for install-token mint) |
+| `installation-id` | Org installation ID on nwlnexus — required to mint install access token |
+| PEM **file attachment** (`*.private-key.pem`) | App private key — ExternalSecrets / Connect must map the **document/file** property |
+
+**PEM as file attachment:** keep the `.pem` as a 1Password **document/file** on the item (not pasted into a password field). When wiring olympus-gitops:
+
+- [ ] ExternalSecret references item `codebase-docs-pipeline-gh-app` in the Dev vault.
+- [ ] Sync `app-id`, `client-id`, `installation-id` as string keys; sync the PEM via the provider’s **file/document** reference into a Secret key such as `private_key` (raw PEM bytes, including `BEGIN/END` lines).
+- [ ] Local verify (laptop only): `op item get codebase-docs-pipeline-gh-app --fields label=app-id,label=installation-id` and read the document attachment for the PEM — do not commit the output.
+
+**Note:** JWT signing uses **App ID + PEM**; exchanging for a short-lived install token also needs **`installation-id`**. `client-id` / `client-secret` are not used by the Job’s `GH_TOKEN` mint path today.
+
+**In cluster (olympus-gitops):**
+
+- [ ] ExternalSecret syncs App ID / installation ID / PEM from 1Password into a K8s Secret (e.g. `codebase-brain-github-app`).
+- [ ] A mint path (init container, small sidecar, or ExternalSecrets generator / CronJob) exchanges JWT → **installation access token** (~1h) and writes/refreshes `GH_TOKEN` on `codebase-brain-secrets` (or injects it for the Workflow).
+- [ ] **Do not** use a personal PAT as production `GH_TOKEN`. Local smoke may use `gh auth token` only on a developer machine.
+- [ ] Install the App on **selected** repos only: `[groups.personal]` allowlist + `second-brain` (see §4).
+
+**App repository permissions (minimum):** Metadata (read); Contents (read/write); Pull requests (read/write). Webhook optional (Argo Events owns push today).
 
 ---
 
@@ -285,7 +324,7 @@ graphs/{owner}/{repo}/latest-digests.json  # skip-gate marker
 - [ ] Content path: `docs/codebases/{repo}/` (+ `_meta/` for SBOM/facet/graph-ref artifacts).
 - [ ] Job opens or updates PR via `gh`; PR body states **“Do not auto-merge.”**
 - [ ] **Do not** configure auto-merge, merge queues, or bot-merge labels on these PRs.
-- [ ] `GH_TOKEN` must allow push to `automation/brain-*` branches and PR create/edit on `second-brain`.
+- [ ] `GH_TOKEN` (from GitHub App install token via ExternalSecrets/1Password) must allow push to `automation/brain-*` branches and PR create/edit on `second-brain`.
 
 ---
 
@@ -346,7 +385,8 @@ podman run --rm \
 
 | Topic | Task brief | This checklist (build decisions) |
 | --- | --- | --- |
-| GitHub auth | “GitHub App creds” | Job uses **`GH_TOKEN`** env; App installation token may back it |
+| GitHub auth | “GitHub App creds” | Dedicated App; **1Password → ExternalSecrets** mint install token → Job `GH_TOKEN` (no personal PAT in prod) |
+| Secrets source | (implied) | **1Password is source of truth**; ExternalSecrets syncs into the cluster — not sealed-secrets / ad-hoc kubectl secrets |
 | Skip gate | (not in brief) | R2 **`latest-digests.json`** drives LLM skip |
 | Timeout | (not in brief) | **`activeDeadlineSeconds`** required — openwiki has no internal timeout |
 | Parent spec link | “link from parent spec §10” | Deferred to Task 14; spec §10 lists open choices (namespace, bucket, model pin) |

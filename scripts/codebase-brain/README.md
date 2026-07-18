@@ -84,7 +84,7 @@ Runtime secrets — never commit. The Containerfile lists the same set.
 | `AWS_ACCESS_KEY_ID` | R2 upload / remote skip marker | R2 access key |
 | `AWS_SECRET_ACCESS_KEY` | R2 upload / remote skip marker | R2 secret key |
 | `BRAIN_R2_BUCKET` | Optional | Bucket name (default `nwl-codebase-brain`) |
-| `GH_TOKEN` | Brain PR (non–dry-run) | `gh` auth for push and PR create/edit |
+| `GH_TOKEN` | Private source clone + brain PR (non–dry-run) | `gh` auth; clone uses `x-access-token` HTTPS when set |
 | `OPENWIKI_MODEL_ID` | Optional | Override openwiki model (otherwise openwiki default) |
 
 Without R2 creds, graph upload and remote digest fetch are skipped; local `out/` artifacts are always

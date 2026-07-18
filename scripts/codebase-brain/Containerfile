@@ -21,18 +21,21 @@
 
 FROM oven/bun:1.2-debian
 
+# build-essential: gitnexus pulls tree-sitter-* native addons (node-gyp needs make/g++)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git ca-certificates curl tar gzip nodejs npm \
+    build-essential python3 \
  && rm -rf /var/lib/apt/lists/*
 
-# Global CLIs — pin versions via build args
-ARG REPOMIX_VERSION=latest
-ARG GITNEXUS_VERSION=latest
+# Global CLIs — pin versions via build args (resolved 2026-07-17 first green build)
+ARG REPOMIX_VERSION=1.16.1
+ARG GITNEXUS_VERSION=1.6.9
 ARG OPENWIKI_VERSION=0.2.0
 RUN npm install -g repomix@${REPOMIX_VERSION} gitnexus@${GITNEXUS_VERSION} openwiki@${OPENWIKI_VERSION}
 
-# syft SBOM scanner
-RUN curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+# syft SBOM scanner (pin to the version resolved on first green build)
+ARG SYFT_VERSION=v1.48.0
+RUN curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin "${SYFT_VERSION}"
 
 WORKDIR /app
 
