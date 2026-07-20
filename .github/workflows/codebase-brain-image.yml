@@ -1,0 +1,73 @@
+name: codebase-brain-image
+
+# Builds the codebase-brain Job image and pushes to GHCR.
+# Mirrors olympus-sdk ingress-discovery.yml / openmemory.yml / kubeconfig-merger.yml:
+#   permissions.packages: write + GITHUB_TOKEN via docker/login-action.
+#
+# Build context MUST be the repo root (Containerfile copies modules/repomix/...).
+#
+# First-time package setup (org UI):
+#   Packages → codebase-brain → Package settings → Manage Actions access
+#   → add nwlnexus/nix-darwin-hm with Write role
+#   → optionally Link repository → nix-darwin-hm
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/codebase-brain/**"
+      - "modules/repomix/repomix.config.json"
+      - ".github/workflows/codebase-brain-image.yml"
+  pull_request:
+    paths:
+      - "scripts/codebase-brain/**"
+      - "modules/repomix/repomix.config.json"
+      - ".github/workflows/codebase-brain-image.yml"
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: nwlnexus/codebase-brain
+
+jobs:
+  build:
+    name: Build & Push Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' }}
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=,format=long
+            type=sha,prefix=,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: scripts/codebase-brain/Containerfile
+          push: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+            org.opencontainers.image.source=https://github.com/nwlnexus/nix-darwin-hm
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # compute-hub workers are amd64
+          platforms: linux/amd64
