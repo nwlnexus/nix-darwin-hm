@@ -10,7 +10,8 @@
     d.hm = [
       ../repomix/repomix.nix
       ../memory-watchdog/memory-watchdog.nix
-    ];
+    ]
+    ++ lib.optionals config.d.profiles.dev.rust.enable [ ../rust/rust.nix ];
 
     environment.systemPackages = with pkgs; [
       github-cli

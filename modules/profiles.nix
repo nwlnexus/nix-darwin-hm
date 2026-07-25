@@ -33,11 +33,13 @@ in
       enable = mkBool true;
 
       js.enable = mkBool cfg.dev.enable;
+      # Rust tooling (shared target dir, sccache, scheduled sweep) is uniform
+      # across the dev fleet, so it follows the dev profile like js does.
+      rust.enable = mkBool cfg.dev.enable;
 
       # Per machine
       go.enable = mkBool false;
       py.enable = mkBool false;
-      rust.enable = mkBool false;
     };
 
     # For: Corporate programs e.g. Zoom, Slack, etc.
