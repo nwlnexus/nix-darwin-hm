@@ -26,26 +26,29 @@
       "libkrun/krun/libkrun"
       "libkrun/krun/libkrunfw"
       "libkrun/krun/gvproxy"
-
-      # Secrets scanner (homebrew-core, no tap needed). Used as a pre-commit
-      # gate on repos handling credentials — see home/cli/git/default.nix.
-      "betterleaks"
     ];
 
     # Casks installed on all macOS hosts.
     casks = [
       "obsidian"
+      # Secrets scanner. Prefer the upstream tap cask over homebrew-core's
+      # formula of the same name: both ship `betterleaks`, and having the cask
+      # installed while the Brewfile asks for the formula makes `brew bundle`
+      # load the cask (upgrade/cleanup) and then fail the formula link.
+      # Used as a pre-commit gate — see home/cli/git/default.nix.
+      "betterleaks/tap/betterleaks"
     ];
 
-    # libkrun/krun is a third-party tap. Homebrew 6.0 gates untrusted taps, and
-    # libkrun pulls in `libkrun/krun/virglrenderer` as a dependency (not
-    # fully-qualified above), so the bundle refuses it from an untrusted tap.
-    # nix-darwin's `taps` option can't emit `trusted: true`, so declare the tap
-    # as a verbatim Brewfile line that both taps AND trusts it (covering the
-    # dependency too). Same pattern as modules/profiles/base.nix for
-    # nwlnexus/olympus. See https://docs.brew.sh/Tap-Trust
+    # Third-party taps. Homebrew 6.0 gates untrusted taps; nix-darwin's `taps`
+    # option can't emit `trusted: true`, so declare them as verbatim Brewfile
+    # lines that both tap AND trust. Same pattern as modules/profiles/base.nix
+    # / dev.nix. Critical under darwin-rebuild: activate runs
+    # `sudo --user=… --set-home brew bundle` without XDG_CONFIG_HOME, so brew
+    # reads ~/.homebrew/trust.json — interactive `brew trust` (which wrote
+    # ~/.config/homebrew/trust.json) does not apply. See https://docs.brew.sh/Tap-Trust
     extraConfig = ''
       tap "libkrun/krun", trusted: true
+      tap "betterleaks/tap", trusted: true
     '';
   };
 }

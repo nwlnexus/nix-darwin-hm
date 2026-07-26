@@ -20,7 +20,6 @@
         "parallels"
         "postman"
         "cloudflare-warp"
-        "zed"
         "orbstack"
         "proton-mail"
         "protonvpn"
