@@ -1,8 +1,65 @@
 default:
     @just --list
 
+# `treefmt` is not installed on PATH — it only exists as this flake's
+# formatter wrapper (flake.nix `outputsBuilder.formatter`), so go through
+# `nix fmt` rather than expecting a bare binary.
+# Format the tree (nixfmt via treefmt-nix).
 fmt:
-    treefmt
+    nix fmt
+
+# Works on every machine regardless of whether the repo sits on the boot
+# volume (laptop) or on an external drive mounted `noowners` (the desktops,
+# where ~/projects symlinks to /Volumes/<drive>/projects). See
+# scripts/darwin-rebuild.sh for why a bare `sudo darwin-rebuild switch` fails
+# on the external-drive hosts.
+# Rebuild and activate this host. Override the host: `just switch NWL-MBM2`.
+switch host="":
+    ./scripts/darwin-rebuild.sh switch {{ host }}
+
+# Uses the same flake reference as `just switch`, so it genuinely warms the
+# cache for the subsequent switch (the git and path fetchers hash differently).
+# Build this host's system closure without activating it, and without sudo.
+build host="":
+    ./scripts/darwin-rebuild.sh build {{ host }}
+
+# Dry-run: build this host and report what would change (needs sudo).
+check host="":
+    ./scripts/darwin-rebuild.sh check {{ host }}
+
+# Let ROOT's git open this repo, so `sudo darwin-rebuild switch --flake .`
+# works directly and Nix can use its leaner git fetcher instead of the
+# `path:` workaround (which copies the whole worktree into the store).
+#
+# Only needed on hosts where this repo lives on an external drive — macOS
+# mounts those `noowners`, and libgit2 then refuses to open the repo as root.
+#
+# The `-H` is load-bearing: macOS sudo preserves $HOME by default, so without
+# it this would write to YOUR git config, which a root rebuild never reads
+# (darwin-rebuild resets HOME=~root when euid is 0).
+#
+# Unverified on these hosts — if a plain `sudo darwin-rebuild switch` still
+# fails afterwards, `just switch` keeps working regardless.
+# Register this repo as a safe.directory for ROOT's git (external-drive hosts).
+git-safe-directory:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    repo="$(pwd -P)"
+    if sudo -H git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$repo"; then
+      echo "already registered for root: $repo"
+      exit 0
+    fi
+    sudo -H git config --global --add safe.directory "$repo"
+    echo "Registered as a safe.directory for root: $repo"
+    echo "Written to /var/root/.gitconfig — re-run per host, and after moving the repo."
+
+# Undo git-safe-directory on this host.
+git-safe-directory-remove:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    repo="$(pwd -P)"
+    sudo -H git config --global --unset-all safe.directory "$(printf '%s' "$repo" | sed 's/[].[^$\\*]/\\&/g')" || true
+    echo "Removed root safe.directory entry for: $repo"
 
 # Capture this host's live iTerm2 default profile into the repo template
 # (home/apps/iterm2/profile.json). Quit iTerm2 first so prefs are flushed.
@@ -65,15 +122,18 @@ update-mnemosyne-flake:
     NIX_CONFIG="$nix_conf" nix flake update mnemosyne
     echo "Updated flake.lock — commit if intentional, then darwin-rebuild."
 
+# Goes through scripts/darwin-rebuild.sh so it works on the external-drive
+# hosts too — a bare `--flake .` fails there under sudo.
 # First darwin-rebuild after materialize-nix-github-token (before !include is live).
-darwin-rebuild-bootstrap:
+darwin-rebuild-bootstrap host="":
     #!/usr/bin/env bash
     set -euo pipefail
     if [ ! -f /etc/nix/github-token.conf ]; then
       echo "missing /etc/nix/github-token.conf — run: just materialize-nix-github-token" >&2
       exit 1
     fi
-    sudo NIX_CONFIG="$(sudo cat /etc/nix/github-token.conf)" darwin-rebuild switch --flake .
+    DARWIN_REBUILD_NIX_CONFIG="$(sudo cat /etc/nix/github-token.conf)" \
+      ./scripts/darwin-rebuild.sh switch {{ host }}
 
 # Materialize the nwlnexus R2 nix binary-cache substituter + credentials so
 # the nix daemon substitutes mnemosyne's CI-built closure instead of building
