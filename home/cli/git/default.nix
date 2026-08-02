@@ -17,6 +17,19 @@ let
       format = "ssh";
       ssh.program = "${pkgs.openssh}/bin/ssh-keygen";
     };
+
+    # Route GitHub SSH through the `github.com-work` alias (see
+    # home/ssh_config.nix) so work repos authenticate with
+    # ~/.ssh/gitlab-work-gl, which GitHub resolves to `nwilliams-lucas`.
+    # Without this, `git@github.com:` matches the default `Host github.com`
+    # block and offers ~/.ssh/id_ed25519 -> `nwlucas`, who is NOT a member
+    # of the dtlr org, so every push to an org repo 403s.
+    url."git@github.com-work:".insteadOf = "git@github.com:";
+
+    # Pin HTTPS remotes to the work account too, so the gh credential helper
+    # resolves deterministically instead of using whichever `gh auth` account
+    # happens to be active.
+    credential."https://github.com".username = "nwilliams-lucas";
   };
 
   # Personal profile bypasses the 1Password SSH agent so unattended
@@ -122,6 +135,19 @@ in
         key = config.d.apps.onepassword.ssh.key;
       };
 
+      # NOTE: the `gitdir:` patterns are deliberately written WITHOUT a `~/`
+      # prefix. `~/projects` is a symlink to an external volume on this host
+      # (/Volumes/REALTEK/projects), and git matches `gitdir:` against the
+      # path as it was traversed. A `gitdir:~/projects/work/` pattern
+      # therefore matches only when you reach the repo through the symlink,
+      # and silently fails for anything that resolves the real path first —
+      # IDEs, `git -C /Volumes/...`, and agent harnesses. The repo then falls
+      # back to the personal identity with no error, which is how work
+      # commits ended up authored as `nwlucas`.
+      #
+      # Git auto-prepends `**/` and auto-appends `**` to a pattern that does
+      # not start with `~/`, `./`, `/`, or `**`, so the bare form below
+      # matches the directory under any prefix — symlinked or real.
       includes =
         (map
           (condition: {
@@ -130,7 +156,7 @@ in
             contents = workGitProfile config;
           })
           [
-            "gitdir:~/projects/work/"
+            "gitdir:projects/work/"
             "hasconfig:remote.*.url:git@github.com-work/**"
             "hasconfig:remote.*.url:git@gitlab-work.com/**"
           ]
@@ -142,7 +168,7 @@ in
             contents = personalGitProfile config;
           })
           [
-            "gitdir:~/projects/personal/"
+            "gitdir:projects/personal/"
           ]
         );
 
