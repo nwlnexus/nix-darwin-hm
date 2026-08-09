@@ -41,20 +41,47 @@ sudo nixos-rebuild switch --flake .#<hostname>
 
 ### Applying on macOS
 
-To apply the configuration on a macOS machine using `nix-darwin`, run:
+Use the host-portable `just` recipes on macOS:
 
 ```bash
-darwin-rebuild switch --flake .#<hostname>
+just build             # Build the current host without activating or sudo.
+just check             # Build and show what would change; requires sudo.
+just switch            # Build and activate the current host; requires sudo.
+just switch <hostname> # Override the detected host.
 ```
 
-Or if you don't have `darwin-rebuild` in your path:
+The recipes call `scripts/darwin-rebuild.sh`, which defaults the host to
+`scutil --get LocalHostName` and verifies it exists under `darwinConfigurations`
+before starting a rebuild. The wrapper is also safe on desktop hosts where this
+repo lives under an external drive mounted `noowners`: it uses a `path:` flake
+reference when root's libgit2 cannot open the checkout, then retries with that
+same fallback if the ownership error appears on a host that was not detected up
+front.
+
+If the repo is on an external drive and you want to use the leaner git fetcher
+instead of the `path:` fallback, register this checkout for root's git:
 
 ```bash
-nix run nix-darwin -- switch --flake .#<hostname>
+just git-safe-directory
 ```
+
+Re-run it per host and after moving the repository. The recipe intentionally uses
+`sudo -H` so the entry lands in `/var/root/.gitconfig`, which is the config read
+by root `darwin-rebuild` evaluations.
+
+For the first rebuild on a host that needs private GitHub flake inputs, materialize
+the token and use the bootstrap recipe:
+
+```bash
+just materialize-nix-github-token
+just darwin-rebuild-bootstrap
+```
+
+After that switch succeeds, `/etc/nix/nix.conf` includes the token file and
+ordinary `just switch` runs do not need the bootstrap prefix.
 
 ## Runbooks
 
-- [Mnemosyne backlog catch-up](docs/mnemosyne-catchup.md) — flush a machine's
+* [Mnemosyne backlog catch-up](docs/mnemosyne-catchup.md) — flush a machine's
   parked mnemosyne queue through moneta (`just mnemosyne-catchup`). Use when a
   dev machine was offline/behind and has a large `~/.claude/mnemosyne/queue`.

@@ -12,10 +12,13 @@ This provides guidance to AI assistants when working with this nix-darwin + Home
 
 ```bash
 # Apply configuration
-darwin-rebuild switch --flake .        # macOS
+just switch                            # macOS: host-portable darwin-rebuild
 nixos-rebuild switch --flake .         # NixOS
 
 # macOS maintenance
+just build [hostname]                  # Build without activation or sudo
+just check [hostname]                  # Dry-run switch; requires sudo
+just git-safe-directory                # Allow root git fetcher on noowners drives
 nix-darwin-reinit [flake-path]         # Fix nix-darwin after macOS upgrades
 
 # Development
@@ -156,6 +159,53 @@ To add a new host configuration:
 - **Cross-platform:** `system/default.nix`
 - **User environment:** `home/`
 
+### Applying macOS Changes
+
+Prefer the `just` recipes over raw `darwin-rebuild` commands:
+
+```bash
+just build             # Build the current host without activating or sudo.
+just check             # Build and show what would change; requires sudo.
+just switch            # Build and activate the current host; requires sudo.
+just switch NWL-MBM2   # Override the detected host when needed.
+```
+
+All three recipes go through `scripts/darwin-rebuild.sh`. The wrapper defaults
+the host to `scutil --get LocalHostName`, validates that it exists in
+`darwinConfigurations`, and keeps `build`/`switch` on the same flake reference so
+a build genuinely warms the subsequent switch. `build` stays unprivileged;
+`check` and `switch` run `darwin-rebuild` under sudo.
+
+Desktop hosts may keep `~/projects` on an external volume mounted `noowners`.
+Root `darwin-rebuild` evaluations then fail when Nix's libgit2 fetcher opens the
+repo as `git+file://` because root does not own the checkout. The wrapper detects
+that case and uses `path:<repo>#<host>` instead, retrying with the same fallback
+if the ownership error appears later. Constraint: `path:` copies the whole
+working tree into the Nix store, including gitignored files.
+
+To opt a host back into the leaner git fetcher, run:
+
+```bash
+just git-safe-directory
+```
+
+This writes the current checkout to root's `safe.directory` list in
+`/var/root/.gitconfig`; re-run it per host and after moving the repository. The
+recipe uses `sudo -H` intentionally because macOS sudo otherwise preserves the
+user's `$HOME`, and root rebuilds do not read the user's git config.
+
+Bootstrap rebuilds that need private GitHub flake inputs use the same wrapper
+with root Nix config injected:
+
+```bash
+just materialize-nix-github-token
+just darwin-rebuild-bootstrap
+```
+
+After the first successful switch, `system/nix.nix` includes
+`/etc/nix/github-token.conf`, so ordinary `just switch` runs can fetch private
+inputs without the bootstrap prefix.
+
 ### Terminal & tmux
 
 - **tmux** is managed by home-manager (`home/cli/tmux.nix`, `programs.tmux`) on all hosts — not Homebrew. It carries the Claude Code integration settings (`allow-passthrough`, `extended-keys` + `xterm*:extkeys`, `focus-events`).
@@ -219,7 +269,7 @@ For in-depth architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **nix-darwin-hm**. Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **nix-darwin-hm** (973 symbols, 1636 relationships, 56 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
 
@@ -247,5 +297,16 @@ This project is indexed by GitNexus as **nix-darwin-hm**. Use the GitNexus MCP t
 | `gitnexus://repo/nix-darwin-hm/clusters` | All functional areas |
 | `gitnexus://repo/nix-darwin-hm/processes` | All execution flows |
 | `gitnexus://repo/nix-darwin-hm/process/{name}` | Step-by-step execution trace |
+
+## CLI
+
+| Task | Read this skill file |
+|------|---------------------|
+| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
+| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
+| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
+| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
+| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
+| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
 
 <!-- gitnexus:end -->
