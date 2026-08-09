@@ -86,7 +86,8 @@ Home Manager configurations for user-specific settings.
 
 **`home/cli/`** - Command line tool configurations:
 
-- `git.nix` - Git configuration
+- `git/default.nix` - Git identity, signing, aliases, and work/personal profile
+  routing
 - `starship.nix` - Starship prompt
 - `bat.nix` - Bat (cat alternative)
 - `eza.nix` - Eza (ls alternative)

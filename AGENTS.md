@@ -206,6 +206,44 @@ After the first successful switch, `system/nix.nix` includes
 `/etc/nix/github-token.conf`, so ordinary `just switch` runs can fetch private
 inputs without the bootstrap prefix.
 
+### Git identity & remotes
+
+Git profiles live in `home/cli/git/default.nix`. The work and personal
+`includeIf` rules intentionally use suffix-style `gitdir:projects/work/` and
+`gitdir:projects/personal/` patterns instead of `~/projects/...`: on desktop
+hosts, `~/projects` may be a symlink to `/Volumes/.../projects`, and tools that
+open the real path would otherwise miss the intended profile and silently fall
+back to the personal identity.
+
+Work GitHub SSH remotes are also rewritten from `git@github.com:` to
+`git@github.com-work:` so SSH offers `~/.ssh/gitlab-work-gl`; HTTPS GitHub
+credentials are pinned to the work username. If a work push unexpectedly 403s,
+check the remote URL, `git config --show-origin --get user.email`, and whether
+the checkout path matches the suffix patterns.
+
+This repo's own `betterleaks` pre-commit hook is scoped locally by
+`home.activation.nixDarwinHmGitHooks`; it sets `core.hooksPath` only for
+`~/projects/personal/nix-darwin-hm` so it does not override Husky or hooks in
+other repositories.
+
+### Mnemosyne / Claude Code hooks
+
+Mnemosyne is installed as a mise global (`npm:@nwlnexus/mnemosyne`) in
+`home/default.nix`, not as a private Nix flake package. Home Manager activation
+in `home/cli/claude/default.nix` explicitly runs `mise install`, strips dead
+legacy hook commands from Claude settings, and then calls the `mnemosyne` shim's
+`install-hooks`.
+
+Activation scripts do not source an interactive shell profile, so mise globals
+must be resolved through their shims and `mise` itself must be on `PATH` for any
+nested installer calls. Hooks also cannot rely on a manually sourced `.env`;
+op-secrets materializes Moneta and Cloudflare Access credentials under
+`~/.config/moneta/` in `home/apps/1password.nix`.
+
+Use [`docs/mnemosyne-catchup.md`](docs/mnemosyne-catchup.md) when a machine has
+a parked `~/.claude/mnemosyne/queue`; the old R2/private-flake bootstrap is no
+longer part of that workflow.
+
 ### Terminal & tmux
 
 - **tmux** is managed by home-manager (`home/cli/tmux.nix`, `programs.tmux`) on all hosts — not Homebrew. It carries the Claude Code integration settings (`allow-passthrough`, `extended-keys` + `xterm*:extkeys`, `focus-events`).

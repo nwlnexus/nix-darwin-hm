@@ -22,26 +22,32 @@ interrupted or repeated run just picks up where it left off. Permanent failures
 
 ## One-time prerequisites (per host)
 
-The mnemosyne CLI is a **private** flake input (`github:nwlnexus/mnemosyne`) and
-its closure is served from the nwlnexus R2 nix cache. If this host has never
-been set up for those, run once (needs sudo; reads secrets from
-`~/projects/personal/.env`):
+Mnemosyne is now installed as a mise global
+(`npm:@nwlnexus/mnemosyne`) during Home Manager activation. It is no longer a
+private Nix flake package, so the old R2 binary-cache bootstrap is not required
+for mnemosyne catch-up.
 
-```bash
-just materialize-nix-github-token   # private flake fetch
-just materialize-r2-cache-creds     # substitute the prebuilt closure
-```
+Before draining, run a current switch so activation can:
+
+- install or refresh the mise global (`mise install npm:@nwlnexus/mnemosyne`);
+- strip stale legacy hook commands from Claude settings;
+- run `mnemosyne install-hooks` through the mise shim; and
+- materialize Moneta/Cloudflare Access credentials under `~/.config/moneta/`.
+
+Those credential files are provisioned by op-secrets because Claude Code hooks
+run as children of the agent process, not a login shell. Do not rely on a
+manually sourced `.env` for hook execution.
 
 ## Catch-up steps
 
 Run these on the machine being caught up:
 
 ```bash
-# 1. Get the latest config (includes the pinned mnemosyne build).
+# 1. Get the latest config.
 cd ~/projects/personal/nix-darwin-hm && git pull
 
-# 2. Install that build.
-sudo darwin-rebuild switch --flake .
+# 2. Install the current config and run Home Manager activation.
+just switch
 
 # 3. Flush the parked queue through moneta (clears stale drains + the lock,
 #    then drains with concurrency, then prints status).
@@ -78,11 +84,26 @@ and reopen** any sessions that predate the rebuild.
 
 ```bash
 # capture (server-side extraction) — should return 200 with learnings
+payload="$(
+  cat <<JSON
+{
+  "turns": [{ "role": "assistant", "text": "We decided X because Y." }],
+  "session": "probe-$(date +%s)",
+  "cwd": "/tmp",
+  "ts": "$(date -u +%FT%TZ)",
+  "source": "probe"
+}
+JSON
+)"
+
 curl -sS -X POST "$MONETA_URL/capture-session" \
-  -H "content-type: application/json" -H "authorization: Bearer $MONETA_AUTH_TOKEN" \
-  -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
-  --data '{"turns":[{"role":"assistant","text":"We decided X because Y."}],"session":"probe-'"$(date +%s)"'","cwd":"/tmp","ts":"'"$(date -u +%FT%TZ)"'","source":"probe"}'
+  -H "content-type: application/json" \
+  -H "authorization: Bearer $MONETA_AUTH_TOKEN" \
+  -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
+  -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
+  --data "$payload"
 ```
 
-`MONETA_URL` / `MONETA_AUTH_TOKEN` / `CF_ACCESS_CLIENT_*` come from
-`~/projects/personal/.env` (op-secrets).
+The catch-up recipe sources `~/projects/personal/.env` for the manual drain, but
+normal Claude Code hooks read the op-secrets materialized files in
+`~/.config/moneta/`.
