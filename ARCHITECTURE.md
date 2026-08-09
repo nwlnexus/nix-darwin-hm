@@ -86,7 +86,8 @@ Home Manager configurations for user-specific settings.
 
 **`home/cli/`** - Command line tool configurations:
 
-- `git.nix` - Git configuration
+- `git/default.nix` - Git identity, signing, aliases, and work/personal profile
+  routing
 - `starship.nix` - Starship prompt
 - `bat.nix` - Bat (cat alternative)
 - `eza.nix` - Eza (ls alternative)
@@ -234,8 +235,10 @@ The configuration includes overlays for:
 
 1. Edit configuration files
 2. Format with `nix fmt` or `treefmt`
-3. Test build: `nix build .#darwinConfigurations.HOSTNAME.system`
-4. Apply: `darwin-rebuild switch --flake .` (macOS) or `nixos-rebuild switch --flake .` (NixOS)
+3. Test build: `just build [hostname]` on macOS or
+   `nix build .#darwinConfigurations.HOSTNAME.system` for a direct flake build
+4. Apply: `just switch [hostname]` (macOS) or `nixos-rebuild switch --flake .`
+   (NixOS)
 
 ### Updating Dependencies
 
