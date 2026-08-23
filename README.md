@@ -41,20 +41,47 @@ sudo nixos-rebuild switch --flake .#<hostname>
 
 ### Applying on macOS
 
-To apply the configuration on a macOS machine using `nix-darwin`, run:
+Use the `just` recipes on macOS. They call `scripts/darwin-rebuild.sh`, which
+chooses the current host by default and works whether this repo is on the boot
+volume or an external drive mounted `noowners`.
 
 ```bash
-darwin-rebuild switch --flake .#<hostname>
+just switch              # rebuild and activate the current host
+just build               # build the current host without activating
+just check               # dry-run: build and report what would change
+just switch NWL-MBM2     # override the host explicitly
 ```
 
-Or if you don't have `darwin-rebuild` in your path:
+Why this wrapper matters: `sudo darwin-rebuild switch --flake .` evaluates as
+root. On external-drive hosts, libgit2 can reject the repo because the volume is
+mounted without ownership metadata. The wrapper detects that case and uses a
+`path:` flake reference, then falls back to the same workaround if the ownership
+error appears on a differently mounted host.
+
+If you want bare `sudo darwin-rebuild switch --flake .#<hostname>` to use Nix's
+leaner git fetcher on an external-drive host, register the repo in root's Git
+config:
 
 ```bash
-nix run nix-darwin -- switch --flake .#<hostname>
+just git-safe-directory
 ```
+
+Re-run that recipe on each host and after moving the checkout. To undo it for
+the current checkout, run `just git-safe-directory-remove`.
+
+Private flake inputs need the root Nix daemon to see the GitHub token. On a new
+host or after token rotation, run:
+
+```bash
+just materialize-nix-github-token
+just darwin-rebuild-bootstrap
+```
+
+After a successful switch, `/etc/nix/nix.conf` includes the token file and
+normal `just switch` runs do not need the bootstrap recipe.
 
 ## Runbooks
 
-- [Mnemosyne backlog catch-up](docs/mnemosyne-catchup.md) — flush a machine's
+* [Mnemosyne backlog catch-up](docs/mnemosyne-catchup.md) — flush a machine's
   parked mnemosyne queue through moneta (`just mnemosyne-catchup`). Use when a
   dev machine was offline/behind and has a large `~/.claude/mnemosyne/queue`.

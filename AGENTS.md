@@ -12,11 +12,15 @@ This provides guidance to AI assistants when working with this nix-darwin + Home
 
 ```bash
 # Apply configuration
-darwin-rebuild switch --flake .        # macOS
+just switch                            # macOS (host-portable wrapper)
+just build                             # macOS build only, no activation
+just check                             # macOS dry-run/change preview
 nixos-rebuild switch --flake .         # NixOS
 
 # macOS maintenance
 nix-darwin-reinit [flake-path]         # Fix nix-darwin after macOS upgrades
+just git-safe-directory                # Let root Git open external-drive checkouts
+just materialize-nix-github-token      # Give root Nix access to private flake inputs
 
 # Development
 nix flake show                         # List all outputs
@@ -155,6 +159,41 @@ To add a new host configuration:
 - **NixOS:** `system/nixos/`
 - **Cross-platform:** `system/default.nix`
 - **User environment:** `home/`
+
+### macOS rebuilds and bootstrap pitfalls
+
+- Prefer `just switch`, `just build`, and `just check` over bare
+  `darwin-rebuild` on macOS. They call `scripts/darwin-rebuild.sh`, default to
+  the current host, and accept an explicit host such as `just switch NWL-MBM2`.
+- The wrapper exists for desktop hosts where `~/projects` resolves to an
+  external volume mounted `noowners`. Root evaluation of `--flake .` goes through
+  libgit2, which can reject those checkouts as "not owned by current user".
+  `scripts/darwin-rebuild.sh` detects that case and uses a `path:` flake ref,
+  falling back to `path:` if the ownership error appears unexpectedly.
+- `build` and `switch` deliberately use the same flake reference so a build
+  warms the cache for the following switch. Do not mix bare `darwin-rebuild
+  build --flake .` with `just switch` when investigating closure differences.
+- `just git-safe-directory` registers the current checkout in root's
+  `/var/root/.gitconfig` so bare root `darwin-rebuild` can use the leaner Git
+  fetcher. Re-run it per host and after moving the checkout; use
+  `just git-safe-directory-remove` to undo the current checkout.
+- New hosts need `just materialize-nix-github-token` before root can fetch
+  private flake inputs such as `github:nwlnexus/mnemosyne`. The first rebuild
+  before `/etc/nix/nix.conf` includes that file should use
+  `just darwin-rebuild-bootstrap`; later runs can use `just switch`.
+
+### Git identity routing
+
+- Personal and work Git profiles are selected in `home/cli/git/default.nix`.
+  The `gitdir:` include patterns intentionally use bare suffixes like
+  `gitdir:projects/work/` and `gitdir:projects/personal/`, not `~/projects/...`.
+- Git expands those bare patterns across any prefix, so they match both the
+  symlinked path and the resolved external-volume path. Restoring a `~/` prefix
+  breaks IDEs, `git -C /Volumes/...`, and agent harnesses by silently falling
+  back to the personal identity for work repos.
+- Work GitHub SSH remotes are rewritten through the `github.com-work` host alias
+  from `home/ssh_config.nix`; HTTPS remotes pin the GitHub credential helper to
+  the work username.
 
 ### Terminal & tmux
 
