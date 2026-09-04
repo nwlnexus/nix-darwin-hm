@@ -51,6 +51,7 @@ The content is organized as follows:
     pipeline.yml
     task.yml
   workflows/
+    codebase-brain-image.yml
     pack.yml
     repomix-pack.yml
 docs/
@@ -150,6 +151,9 @@ modules/
     repomix.config.json
     repomix.nix
     repos.toml
+  rust/
+    reclaim-disk.sh
+    rust.nix
   default.nix
   nix.nix
   profiles.nix
@@ -168,6 +172,7 @@ scripts/
       stages/
         analyze.test.ts
         analyze.ts
+        clone.test.ts
         clone.ts
         facets.test.ts
         facets.ts
@@ -222,6 +227,7 @@ scripts/
       types.ts
     package.json
     tsconfig.json
+  darwin-rebuild.sh
   export-iterm-profile.sh
 system/
   darwin/
@@ -234,6 +240,7 @@ system/
     iterm2.nix
     keyboard.nix
     limits.nix
+    lldpd.nix
     login.nix
     mvmctl.entitlements
     mvmctl.nix
@@ -527,6 +534,82 @@ body:
         - system/darwin/...
     validations:
       required: false
+</file>
+
+<file path=".github/workflows/codebase-brain-image.yml">
+name: codebase-brain-image
+
+# Builds the codebase-brain Job image and pushes to GHCR.
+# Mirrors olympus-sdk ingress-discovery.yml / openmemory.yml / kubeconfig-merger.yml:
+#   permissions.packages: write + GITHUB_TOKEN via docker/login-action.
+#
+# Build context MUST be the repo root (Containerfile copies modules/repomix/...).
+#
+# First-time package setup (org UI):
+#   Packages → codebase-brain → Package settings → Manage Actions access
+#   → add nwlnexus/nix-darwin-hm with Write role
+#   → optionally Link repository → nix-darwin-hm
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/codebase-brain/**"
+      - "modules/repomix/repomix.config.json"
+      - ".github/workflows/codebase-brain-image.yml"
+  pull_request:
+    paths:
+      - "scripts/codebase-brain/**"
+      - "modules/repomix/repomix.config.json"
+      - ".github/workflows/codebase-brain-image.yml"
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: nwlnexus/codebase-brain
+
+jobs:
+  build:
+    name: Build & Push Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' }}
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=,format=long
+            type=sha,prefix=,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: scripts/codebase-brain/Containerfile
+          push: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+            org.opencontainers.image.source=https://github.com/nwlnexus/nix-darwin-hm
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # compute-hub workers are amd64
+          platforms: linux/amd64
 </file>
 
 <file path=".github/workflows/pack.yml">
@@ -3134,25 +3217,64 @@ podman run --rm ghcr.io/nwlnexus/codebase-brain:<tag> \
 
 ## 3. Secrets (runtime env only — NEVER in the image)
 
-Mount via Kubernetes `Secret` + ExternalSecrets (or sealed secrets). The Job reads **environment variables** at runtime.
+**Principle:** secrets live in **1Password**; the cluster reads them via **ExternalSecrets** into a
+namespaced Kubernetes `Secret`. Do **not** paste tokens into ConfigMaps, image layers, Flux
+plaintext, or long-lived “manual” `kubectl create secret` as the source of truth. Sealed-secrets
+are not the preferred path for this Job.
 
-| Secret key / env var | Required when | Source (example) |
+The Job reads **environment variables** at runtime (`envFrom: secretRef` on the Workflow container).
+
+| Secret key / env var | Required when | 1Password → ExternalSecret (example) |
 | --- | --- | --- |
-| `ANTHROPIC_API_KEY` | `--phase 2`, `all` (openwiki) | 1Password `op://Dev/docs-api-key` → ExternalSecret, or cluster secret |
-| `AWS_ENDPOINT_URL` | R2 publish / skip-gate fetch | R2 account endpoint |
-| `AWS_ACCESS_KEY_ID` | R2 publish / skip-gate fetch | R2 API token |
-| `AWS_SECRET_ACCESS_KEY` | R2 publish / skip-gate fetch | R2 API token |
-| `BRAIN_R2_BUCKET` | optional | default `nwl-codebase-brain` if unset |
-| `GH_TOKEN` | brain PR push + `gh pr` (phase 2 / all) | GitHub PAT or App installation token with repo contents + PR scope |
-| `OPENWIKI_MODEL_ID` | optional | openwiki model override |
+| `ANTHROPIC_API_KEY` | `--phase 2`, `all` (openwiki) | `op://Dev/docs-api-key` (or dedicated item) |
+| `AWS_ENDPOINT_URL` | R2 publish / skip-gate fetch | R2 item in 1Password Dev vault |
+| `AWS_ACCESS_KEY_ID` | R2 publish / skip-gate fetch | same R2 item |
+| `AWS_SECRET_ACCESS_KEY` | R2 publish / skip-gate fetch | same R2 item |
+| `BRAIN_R2_BUCKET` | optional | default `nwl-codebase-brain` if unset (non-secret ConfigMap/env OK) |
+| `GH_TOKEN` | private source clone + brain PR / `gh` | **minted** from GitHub App creds (see §3.1) — not a personal PAT |
+| `OPENWIKI_MODEL_ID` | optional | non-secret; ConfigMap/env OK |
 
-- [ ] Create ExternalSecret(s) in `codebase-brain` namespace for the above (split or single secret — operator choice).
-- [ ] Wire Workflow container `envFrom: secretRef` (or explicit `env:` entries) — **no secrets in ConfigMap or image layers**.
-- [ ] Confirm `gh` and `git` inside the pod can authenticate via `GH_TOKEN` for `nwlnexus/second-brain` and source repos (HTTPS clone uses public read; push/PR needs token).
+- [ ] ExternalSecrets Operator + 1Password Connect / Secrets Automation already installed (or add in olympus-gitops).
+- [ ] Create ExternalSecret(s) in `codebase-brain` namespace that sync from 1Password into `codebase-brain-secrets` (split or single Secret — operator choice).
+- [ ] Wire Workflow container `envFrom: secretRef: name: codebase-brain-secrets` — **no secrets in ConfigMap or image layers**.
+- [ ] Confirm `gh` and `git` inside the pod authenticate via `GH_TOKEN` for allowlisted source clones **and** `nwlnexus/second-brain` push/PR.
 
-> **Brief note:** Task brief lists “GitHub App creds”; the Job uses `gh`/`git` with **`GH_TOKEN`**. A GitHub App installation token synced into `GH_TOKEN` satisfies both.
+- [ ] (Recommended) ExternalSecret for **Slack webhook** (or reuse existing notify 1Password item / pattern) for failure alerts — see §10.
 
-- [ ] (Recommended) ExternalSecret for **Slack webhook** (or reuse existing notify secret pattern) for failure alerts — see §10.
+### 3.1 GitHub App → `GH_TOKEN` (1Password + ExternalSecrets)
+
+Use a dedicated org App (e.g. `codebase-brain`) for clone + brain PR — bounded, auditable bot
+identity. The Job still consumes a short-lived token as **`GH_TOKEN`** (HTTPS
+`x-access-token:…@github.com/…` clone and `gh`/`git` push).
+
+**Store in 1Password (Dev vault), never in git:**
+
+Item: **`codebase-docs-pipeline-gh-app`** (path shape: `op://Dev/codebase-docs-pipeline-gh-app/…`)
+
+| Field (as stored) | Purpose |
+| --- | --- |
+| `app-id` | GitHub App ID (numeric) |
+| `client-id` | GitHub App Client ID |
+| `client-secret` | App client secret (OAuth-style; not required for install-token mint) |
+| `installation-id` | Org installation ID on nwlnexus — required to mint install access token |
+| PEM **file attachment** (`*.private-key.pem`) | App private key — ExternalSecrets / Connect must map the **document/file** property |
+
+**PEM as file attachment:** keep the `.pem` as a 1Password **document/file** on the item (not pasted into a password field). When wiring olympus-gitops:
+
+- [ ] ExternalSecret references item `codebase-docs-pipeline-gh-app` in the Dev vault.
+- [ ] Sync `app-id`, `client-id`, `installation-id` as string keys; sync the PEM via the provider’s **file/document** reference into a Secret key such as `private_key` (raw PEM bytes, including `BEGIN/END` lines).
+- [ ] Local verify (laptop only): `op item get codebase-docs-pipeline-gh-app --fields label=app-id,label=installation-id` and read the document attachment for the PEM — do not commit the output.
+
+**Note:** JWT signing uses **App ID + PEM**; exchanging for a short-lived install token also needs **`installation-id`**. `client-id` / `client-secret` are not used by the Job’s `GH_TOKEN` mint path today.
+
+**In cluster (olympus-gitops):**
+
+- [ ] ExternalSecret syncs App ID / installation ID / PEM from 1Password into a K8s Secret (e.g. `codebase-brain-github-app`).
+- [ ] A mint path (init container, small sidecar, or ExternalSecrets generator / CronJob) exchanges JWT → **installation access token** (~1h) and writes/refreshes `GH_TOKEN` on `codebase-brain-secrets` (or injects it for the Workflow).
+- [ ] **Do not** use a personal PAT as production `GH_TOKEN`. Local smoke may use `gh auth token` only on a developer machine.
+- [ ] Install the App on **selected** repos only: `[groups.personal]` allowlist + `second-brain` (see §4).
+
+**App repository permissions (minimum):** Metadata (read); Contents (read/write); Pull requests (read/write). Webhook optional (Argo Events owns push today).
 
 ---
 
@@ -3363,7 +3485,7 @@ graphs/{owner}/{repo}/latest-digests.json  # skip-gate marker
 - [ ] Content path: `docs/codebases/{repo}/` (+ `_meta/` for SBOM/facet/graph-ref artifacts).
 - [ ] Job opens or updates PR via `gh`; PR body states **“Do not auto-merge.”**
 - [ ] **Do not** configure auto-merge, merge queues, or bot-merge labels on these PRs.
-- [ ] `GH_TOKEN` must allow push to `automation/brain-*` branches and PR create/edit on `second-brain`.
+- [ ] `GH_TOKEN` (from GitHub App install token via ExternalSecrets/1Password) must allow push to `automation/brain-*` branches and PR create/edit on `second-brain`.
 
 ---
 
@@ -3424,7 +3546,8 @@ podman run --rm \
 
 | Topic | Task brief | This checklist (build decisions) |
 | --- | --- | --- |
-| GitHub auth | “GitHub App creds” | Job uses **`GH_TOKEN`** env; App installation token may back it |
+| GitHub auth | “GitHub App creds” | Dedicated App; **1Password → ExternalSecrets** mint install token → Job `GH_TOKEN` (no personal PAT in prod) |
+| Secrets source | (implied) | **1Password is source of truth**; ExternalSecrets syncs into the cluster — not sealed-secrets / ad-hoc kubectl secrets |
 | Skip gate | (not in brief) | R2 **`latest-digests.json`** drives LLM skip |
 | Timeout | (not in brief) | **`activeDeadlineSeconds`** required — openwiki has no internal timeout |
 | Parent spec link | “link from parent spec §10” | Deferred to Task 14; spec §10 lists open choices (namespace, bucket, model pin) |
@@ -10159,6 +10282,19 @@ let
       format = "ssh";
       ssh.program = "${pkgs.openssh}/bin/ssh-keygen";
     };
+
+    # Route GitHub SSH through the `github.com-work` alias (see
+    # home/ssh_config.nix) so work repos authenticate with
+    # ~/.ssh/gitlab-work-gl, which GitHub resolves to `nwilliams-lucas`.
+    # Without this, `git@github.com:` matches the default `Host github.com`
+    # block and offers ~/.ssh/id_ed25519 -> `nwlucas`, who is NOT a member
+    # of the dtlr org, so every push to an org repo 403s.
+    url."git@github.com-work:".insteadOf = "git@github.com:";
+
+    # Pin HTTPS remotes to the work account too, so the gh credential helper
+    # resolves deterministically instead of using whichever `gh auth` account
+    # happens to be active.
+    credential."https://github.com".username = "nwilliams-lucas";
   };
 
   # Personal profile bypasses the 1Password SSH agent so unattended
@@ -10264,6 +10400,19 @@ in
         key = config.d.apps.onepassword.ssh.key;
       };
 
+      # NOTE: the `gitdir:` patterns are deliberately written WITHOUT a `~/`
+      # prefix. `~/projects` is a symlink to an external volume on this host
+      # (/Volumes/REALTEK/projects), and git matches `gitdir:` against the
+      # path as it was traversed. A `gitdir:~/projects/work/` pattern
+      # therefore matches only when you reach the repo through the symlink,
+      # and silently fails for anything that resolves the real path first —
+      # IDEs, `git -C /Volumes/...`, and agent harnesses. The repo then falls
+      # back to the personal identity with no error, which is how work
+      # commits ended up authored as `nwlucas`.
+      #
+      # Git auto-prepends `**/` and auto-appends `**` to a pattern that does
+      # not start with `~/`, `./`, `/`, or `**`, so the bare form below
+      # matches the directory under any prefix — symlinked or real.
       includes =
         (map
           (condition: {
@@ -10272,7 +10421,7 @@ in
             contents = workGitProfile config;
           })
           [
-            "gitdir:~/projects/work/"
+            "gitdir:projects/work/"
             "hasconfig:remote.*.url:git@github.com-work/**"
             "hasconfig:remote.*.url:git@gitlab-work.com/**"
           ]
@@ -10284,7 +10433,7 @@ in
             contents = personalGitProfile config;
           })
           [
-            "gitdir:~/projects/personal/"
+            "gitdir:projects/personal/"
           ]
         );
 
@@ -11653,7 +11802,8 @@ fi
     d.hm = [
       ../repomix/repomix.nix
       ../memory-watchdog/memory-watchdog.nix
-    ];
+    ]
+    ++ lib.optionals config.d.profiles.dev.rust.enable [ ../rust/rust.nix ];
 
     environment.systemPackages = with pkgs; [
       github-cli
@@ -11726,7 +11876,6 @@ fi
         "parallels"
         "postman"
         "cloudflare-warp"
-        "zed"
         "orbstack"
         "proton-mail"
         "protonvpn"
@@ -11898,6 +12047,217 @@ owner    = "dtlr"
 repos    = ["marquee", "drop-app"]
 </file>
 
+<file path="modules/rust/reclaim-disk.sh">
+#!/usr/bin/env bash
+#
+# reclaim-disk — on-demand disk reclamation for a dev Mac.
+#
+# Templated to ~/.local/bin/reclaim-disk by home-manager (modules/rust/rust.nix).
+# NOT scheduled — run it by hand when you need space back:  reclaim-disk
+#
+# The AUTOMATIC section only removes regenerable build output and package
+# caches (Rust target dirs, npm/pnpm caches). Nothing here touches source code,
+# git history, or emulators/simulators. The MANUAL section lists bigger,
+# judgement-call wins and is left commented out on purpose.
+#
+set -uo pipefail
+
+DRY_RUN=0
+[ "${1:-}" = "--dry-run" ] && DRY_RUN=1
+
+human()  { du -sh "$1" 2>/dev/null | cut -f1; }
+note()   { printf '  %-48s %s\n' "$1" "$2"; }
+run()    { if [ "$DRY_RUN" = 1 ]; then echo "  [dry-run] $*"; else eval "$@"; fi; }
+
+CARGO_TARGET_DIR_DEFAULT="$HOME/.cache/cargo/target"
+PROJECTS="$HOME/projects"
+
+echo "Disk before:"
+df -h / | awk 'NR==1 || /\/$/'
+[ "$DRY_RUN" = 1 ] && echo "(dry run — nothing will be deleted)"
+echo
+
+echo "== Top space users in \$HOME (informational) =="
+du -h -d 1 "$HOME" 2>/dev/null | sort -hr | head -12
+echo
+
+# ---------------------------------------------------------------------------
+# AUTOMATIC — regenerable only. Safe.
+# ---------------------------------------------------------------------------
+echo "== Rust build artifacts (usually the biggest win) =="
+# Shared target dir (set by home-manager via CARGO_TARGET_DIR).
+shared="${CARGO_TARGET_DIR:-$CARGO_TARGET_DIR_DEFAULT}"
+if [ -d "$shared" ]; then
+  note "shared target dir" "$(human "$shared")"
+  run "rm -rf \"$shared\""
+fi
+# Any per-project target/ dirs left over from before the shared dir, or from
+# projects that override CARGO_TARGET_DIR.
+if [ -d "$PROJECTS" ]; then
+  while IFS= read -r d; do
+    note "rm target" "$(human "$d")  ($d)"
+    run "rm -rf \"$d\""
+  done < <(find "$PROJECTS" -type d -name target -prune 2>/dev/null)
+fi
+echo
+
+echo "== JS package caches (regenerable) =="
+if command -v npm >/dev/null 2>&1; then
+  note ".npm cache" "$(human "$HOME/.npm")"
+  run "npm cache clean --force >/dev/null 2>&1 || true"
+fi
+if command -v pnpm >/dev/null 2>&1; then
+  note "pnpm store prune" "$(human "$(pnpm store path 2>/dev/null)")"
+  run "pnpm store prune >/dev/null 2>&1 || true"
+fi
+# Stray .pnpm-store dirs inside projects (older pnpm layouts).
+if [ -d "$PROJECTS" ]; then
+  while IFS= read -r d; do
+    note "rm .pnpm-store" "$(human "$d")  ($d)"
+    run "rm -rf \"$d\""
+  done < <(find "$PROJECTS" -type d -name .pnpm-store -prune 2>/dev/null)
+fi
+echo
+
+echo "Disk after automatic cleanup:"
+df -h / | awk '/\/$/'
+echo
+
+# ---------------------------------------------------------------------------
+# MANUAL — bigger wins that need YOUR judgement. Uncomment to enable.
+# ---------------------------------------------------------------------------
+cat <<'NOTES'
+Not run automatically — decide per machine, then uncomment:
+
+  # Gradle dependency cache (safe, forces one slow Android rebuild):
+  #   rm -rf ~/.gradle/caches
+
+  # Xcode DerivedData (safe, forces one slow iOS rebuild; simulators untouched):
+  #   rm -rf ~/Library/Developer/Xcode/DerivedData/*
+
+  # Unused Android system images / AVDs — prune via Android Studio > SDK Manager.
+  #   Do NOT delete the image/AVD an active project's emulator targets.
+
+  # Standalone Android emulators you no longer use (e.g. MuMu, BlueStacks):
+  #   uninstall the app, then remove its ~/Library/"Application Support"/<id> dir.
+
+  # git worktrees in active repos — leave these to the coding agent working in
+  # that repo; it can tell needed work from stale. Do not bulk-remove.
+NOTES
+</file>
+
+<file path="modules/rust/rust.nix">
+{
+  config,
+  pkgs,
+  lib,
+  ...
+}:
+# Global Rust tooling and hygiene for dev machines.
+#
+# This module does NOT install a Rust toolchain -- `rustup` (from base.nix)
+# owns that, and it makes juggling toolchains far easier than a pinned Nix
+# derivation would. What we template here are the *global settings* every dev
+# machine should share, plus the tools and the scheduled job that keep `target/`
+# bloat from silently eating hundreds of GB (the concrete incident: two Rust
+# repos held ~51 GB of stale `target/` between them).
+#
+# Enabled fleet-wide via `d.profiles.dev.rust.enable` (see modules/profiles.nix,
+# which defaults it to follow the dev profile) and imported from
+# modules/profiles/dev.nix.
+let
+  # One shared target dir for every project, so dependency builds are not
+  # duplicated per-repo and there is a single place to sweep. `cargo-sweep`
+  # discovers `.fingerprint` dirs by walking, so it sweeps this cleanly.
+  cargoTargetDir = "${config.home.homeDirectory}/.cache/cargo/target";
+
+  sweepLogDir = "${config.home.homeDirectory}/.cache/cargo-sweep";
+
+  # Time-based sweep of the shared target dir plus any per-project `target/`
+  # dirs (leftovers, or repos that override CARGO_TARGET_DIR). `--time` mode
+  # needs no rustc/rustup, so it runs fine under launchd's bare environment.
+  cargo-sweep-scheduled = pkgs.writeShellApplication {
+    name = "cargo-sweep-scheduled";
+    runtimeInputs = [ pkgs.cargo-sweep ];
+    text = ''
+      for root in "$HOME/.cache/cargo" "$HOME/projects"; do
+        [ -d "$root" ] || continue
+        echo "sweeping $root (artifacts unused > 30 days)"
+        cargo-sweep --recursive --time 30 "$root" || true
+      done
+    '';
+  };
+in
+lib.mkMerge [
+  {
+    # sccache + cargo-sweep are helper tools, not the toolchain. sccache is
+    # installed and size-capped, but intentionally NOT wired as a global
+    # RUSTC_WRAPPER: that disables incremental compilation, which hurts the
+    # fast edit/rebuild loop. Opt a project in when you want shared caching --
+    # e.g. add to its .cargo/config.toml:  [build] rustc-wrapper = "sccache"
+    # (or export RUSTC_WRAPPER=sccache in that repo's direnv).
+    home.packages = [
+      pkgs.sccache
+      pkgs.cargo-sweep
+    ];
+
+    home.sessionVariables = {
+      # Cap the sccache cache so it cannot grow without bound.
+      SCCACHE_CACHE_SIZE = "10G";
+      # Consolidate all cargo build output into one shared, sweepable location.
+      CARGO_TARGET_DIR = cargoTargetDir;
+    };
+  }
+
+  # launchd + the reclaim helper are macOS-only. The dev fleet is Darwin; a
+  # NixOS host would want a systemd timer instead (not needed today).
+  (lib.mkIf pkgs.stdenv.isDarwin {
+    # On-demand "give me space back" button, ready on every dev machine.
+    # Non-destructive (regenerable caches only); see the script for details.
+    home.file.".local/bin/reclaim-disk" = {
+      source = ./reclaim-disk.sh;
+      executable = true;
+    };
+
+    # Ensure the log dir exists before launchd tries to write into it.
+    home.activation.cargoSweepLogDir = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      mkdir -p ${lib.escapeShellArg sweepLogDir}
+    '';
+
+    # Weekly sweep: Sundays at 11:00. Removes build artifacts untouched for
+    # 30+ days without forcing rebuilds of anything you are actively working on.
+    launchd.agents.cargo-sweep = {
+      enable = true;
+      config = {
+        ProgramArguments = [ "${cargo-sweep-scheduled}/bin/cargo-sweep-scheduled" ];
+        StartCalendarInterval = [
+          {
+            Weekday = 0;
+            Hour = 11;
+            Minute = 0;
+          }
+        ];
+        EnvironmentVariables = {
+          HOME = config.home.homeDirectory;
+          PATH = lib.concatStringsSep ":" [
+            "/etc/profiles/per-user/${config.home.username}/bin"
+            "/run/current-system/sw/bin"
+            "/nix/var/nix/profiles/default/bin"
+            "/usr/bin"
+            "/bin"
+            "/usr/sbin"
+            "/sbin"
+          ];
+        };
+        RunAtLoad = false;
+        StandardOutPath = "${sweepLogDir}/launchd.out.log";
+        StandardErrorPath = "${sweepLogDir}/launchd.err.log";
+      };
+    };
+  })
+]
+</file>
+
 <file path="modules/default.nix">
 {
   imports = [
@@ -11954,11 +12314,13 @@ in
       enable = mkBool true;
 
       js.enable = mkBool cfg.dev.enable;
+      # Rust tooling (shared target dir, sccache, scheduled sweep) is uniform
+      # across the dev fleet, so it follows the dev profile like js does.
+      rust.enable = mkBool cfg.dev.enable;
 
       # Per machine
       go.enable = mkBool false;
       py.enable = mkBool false;
-      rust.enable = mkBool false;
     };
 
     # For: Corporate programs e.g. Zoom, Slack, etc.
@@ -13007,14 +13369,29 @@ import { $ } from "bun";
 import { mkdir } from "node:fs/promises";
 import type { JobContext } from "../types";
 
+/** HTTPS clone URL; embeds GH_TOKEN/GITHUB_TOKEN when set (private allowlisted repos). */
+export function cloneUrl(ctx: JobContext, env: NodeJS.ProcessEnv = process.env): string {
+  const token = env.GH_TOKEN ?? env.GITHUB_TOKEN;
+  if (token) {
+    return `https://x-access-token:${token}@github.com/${ctx.owner}/${ctx.repo}.git`;
+  }
+  return `https://github.com/${ctx.owner}/${ctx.repo}.git`;
+}
+
+function redactUrl(url: string): string {
+  return url.replace(/x-access-token:[^@]+@/i, "x-access-token:***@");
+}
+
 export async function cloneAtSha(ctx: JobContext): Promise<void> {
   await mkdir(ctx.workDir, { recursive: true });
-  const url = `https://github.com/${ctx.owner}/${ctx.repo}.git`;
+  const url = cloneUrl(ctx);
   const exists = await Bun.file(`${ctx.workDir}/.git/HEAD`).exists();
   if (!exists) {
     const r = await $`git clone --filter=blob:none ${url} ${ctx.workDir}`.quiet().nothrow();
     if (r.exitCode !== 0) {
-      throw new Error(`clone failed (${r.exitCode}): ${r.stderr.toString()}`);
+      throw new Error(
+        `clone failed (${r.exitCode}): ${r.stderr.toString() || redactUrl(url)}`,
+      );
     }
   }
   const f = await $`git -C ${ctx.workDir} fetch --depth=1 origin ${ctx.sha}`.quiet().nothrow();
@@ -14267,18 +14644,21 @@ node_modules/
 
 FROM oven/bun:1.2-debian
 
+# build-essential: gitnexus pulls tree-sitter-* native addons (node-gyp needs make/g++)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git ca-certificates curl tar gzip nodejs npm \
+    build-essential python3 \
  && rm -rf /var/lib/apt/lists/*
 
-# Global CLIs — pin versions via build args
-ARG REPOMIX_VERSION=latest
-ARG GITNEXUS_VERSION=latest
+# Global CLIs — pin versions via build args (resolved 2026-07-17 first green build)
+ARG REPOMIX_VERSION=1.16.1
+ARG GITNEXUS_VERSION=1.6.9
 ARG OPENWIKI_VERSION=0.2.0
 RUN npm install -g repomix@${REPOMIX_VERSION} gitnexus@${GITNEXUS_VERSION} openwiki@${OPENWIKI_VERSION}
 
-# syft SBOM scanner
-RUN curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+# syft SBOM scanner (pin to the version resolved on first green build)
+ARG SYFT_VERSION=v1.48.0
+RUN curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin "${SYFT_VERSION}"
 
 WORKDIR /app
 
@@ -14405,7 +14785,7 @@ Runtime secrets — never commit. The Containerfile lists the same set.
 | `AWS_ACCESS_KEY_ID` | R2 upload / remote skip marker | R2 access key |
 | `AWS_SECRET_ACCESS_KEY` | R2 upload / remote skip marker | R2 secret key |
 | `BRAIN_R2_BUCKET` | Optional | Bucket name (default `nwl-codebase-brain`) |
-| `GH_TOKEN` | Brain PR (non–dry-run) | `gh` auth for push and PR create/edit |
+| `GH_TOKEN` | Private source clone + brain PR (non–dry-run) | `gh` auth; clone uses `x-access-token` HTTPS when set |
 | `OPENWIKI_MODEL_ID` | Optional | Override openwiki model (otherwise openwiki default) |
 
 Without R2 creds, graph upload and remote digest fetch are skipped; local `out/` artifacts are always
@@ -19595,6 +19975,151 @@ export interface RepoTarget {
 }
 </file>
 
+<file path="scripts/darwin-rebuild.sh">
+#!/usr/bin/env bash
+#
+# darwin-rebuild.sh
+#
+# Host-portable wrapper around `darwin-rebuild` that works whether this repo
+# lives on the boot volume (laptop) or on an external drive (the desktop
+# hosts, where ~/projects is a symlink to e.g. /Volumes/REALTEK/projects).
+#
+#   ./scripts/darwin-rebuild.sh switch [host] [extra darwin-rebuild args...]
+#   ./scripts/darwin-rebuild.sh build  [host]
+#   ./scripts/darwin-rebuild.sh check  [host]
+#
+# WHY THIS EXISTS
+#
+# `sudo darwin-rebuild switch --flake .` evaluates as root. Nix resolves a
+# bare path inside a git repo through its libgit2 `git+file://` fetcher, and
+# libgit2 refuses to open a repository whose owner it does not recognise:
+#
+#   error: opening Git repository "/Volumes/REALTEK/projects/personal/nix-darwin-hm":
+#          repository path ... is not owned by current user (libgit2 error code = 7)
+#
+# External drives are mounted `noowners` on macOS (confirm with
+# `mount | grep <volume>`), which is what trips the check there but not on the
+# boot volume. `darwin-rebuild` also resets HOME=~root when euid is 0, so a
+# `safe.directory` entry in YOUR git config is never consulted during a root
+# rebuild — it has to live in root's own config (see `just git-safe-directory`).
+#
+# The fix used here is to hand Nix a `path:` flake reference on affected
+# hosts, which bypasses the git fetcher entirely. Verified to produce a
+# byte-identical system closure to the git+file build.
+#
+# Notes:
+# - `build` and `switch` deliberately use the SAME flake reference. The git
+#   and path fetchers hash their sources differently, so mixing them means a
+#   `build` never warms the cache for the following `switch`.
+# - `path:` copies the whole working tree into the store, including
+#   gitignored files. That is the cost of the workaround; `git-safe-directory`
+#   is the way to opt back into the leaner git fetcher.
+# - Detection is belt-and-braces: we pick `path:` up front when the volume is
+#   `noowners`, and still fall back automatically if the ownership error shows
+#   up anyway on a host that mounts its drive differently.
+
+set -euo pipefail
+
+usage() {
+  echo "usage: $(basename "$0") {switch|build|check} [host] [extra args...]" >&2
+}
+
+action="${1:-switch}"
+[ $# -gt 0 ] && shift
+
+case "$action" in
+  switch | build | check) ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  *)
+    usage
+    exit 2
+    ;;
+esac
+
+# A leading non-flag argument is the host name; otherwise default to this
+# machine's short hostname. An empty first argument is treated as absent so
+# justfile recipes can pass through an unset `host` parameter.
+if [ $# -gt 0 ] && [ -n "$1" ] && [ "${1#-}" = "$1" ]; then
+  host="$1"
+  shift
+else
+  [ $# -gt 0 ] && [ -z "$1" ] && shift
+  # Matches darwin-rebuild's own default. LocalHostName is stable, whereas
+  # `hostname -s` can drift to whatever DHCP hands back.
+  host="$(scutil --get LocalHostName 2>/dev/null || hostname -s)"
+fi
+
+repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+
+# Fail fast on an unknown host rather than after a long eval or a wasted sudo
+# prompt. Listing attrNames is cheap; evaluating .system would not be.
+hosts="$(nix eval --raw "${repo_dir}#darwinConfigurations" \
+  --apply 'x: builtins.concatStringsSep " " (builtins.attrNames x)' 2>/dev/null || true)"
+if [ -n "$hosts" ] && ! printf '%s\n' $hosts | grep -qx -- "$host"; then
+  echo "no darwinConfigurations.\"${host}\" in this flake." >&2
+  echo "available: ${hosts}" >&2
+  echo "pass one explicitly: $(basename "$0") ${action} <host>" >&2
+  exit 1
+fi
+
+# Is the repo on a volume mounted `noowners`? That is the marker for the
+# libgit2 ownership failure under sudo.
+mount_point="$(df -P "$repo_dir" | awk 'NR==2 {out=$6; for (i=7; i<=NF; i++) out = out OFS $i; print out}')"
+git_ref="${repo_dir}#${host}"
+path_ref="path:${repo_dir}#${host}"
+
+if mount | grep -F " on ${mount_point} " | grep -q noowners; then
+  echo "note: ${mount_point} is mounted noowners — using a path: flake ref so the"
+  echo "      root evaluation does not go through libgit2."
+  echo "      (\`just git-safe-directory\` may let you drop this; see that recipe.)"
+  flake_ref="$path_ref"
+else
+  flake_ref="$git_ref"
+fi
+
+# Bootstrap rebuilds need the GitHub PAT in the ROOT eval's nix config, before
+# system/nix.nix's `!include` of /etc/nix/github-token.conf is live. Callers
+# set DARWIN_REBUILD_NIX_CONFIG; see the darwin-rebuild-bootstrap recipe.
+run() {
+  local ref="$1"
+  shift
+  if [ "$action" = build ]; then
+    # Building needs no privileges, and staying unprivileged sidesteps the
+    # ownership check entirely.
+    darwin-rebuild build --flake "$ref" "$@"
+  elif [ -n "${DARWIN_REBUILD_NIX_CONFIG:-}" ]; then
+    sudo NIX_CONFIG="$DARWIN_REBUILD_NIX_CONFIG" darwin-rebuild "$action" --flake "$ref" "$@"
+  else
+    sudo darwin-rebuild "$action" --flake "$ref" "$@"
+  fi
+}
+
+# Explicit template: BSD and GNU mktemp disagree about bare `-t` prefixes.
+log="$(mktemp "${TMPDIR:-/tmp}/darwin-rebuild.XXXXXX")"
+trap 'rm -f "$log"' EXIT
+
+set +e
+run "$flake_ref" "$@" 2>&1 | tee "$log"
+rc="${PIPESTATUS[0]}"
+set -e
+
+if [ "$rc" -ne 0 ] \
+  && [ "$flake_ref" != "$path_ref" ] \
+  && grep -q 'is not owned by current user' "$log"; then
+  echo
+  echo "libgit2 refused the repo under root — retrying with a path: flake ref."
+  set +e
+  run "$path_ref" "$@" 2>&1 | tee "$log"
+  rc="${PIPESTATUS[0]}"
+  set -e
+fi
+
+exit "$rc"
+</file>
+
 <file path="scripts/export-iterm-profile.sh">
 #!/usr/bin/env bash
 #
@@ -19701,26 +20226,29 @@ echo "Done. Review with: git diff home/apps/iterm2/profile.json"
       "libkrun/krun/libkrun"
       "libkrun/krun/libkrunfw"
       "libkrun/krun/gvproxy"
-
-      # Secrets scanner (homebrew-core, no tap needed). Used as a pre-commit
-      # gate on repos handling credentials — see home/cli/git/default.nix.
-      "betterleaks"
     ];
 
     # Casks installed on all macOS hosts.
     casks = [
       "obsidian"
+      # Secrets scanner. Prefer the upstream tap cask over homebrew-core's
+      # formula of the same name: both ship `betterleaks`, and having the cask
+      # installed while the Brewfile asks for the formula makes `brew bundle`
+      # load the cask (upgrade/cleanup) and then fail the formula link.
+      # Used as a pre-commit gate — see home/cli/git/default.nix.
+      "betterleaks/tap/betterleaks"
     ];
 
-    # libkrun/krun is a third-party tap. Homebrew 6.0 gates untrusted taps, and
-    # libkrun pulls in `libkrun/krun/virglrenderer` as a dependency (not
-    # fully-qualified above), so the bundle refuses it from an untrusted tap.
-    # nix-darwin's `taps` option can't emit `trusted: true`, so declare the tap
-    # as a verbatim Brewfile line that both taps AND trusts it (covering the
-    # dependency too). Same pattern as modules/profiles/base.nix for
-    # nwlnexus/olympus. See https://docs.brew.sh/Tap-Trust
+    # Third-party taps. Homebrew 6.0 gates untrusted taps; nix-darwin's `taps`
+    # option can't emit `trusted: true`, so declare them as verbatim Brewfile
+    # lines that both tap AND trust. Same pattern as modules/profiles/base.nix
+    # / dev.nix. Critical under darwin-rebuild: activate runs
+    # `sudo --user=… --set-home brew bundle` without XDG_CONFIG_HOME, so brew
+    # reads ~/.homebrew/trust.json — interactive `brew trust` (which wrote
+    # ~/.config/homebrew/trust.json) does not apply. See https://docs.brew.sh/Tap-Trust
     extraConfig = ''
       tap "libkrun/krun", trusted: true
+      tap "betterleaks/tap", trusted: true
     '';
   };
 }
@@ -19741,6 +20269,7 @@ in
     ./finder.nix
     ./keyboard.nix
     ./limits.nix
+    ./lldpd.nix
     ./login.nix
     ./brew.nix
     ./fonts.nix
@@ -20030,6 +20559,28 @@ in
       ServiceIPC = false;
     };
   };
+}
+</file>
+
+<file path="system/darwin/lldpd.nix">
+{ config, ... }:
+{
+  # IEEE 802.1ab (LLDP) daemon — announces this host to switches/neighbors.
+  # Formula is homebrew-core (implicitly trusted). The service requires root
+  # (`require_root`), but nix-darwin's brew bundle runs as the primary user, so
+  # Brewfile `start_service`/`restart_service` only warn and never load the
+  # boot daemon. Start it from postActivation (runs as root, after brew install).
+  homebrew.brews = [ "lldpd" ];
+
+  system.activationScripts.postActivation.text = ''
+    echo "starting lldpd (brew services)..." >&2
+    brew="${config.homebrew.prefix}/bin/brew"
+    if [ -x "$brew" ] && "$brew" list --formula lldpd >/dev/null 2>&1; then
+      "$brew" services start lldpd >/dev/null 2>&1 \
+        || "$brew" services restart lldpd \
+        || echo >&2 "warning: failed to start lldpd via brew services"
+    fi
+  '';
 }
 </file>
 
@@ -20965,7 +21516,9 @@ For packages available to all users, add to `environment.systemPackages`:
 
 #### Non-official Homebrew taps (tap trust)
 
-Homebrew 6.0+ requires non-official taps to be explicitly trusted. nix-darwin's `homebrew.taps` option cannot emit `trusted: true`, so trusted taps are declared as verbatim Brewfile lines via `homebrew.extraConfig` (which both taps and trusts them), co-located with the profile that uses them (`base.nix`, `dev.nix`). Fully-qualified brews like `user/repo/formula` auto-trust that item; declaring the tap as `trusted: true` additionally silences the tap-level "not trusted" warnings.
+Homebrew 6.0+ requires non-official taps to be explicitly trusted. nix-darwin's `homebrew.taps` option cannot emit `trusted: true`, so trusted taps are declared as verbatim Brewfile lines via `homebrew.extraConfig` (which both taps and trusts them), co-located with the profile that uses them (`base.nix`, `dev.nix`, `system/darwin/brew.nix`). Fully-qualified brews/casks like `user/repo/formula` auto-trust that item; declaring the tap as `trusted: true` additionally silences the tap-level "not trusted" warnings.
+
+Interactive `brew trust` is not enough for `darwin-rebuild`: activation runs `brew bundle` via `sudo --user=… --set-home` without `XDG_CONFIG_HOME`, so Homebrew reads `~/.homebrew/trust.json` rather than `~/.config/homebrew/trust.json`. Declare trust in the Brewfile (`extraConfig` / fully-qualified entries) so bundle applies it during activation.
 
 ### Adding Hosts
 
@@ -21004,6 +21557,14 @@ To add a new host configuration:
 - **iTerm2** is the default terminal on all macOS hosts (`system/darwin/iterm2.nix` installs the cask + sets it as default handler via `duti`).
 - The default iTerm2 profile is a **Dynamic Profile** (`home/apps/iterm2/`) that auto-launches `tmux -CC` (control mode). The gateway window is hidden via `AutoHideTmuxClientSession`. The profile is made default by matching `Default Bookmark Guid` (system) to the profile `Guid` (home) — keep these two in sync.
 - To refresh the profile template from a host's live settings: `just export-iterm-profile`, then commit `home/apps/iterm2/profile.json`.
+
+### Rust build hygiene
+
+- Rust tooling is templated fleet-wide in `modules/rust/rust.nix`, gated on `d.profiles.dev.rust.enable` (which follows the dev profile). It does **not** install a toolchain — `rustup` from `base.nix` owns that. It only sets global config and helpers.
+- All cargo build output goes to a **shared target dir** (`~/.cache/cargo/target`, via `CARGO_TARGET_DIR`) so it isn't duplicated per-repo and there's one place to sweep.
+- `sccache` is installed and size-capped (`SCCACHE_CACHE_SIZE=10G`) but is **not** a global `RUSTC_WRAPPER` (that disables incremental compilation). Opt a project in via its `.cargo/config.toml` `[build] rustc-wrapper = "sccache"`.
+- A weekly launchd agent (`cargo-sweep`, Sundays 11:00, darwin-only) removes build artifacts unused for 30+ days. Logs: `~/.cache/cargo-sweep/launchd.*.log`.
+- `reclaim-disk` (installed to `~/.local/bin`, source `modules/rust/reclaim-disk.sh`) is an on-demand, non-destructive space reclaim for regenerable caches. Run `reclaim-disk --dry-run` first to preview.
 
 ### Updating Dependencies
 
@@ -22502,8 +23063,65 @@ echo -e "${GREEN}Setup complete!${NC}"
 default:
     @just --list
 
+# `treefmt` is not installed on PATH — it only exists as this flake's
+# formatter wrapper (flake.nix `outputsBuilder.formatter`), so go through
+# `nix fmt` rather than expecting a bare binary.
+# Format the tree (nixfmt via treefmt-nix).
 fmt:
-    treefmt
+    nix fmt
+
+# Works on every machine regardless of whether the repo sits on the boot
+# volume (laptop) or on an external drive mounted `noowners` (the desktops,
+# where ~/projects symlinks to /Volumes/<drive>/projects). See
+# scripts/darwin-rebuild.sh for why a bare `sudo darwin-rebuild switch` fails
+# on the external-drive hosts.
+# Rebuild and activate this host. Override the host: `just switch NWL-MBM2`.
+switch host="":
+    ./scripts/darwin-rebuild.sh switch {{ host }}
+
+# Uses the same flake reference as `just switch`, so it genuinely warms the
+# cache for the subsequent switch (the git and path fetchers hash differently).
+# Build this host's system closure without activating it, and without sudo.
+build host="":
+    ./scripts/darwin-rebuild.sh build {{ host }}
+
+# Dry-run: build this host and report what would change (needs sudo).
+check host="":
+    ./scripts/darwin-rebuild.sh check {{ host }}
+
+# Let ROOT's git open this repo, so `sudo darwin-rebuild switch --flake .`
+# works directly and Nix can use its leaner git fetcher instead of the
+# `path:` workaround (which copies the whole worktree into the store).
+#
+# Only needed on hosts where this repo lives on an external drive — macOS
+# mounts those `noowners`, and libgit2 then refuses to open the repo as root.
+#
+# The `-H` is load-bearing: macOS sudo preserves $HOME by default, so without
+# it this would write to YOUR git config, which a root rebuild never reads
+# (darwin-rebuild resets HOME=~root when euid is 0).
+#
+# Unverified on these hosts — if a plain `sudo darwin-rebuild switch` still
+# fails afterwards, `just switch` keeps working regardless.
+# Register this repo as a safe.directory for ROOT's git (external-drive hosts).
+git-safe-directory:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    repo="$(pwd -P)"
+    if sudo -H git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$repo"; then
+      echo "already registered for root: $repo"
+      exit 0
+    fi
+    sudo -H git config --global --add safe.directory "$repo"
+    echo "Registered as a safe.directory for root: $repo"
+    echo "Written to /var/root/.gitconfig — re-run per host, and after moving the repo."
+
+# Undo git-safe-directory on this host.
+git-safe-directory-remove:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    repo="$(pwd -P)"
+    sudo -H git config --global --unset-all safe.directory "$(printf '%s' "$repo" | sed 's/[].[^$\\*]/\\&/g')" || true
+    echo "Removed root safe.directory entry for: $repo"
 
 # Capture this host's live iTerm2 default profile into the repo template
 # (home/apps/iterm2/profile.json). Quit iTerm2 first so prefs are flushed.
@@ -22566,15 +23184,18 @@ update-mnemosyne-flake:
     NIX_CONFIG="$nix_conf" nix flake update mnemosyne
     echo "Updated flake.lock — commit if intentional, then darwin-rebuild."
 
+# Goes through scripts/darwin-rebuild.sh so it works on the external-drive
+# hosts too — a bare `--flake .` fails there under sudo.
 # First darwin-rebuild after materialize-nix-github-token (before !include is live).
-darwin-rebuild-bootstrap:
+darwin-rebuild-bootstrap host="":
     #!/usr/bin/env bash
     set -euo pipefail
     if [ ! -f /etc/nix/github-token.conf ]; then
       echo "missing /etc/nix/github-token.conf — run: just materialize-nix-github-token" >&2
       exit 1
     fi
-    sudo NIX_CONFIG="$(sudo cat /etc/nix/github-token.conf)" darwin-rebuild switch --flake .
+    DARWIN_REBUILD_NIX_CONFIG="$(sudo cat /etc/nix/github-token.conf)" \
+      ./scripts/darwin-rebuild.sh switch {{ host }}
 
 # Materialize the nwlnexus R2 nix binary-cache substituter + credentials so
 # the nix daemon substitutes mnemosyne's CI-built closure instead of building
