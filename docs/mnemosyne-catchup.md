@@ -22,14 +22,26 @@ interrupted or repeated run just picks up where it left off. Permanent failures
 
 ## One-time prerequisites (per host)
 
-The mnemosyne CLI is a **private** flake input (`github:nwlnexus/mnemosyne`) and
-its closure is served from the nwlnexus R2 nix cache. If this host has never
-been set up for those, run once (needs sudo; reads secrets from
-`~/projects/personal/.env`):
+The mnemosyne CLI is installed by Home Manager as an
+`npm:@nwlnexus/mnemosyne` mise global during activation. The catch-up recipe also
+needs the moneta bearer token and Cloudflare Access service credentials, which
+op-secrets writes into `~/projects/personal/.env`.
+
+If the host has never been rebuilt since the mnemosyne migration, start with the
+normal macOS wrapper:
 
 ```bash
-just materialize-nix-github-token   # private flake fetch
-just materialize-r2-cache-creds     # substitute the prebuilt closure
+cd ~/projects/personal/nix-darwin-hm
+git pull
+just switch
+```
+
+Only run the root credential bootstrap when the rebuild reports that root cannot
+fetch private GitHub flake inputs:
+
+```bash
+just materialize-nix-github-token
+just darwin-rebuild-bootstrap
 ```
 
 ## Catch-up steps
@@ -41,7 +53,7 @@ Run these on the machine being caught up:
 cd ~/projects/personal/nix-darwin-hm && git pull
 
 # 2. Install that build.
-sudo darwin-rebuild switch --flake .
+just switch
 
 # 3. Flush the parked queue through moneta (clears stale drains + the lock,
 #    then drains with concurrency, then prints status).

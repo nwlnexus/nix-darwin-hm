@@ -12,11 +12,17 @@ This provides guidance to AI assistants when working with this nix-darwin + Home
 
 ```bash
 # Apply configuration
-darwin-rebuild switch --flake .        # macOS
+just build                             # macOS: build current host
+just check                             # macOS: dry-run activation
+just switch                            # macOS: activate current host
+just switch <hostname>                 # macOS: activate another darwin host
 nixos-rebuild switch --flake .         # NixOS
 
 # macOS maintenance
 nix-darwin-reinit [flake-path]         # Fix nix-darwin after macOS upgrades
+just materialize-nix-github-token      # Root Nix token for private flake inputs
+just darwin-rebuild-bootstrap          # First switch after token setup
+just git-safe-directory                # Optional root Git trust
 
 # Development
 nix flake show                         # List all outputs
@@ -195,8 +201,44 @@ For in-depth architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 **Current hosts:**
 
-- **darwinM:** DTLR-NWLMMINI, MACST-01, MACST-02, NWL-MBM2, NWL-MMINI, NWL-STUDIO, NWL-STUDIO-DTLR
+- **darwinM:** DTLR-NWLMMINI, MACST-01, MACST-02, NWL-MBM2, NWL-MMINI
 - **nixos-arm:** nixos-parallels, rpi-01
+
+## macOS rebuild workflow
+
+Prefer `just build`, `just check`, and `just switch` over raw
+`darwin-rebuild` commands. They all call `scripts/darwin-rebuild.sh`, which:
+
+- Defaults the host from `scutil --get LocalHostName` and validates it against
+  `darwinConfigurations`.
+- Uses the same flake reference for `build` and `switch`, so the build warms the
+  closure needed by the later activation.
+- Detects repositories on macOS volumes mounted `noowners` and switches to a
+  `path:` flake reference before root's libgit2 ownership check can fail.
+- Retries with `path:` automatically if the ownership error still appears.
+
+Private flake inputs are fetched by root during `sudo darwin-rebuild`. Run
+`just materialize-nix-github-token` once per host to create
+`/etc/nix/github-token.conf`; the first rebuild before `system/nix.nix` includes
+that file should use `just darwin-rebuild-bootstrap`.
+
+`just git-safe-directory` is optional. It writes the resolved checkout path to
+root's Git config so raw `sudo darwin-rebuild switch --flake .` can use Nix's
+git fetcher. `just switch` keeps working without it by falling back to `path:`.
+
+## Git identity routing
+
+`home/cli/git/default.nix` routes identities with suffix-based `includeIf`
+patterns:
+
+- `gitdir:projects/personal/` loads the personal profile and SSH signing key.
+- `gitdir:projects/work/` loads the work profile and rewrites GitHub SSH remotes
+  to `github.com-work`.
+
+Do not change these back to `~/projects/...` patterns. On several hosts
+`~/projects` is a symlink to an external volume, and Git matches `gitdir:`
+against the traversed path. Prefix-specific patterns silently miss IDEs, agents,
+or commands that use the real `/Volumes/.../projects/...` path.
 
 ## Notes for AI Assistants
 

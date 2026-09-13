@@ -54,7 +54,7 @@ Host-specific configurations organized by platform. Each `.nix` file represents 
 
 **Current hosts:**
 
-- **darwinM:** NWL-MBM2, NWL-STUDIO, NWL-STUDIO-DTLR
+- **darwinM:** DTLR-NWLMMINI, MACST-01, MACST-02, NWL-MBM2, NWL-MMINI
 - **nixos-arm:** nixos-parallels, rpi-01
 
 ### `/system/`
@@ -86,7 +86,7 @@ Home Manager configurations for user-specific settings.
 
 **`home/cli/`** - Command line tool configurations:
 
-- `git.nix` - Git configuration
+- `git/` - Git aliases, signing, hooks, and identity routing
 - `starship.nix` - Starship prompt
 - `bat.nix` - Bat (cat alternative)
 - `eza.nix` - Eza (ls alternative)
@@ -233,9 +233,63 @@ The configuration includes overlays for:
 ### Applying Changes
 
 1. Edit configuration files
-2. Format with `nix fmt` or `treefmt`
-3. Test build: `nix build .#darwinConfigurations.HOSTNAME.system`
-4. Apply: `darwin-rebuild switch --flake .` (macOS) or `nixos-rebuild switch --flake .` (NixOS)
+2. Format with `nix fmt` or `just fmt`
+3. On macOS, test with `just build` or `just check`
+4. Apply with `just switch` (macOS) or
+   `nixos-rebuild switch --flake .#<hostname>` (NixOS)
+
+### macOS Rebuild Wrapper
+
+`just build`, `just check`, and `just switch` call
+`scripts/darwin-rebuild.sh` instead of invoking `darwin-rebuild` directly. The
+wrapper exists because desktop hosts keep this repository on an external volume
+mounted `noowners`; when root evaluates `sudo darwin-rebuild switch --flake .`,
+Nix's libgit2 fetcher may reject the checkout as not owned by the current user.
+
+The wrapper:
+
+1. Defaults the host from `scutil --get LocalHostName` and validates it against
+   the flake's `darwinConfigurations`.
+2. Uses a normal git-backed flake reference when root can read the checkout.
+3. Uses a `path:` flake reference on `noowners` volumes, bypassing libgit2's
+   ownership check.
+4. Retries with `path:` if the ownership error appears after the first attempt.
+5. Supports bootstrap rebuilds with `DARWIN_REBUILD_NIX_CONFIG`, used by
+   `just darwin-rebuild-bootstrap` before the root Nix token include is active.
+
+`build` intentionally uses the same flake reference as `switch`; otherwise the
+git and path fetchers hash different sources and a build would not warm the
+closure used by the later activation.
+
+### Root Nix Credentials
+
+Private flake inputs and the optional R2 binary cache are root-daemon concerns:
+
+- `just materialize-nix-github-token` writes `/etc/nix/github-token.conf` from
+  the provisioned personal environment. It enables private GitHub flake inputs,
+  such as `github:nwlnexus/mnemosyne`, during root evaluations.
+- `just darwin-rebuild-bootstrap` passes that token through `NIX_CONFIG` for the
+  first successful switch, before `system/nix.nix` has installed the optional
+  `!include`.
+- `just materialize-r2-cache-creds` writes `/etc/nix/r2-cache.conf` plus a root
+  AWS profile named `nwlnexus-r2` so the Nix daemon can use the R2 substituter.
+
+Both `/etc/nix/*.conf` files are optional includes in `system/nix.nix`; hosts
+without them still evaluate, but private fetches or binary-cache substitution may
+be unavailable.
+
+### Git Identity Routing
+
+`home/cli/git/default.nix` uses suffix-based `includeIf` conditions so identity
+selection works through both symlinked and real checkout paths:
+
+- `gitdir:projects/personal/` loads the personal identity and SSH signing key.
+- `gitdir:projects/work/` loads the work identity, GitHub SSH rewrite, and work
+  credential username.
+
+Avoid `~/projects/...` conditions. Git matches `gitdir:` against the path used to
+enter the repository; IDEs, agents, and `git -C /Volumes/...` can bypass the
+symlink and would silently fall back to the default personal identity.
 
 ### Updating Dependencies
 
@@ -293,6 +347,38 @@ The script is managed by Home Manager and automatically installed to `~/.local/b
 2. Verify imports are correct
 3. Ensure all required inputs are in flake.nix
 4. Check for circular dependencies
+
+### External-Drive macOS Checkouts
+
+If raw `sudo darwin-rebuild switch --flake .` fails with a libgit2 ownership
+error on an external-drive checkout, use the supported wrapper:
+
+```bash
+just switch
+```
+
+To make the raw command use Nix's git fetcher again, register the resolved
+checkout path in root's Git config:
+
+```bash
+just git-safe-directory
+```
+
+The recipe uses `sudo -H` so the setting lands in `/var/root/.gitconfig`, which
+is the config root reads during `darwin-rebuild`. Re-run it after moving the
+checkout, or remove it with `just git-safe-directory-remove`.
+
+### Private Flake Input Fetches
+
+If root rebuilds cannot fetch private GitHub inputs:
+
+```bash
+just materialize-nix-github-token
+just darwin-rebuild-bootstrap
+```
+
+After that bootstrap switch, subsequent rebuilds can use `just switch` because
+`system/nix.nix` includes `/etc/nix/github-token.conf`.
 
 ### PATH Issues
 
