@@ -14,7 +14,7 @@ Push to allowlisted `main` on a personal (`nwlnexus`) repo triggers an Argo Even
 - [ ] Argo Events and Argo Workflows installed and reachable from olympus-gitops (Flux manages apps; ArgoCD remains retired for this path).
 - [ ] Cluster can pull images from the chosen registry and reach `github.com`, Cloudflare R2 (`AWS_ENDPOINT_URL`), and `api.anthropic.com`.
 - [ ] GitHub org webhook endpoint (Ingress or existing Events gateway) ready to receive `push` events with HMAC signature verification.
-- [ ] R2 bucket exists (default Job bucket: `nwl-codebase-brain`; override via `BRAIN_R2_BUCKET`).
+- [ ] R2 bucket exists (default Job bucket: `second-brain-docs`; override via `BRAIN_R2_BUCKET`).
 
 ---
 
@@ -69,7 +69,7 @@ The Job reads **environment variables** at runtime (`envFrom: secretRef` on the 
 | `AWS_ENDPOINT_URL` | R2 publish / skip-gate fetch | R2 item in 1Password Dev vault |
 | `AWS_ACCESS_KEY_ID` | R2 publish / skip-gate fetch | same R2 item |
 | `AWS_SECRET_ACCESS_KEY` | R2 publish / skip-gate fetch | same R2 item |
-| `BRAIN_R2_BUCKET` | optional | default `nwl-codebase-brain` if unset (non-secret ConfigMap/env OK) |
+| `BRAIN_R2_BUCKET` | optional | default `second-brain-docs` if unset (non-secret ConfigMap/env OK) |
 | `GH_TOKEN` | private source clone + brain PR / `gh` | **minted** from GitHub App creds (see §3.1) — not a personal PAT |
 | `OPENWIKI_MODEL_ID` | optional | non-secret; ConfigMap/env OK |
 
@@ -306,7 +306,7 @@ Operational split (optional):
 - [ ] **Fast path:** `--phase 1` WorkflowTemplate variant for graph-only refreshes (no Anthropic spend).
 - [ ] **Default prod:** `--phase all` on push-to-main.
 
-R2 keys (bucket default `nwl-codebase-brain`, prefix `graphs`):
+R2 keys (bucket default `second-brain-docs`, prefix `graphs`):
 
 ```text
 graphs/{owner}/{repo}/{sha}.tgz      # immutable graph tarball

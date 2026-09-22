@@ -60,7 +60,7 @@ export function buildContext(argv: string[]): JobContext {
     configPath: values["config-path"]!,
     brainRepo: values["brain-repo"]!,
     brainContentRoot: "docs/codebases",
-    r2Bucket: process.env.BRAIN_R2_BUCKET ?? "nwl-codebase-brain",
+    r2Bucket: process.env.BRAIN_R2_BUCKET ?? "second-brain-docs",
     r2Prefix: "graphs",
     anthropicApiKey: process.env.ANTHROPIC_API_KEY,
     dryRun: Boolean(values["dry-run"]),
