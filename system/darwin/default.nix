@@ -46,6 +46,22 @@ in
     "${PROJECT_ROOT}/files/certs/certificate.pem"
   ];
 
+  # mnemosyne retirement, root-owned leftovers (user-level ones are in
+  # home/cli/claude/default.nix). Idempotent: every step is a no-op once done.
+  # Delete once every host has switched.
+  system.activationScripts.postActivation.text = ''
+    rm -f /etc/nix/r2-cache.conf
+    creds=/var/root/.aws/credentials
+    if [ -f "$creds" ] && grep -q '^\[nwlnexus-r2\]' "$creds"; then
+      tmp="$(mktemp)"
+      awk '/^\[/ { skip = ($0 == "[nwlnexus-r2]") } !skip' "$creds" > "$tmp" \
+        && cat "$tmp" > "$creds"
+      rm -f "$tmp"
+      # Drop the file entirely if nothing but whitespace is left.
+      grep -q '[^[:space:]]' "$creds" || rm -f "$creds"
+    fi
+  '';
+
   system.defaults.screencapture.target = "clipboard";
 
   system.defaults.NSGlobalDomain = {

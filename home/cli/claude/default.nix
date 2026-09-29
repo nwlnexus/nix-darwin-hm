@@ -15,8 +15,10 @@
 
   # mnemosyne is retired. Its `install-hooks` wrote entries straight into
   # ~/.claude/settings.json and ~/.cursor/hooks.json (outside Nix), so nothing
-  # removes them on its own — strip them on each activation until every host
-  # has switched, then delete this block. Fail-soft: never blocks a switch.
+  # removes them on its own — strip them, plus its mise install and state dir,
+  # on each activation until every host has switched, then delete this block.
+  # Idempotent (each step is a no-op once done) and fail-soft. Root-owned
+  # leftovers are handled in system/darwin/default.nix.
   home.activation.mnemosyneCleanup = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     strip() { # file jq-filter
       [ -f "$1" ] || return 0
@@ -35,6 +37,14 @@
       if .hooks then .hooks |= (with_entries(
         .value |= map(select((.command // "") | test("mnemosyne") | not))
       ) | with_entries(select(.value | length > 0))) else . end'
+
+    rm -rf "${config.home.homeDirectory}/.claude/mnemosyne"
+    MISE_DATA="${config.home.homeDirectory}/.local/share/mise"
+    if [ -d "$MISE_DATA/installs/npm-nwlnexus-mnemosyne" ]; then
+      PATH="${pkgs.mise}/bin:$PATH" ${pkgs.mise}/bin/mise uninstall --all npm:@nwlnexus/mnemosyne 2>&1 || true
+      rm -rf "$MISE_DATA/installs/npm-nwlnexus-mnemosyne"
+      PATH="${pkgs.mise}/bin:$PATH" ${pkgs.mise}/bin/mise reshim 2>&1 || true
+    fi
   '';
 
   # gitnexus ships its own installer; it is idempotent and non-interactive.
