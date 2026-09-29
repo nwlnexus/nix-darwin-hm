@@ -88,8 +88,7 @@ fetch-personal-ssh-key:
     echo "Personal SSH key placed at ~/.ssh/id_ed25519_personal"
 
 # Materialize the GitHub access token for nix's github: fetcher so ROOT evals
-# (sudo darwin-rebuild switch) can fetch private flake inputs like
-# github:nwlnexus/mnemosyne. Reads the op-provisioned PAT from
+# (sudo darwin-rebuild switch) can fetch private flake inputs. Reads the op-provisioned PAT from
 # ~/projects/personal/.env; system/nix.nix `!include`s the resulting file.
 # Run once per host (and re-run if the PAT rotates). Requires sudo.
 materialize-nix-github-token:
@@ -109,19 +108,6 @@ materialize-nix-github-token:
     echo
     echo "Subsequent rebuilds need no prefix."
 
-# Bump the locked mnemosyne flake input (private repo — needs github-token.conf).
-# Run `just materialize-nix-github-token` first if you haven't on this host.
-update-mnemosyne-flake:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if [ ! -f /etc/nix/github-token.conf ]; then
-      echo "missing /etc/nix/github-token.conf — run: just materialize-nix-github-token" >&2
-      exit 1
-    fi
-    nix_conf="$(sudo cat /etc/nix/github-token.conf)"
-    NIX_CONFIG="$nix_conf" nix flake update mnemosyne
-    echo "Updated flake.lock — commit if intentional, then darwin-rebuild."
-
 # Goes through scripts/darwin-rebuild.sh so it works on the external-drive
 # hosts too — a bare `--flake .` fails there under sudo.
 # First darwin-rebuild after materialize-nix-github-token (before !include is live).
@@ -134,63 +120,3 @@ darwin-rebuild-bootstrap host="":
     fi
     DARWIN_REBUILD_NIX_CONFIG="$(sudo cat /etc/nix/github-token.conf)" \
       ./scripts/darwin-rebuild.sh switch {{ host }}
-
-# Materialize the nwlnexus R2 nix binary-cache substituter + credentials so
-# the nix daemon substitutes mnemosyne's CI-built closure instead of building
-# it locally. Same pattern as materialize-nix-github-token: system/nix.nix
-# `!include`s /etc/nix/r2-cache.conf, so hosts that never run this recipe are
-# unaffected. Reads from 1Password (adjust the op:// refs below if the item
-# fields are named differently). Run once per host; re-run on key rotation.
-materialize-r2-cache-creds:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    read_ref() { op read "$1" 2>/dev/null || { echo "op read failed for $1 — fix the op:// ref in this recipe to match your vault item fields" >&2; exit 1; }; }
-    account_id="$(read_ref "op://Dev/nwlnexus-nix-cache/account-id")"
-    key_id="$(read_ref "op://Dev/nwlnexus-nix-cache/access-key-id")"
-    secret="$(read_ref "op://Dev/nwlnexus-nix-cache/secret-access-key")"
-    printf 'extra-substituters = s3://nwlnexus-nix-cache?endpoint=https://%s.r2.cloudflarestorage.com&region=auto&profile=nwlnexus-r2\n' "$account_id" \
-      | sudo tee /etc/nix/r2-cache.conf >/dev/null
-    sudo chmod 600 /etc/nix/r2-cache.conf && sudo chown root:wheel /etc/nix/r2-cache.conf
-    # nix's S3 substituter resolves credentials via the AWS SDK chain of the
-    # daemon (root). A dedicated profile keeps any root default profile intact.
-    sudo mkdir -p /var/root/.aws
-    if sudo grep -q '^\[nwlnexus-r2\]' /var/root/.aws/credentials 2>/dev/null; then
-      echo "profile [nwlnexus-r2] already present in /var/root/.aws/credentials — update it manually if rotating" >&2
-    else
-      printf '[nwlnexus-r2]\naws_access_key_id = %s\naws_secret_access_key = %s\n' "$key_id" "$secret" \
-        | sudo tee -a /var/root/.aws/credentials >/dev/null
-    fi
-    sudo chmod 600 /var/root/.aws/credentials && sudo chown root:wheel /var/root/.aws/credentials
-    echo "Wrote /etc/nix/r2-cache.conf and root AWS profile [nwlnexus-r2]."
-    echo "The !include lands in /etc/nix/nix.conf on the next darwin-rebuild switch."
-
-# Flush this machine's parked mnemosyne backlog through moneta /capture-session.
-# Idempotent + resumable (moneta dedupes by session receipt; brain by ledger;
-# queue entries removed only on success). Run after `git pull` +
-# `darwin-rebuild switch` so the current mnemosyne build is installed.
-# See docs/mnemosyne-catchup.md. Override throughput with
-# `MNEMOSYNE_DRAIN_CONCURRENCY=12 just mnemosyne-catchup`.
-mnemosyne-catchup:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    command -v mnemosyne >/dev/null 2>&1 || { echo "mnemosyne not on PATH — run: sudo darwin-rebuild switch --flake ." >&2; exit 1; }
-    # moneta capture needs the token + CF Access creds from the personal bundle.
-    PERSONAL_ENV="${PERSONAL_ENV:-$HOME/projects/personal/.env}"
-    if [ -f "$PERSONAL_ENV" ]; then set -a; . "$PERSONAL_ENV"; set +a; fi
-    HOME_DIR="${MNEMOSYNE_HOME:-$HOME/.claude/mnemosyne}"
-    # Stop stale pre-rebuild drains squatting the lock, then take it fresh.
-    pkill -f 'dist/cli.js drain' 2>/dev/null || true
-    sleep 1
-    rm -rf "$HOME_DIR/drain.lock"
-    echo "Draining $(ls "$HOME_DIR/queue" 2>/dev/null | grep -c '\.json$') queued transcript(s) at concurrency ${MNEMOSYNE_DRAIN_CONCURRENCY:-8}…"
-    MNEMOSYNE_DRAIN_CONCURRENCY="${MNEMOSYNE_DRAIN_CONCURRENCY:-8}" mnemosyne drain
-    echo "---"
-    mnemosyne status
-
-# Show the local mnemosyne spool + moneta totals.
-mnemosyne-status:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    PERSONAL_ENV="${PERSONAL_ENV:-$HOME/projects/personal/.env}"
-    if [ -f "$PERSONAL_ENV" ]; then set -a; . "$PERSONAL_ENV"; set +a; fi
-    mnemosyne status

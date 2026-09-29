@@ -9,86 +9,32 @@
   # /brain slash command (consult + ingest the second-brain wiki).
   home.file.".claude/commands/brain.md".source = ./commands/brain.md;
 
-  # Capture-worker env (the worker reads these; hooks fall back to defaults).
   home.sessionVariables = {
     SECOND_BRAIN_PATH = "${config.home.homeDirectory}/Documents/Obsidian Vault/brain";
-    MNEMOSYNE_OLLAMA_URL = "http://ai-hub.raptor-mimosa.ts.net:11434";
-    MNEMOSYNE_MODEL = "qwen3.5:9b";
   };
 
-  # mnemosyne is an `npm:@nwlnexus/mnemosyne` mise global (home/default.nix) —
-  # same pattern as gitnexus/repomix, and for the same reason: it isn't in
-  # nixpkgs. Credentials (moneta token + CF Access) are file-provisioned by
-  # op-secrets (home/apps/1password.nix) rather than shell-sourced, since
-  # hook commands run as children of the agent process, not a login shell —
-  # see nwlnexus/mnemosyne#30. This replaces the old mem0ctl/flake apparatus
-  # entirely (nix-darwin-hm#58/#61, nwlnexus/mnemosyne#33).
-  #
-  # `mnemosyne install-hooks` is itself idempotent (keyed replace-or-skip
-  # merge into each agent's config, per its own design) — safe to rerun on
-  # every activation. Resolved by absolute mise-shim path, not PATH lookup:
-  # a mise global's only PATH entry is the shims dir, which the INTERACTIVE
-  # shell profile adds — home-manager's activation script sources no shell
-  # profile, so a bare `mnemosyne install-hooks` would fail with "command not
-  # found" (the exact gitnexusSetup/repomix-pack footgun already documented
-  # elsewhere in this repo: modules/repomix/repomix.nix).
-  #
-  # Confirmed live on a real switch: merely declaring a tool in
-  # programs.mise.globalConfig.tools does NOT install it — nothing in this
-  # repo runs `mise install` anywhere, so a newly-added global's shim simply
-  # doesn't exist yet after activation (gitnexusSetup below has this same
-  # latent gap; not fixed here, out of scope for this pass). Explicitly
-  # install it first, via mise's own nix-store path (mise is a real nixpkgs
-  # package from `programs.mise.enable`, unlike the npm-global tools it
-  # manages, so this one call IS safe to resolve via PATH-free absolute
-  # path without the shim dance). Idempotent/fast when already installed.
-  #
-  # Confirmed live (2nd attempt, DTLR-NWLMMINI): a bare absolute-path call
-  # to `mise` isn't enough — mise's OWN npm-install machinery shells out to
-  # a bare `mise` command internally (its bundled node's npm wrapper does
-  # this, per the observed "line 76: mise: command not found" / exit 127),
-  # and that nested subprocess doesn't inherit anything beyond this one
-  # command's own env unless `mise`'s directory is actually ON PATH for the
-  # whole invocation (not just the literal binary I called) — env vars set
-  # as a command prefix DO propagate to that command's entire subprocess
-  # tree, so prepending PATH here (rather than only resolving the one
-  # top-level binary by absolute path) fixes the nested lookup too.
-  #
-  # Confirmed live (3rd attempt, DTLR-NWLMMINI): the shim now installs fine,
-  # but `install-hooks` silently no-ops — settings.json still shows the OLD
-  # mnemosyne-drain.sh/mnemosyne-enqueue.sh/moneta-recall-hook.sh entries.
-  # This is mnemosyne's OWN idempotency working exactly as documented, just
-  # against state this migration never cleaned up: its NEEDLES check treats
-  # any hook command mentioning these legacy filenames as "already wired"
-  # (intentionally, so a machine still running the real nix-managed scripts
-  # doesn't get double-installed over) — but this migration deleted those
-  # script files outright rather than replacing them, so the stale entries
-  # now point at nothing, and mnemosyne skips writing its own real ones
-  # because it (reasonably) assumes they're redundant. Strip the dead
-  # entries first so install-hooks sees a clean slate and actually writes.
-  home.activation.mnemosyneSetup = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    SETTINGS="${config.home.homeDirectory}/.claude/settings.json"
-    if [ -f "$SETTINGS" ]; then
+  # mnemosyne is retired. Its `install-hooks` wrote entries straight into
+  # ~/.claude/settings.json and ~/.cursor/hooks.json (outside Nix), so nothing
+  # removes them on its own — strip them on each activation until every host
+  # has switched, then delete this block. Fail-soft: never blocks a switch.
+  home.activation.mnemosyneCleanup = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    strip() { # file jq-filter
+      [ -f "$1" ] || return 0
       TMP="$(mktemp)"
-      if ${pkgs.jq}/bin/jq '
-        .hooks |= with_entries(
-          .value |= map(
-            select(
-              (.hooks // []) | all(.command // "" | test("mnemosyne-drain\\.sh|mnemosyne-enqueue\\.sh|moneta-recall-hook\\.sh|mem0ctl|mem0-recall-hook\\.sh") | not)
-            )
-          )
-        )
-      ' "$SETTINGS" > "$TMP" 2>/dev/null; then
-        mv "$TMP" "$SETTINGS"
+      if ${pkgs.jq}/bin/jq "$2" "$1" > "$TMP" 2>/dev/null && ! cmp -s "$TMP" "$1"; then
+        mv "$TMP" "$1"
       else
         rm -f "$TMP"
       fi
-    fi
-    PATH="${pkgs.mise}/bin:$PATH" ${pkgs.mise}/bin/mise install npm:@nwlnexus/mnemosyne 2>&1 || true
-    MNEMOSYNE_BIN="${config.home.homeDirectory}/.local/share/mise/shims/mnemosyne"
-    if [ -x "$MNEMOSYNE_BIN" ]; then
-      "$MNEMOSYNE_BIN" install-hooks || true
-    fi
+    }
+    strip "${config.home.homeDirectory}/.claude/settings.json" '
+      if .hooks then .hooks |= (with_entries(
+        .value |= map(select((.hooks // []) | all(.command // "" | test("mnemosyne|moneta-recall-hook|mem0") | not)))
+      ) | with_entries(select(.value | length > 0))) else . end'
+    strip "${config.home.homeDirectory}/.cursor/hooks.json" '
+      if .hooks then .hooks |= (with_entries(
+        .value |= map(select((.command // "") | test("mnemosyne") | not))
+      ) | with_entries(select(.value | length > 0))) else . end'
   '';
 
   # gitnexus ships its own installer; it is idempotent and non-interactive.
