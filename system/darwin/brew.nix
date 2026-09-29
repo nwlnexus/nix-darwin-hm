@@ -16,18 +16,6 @@
       fontdir = "~/Library/Fonts";
     };
 
-    brews = [
-      # libkrun runtime for mvmctl's macOS microVM backends (Apple
-      # Virtualization / Hypervisor.framework). virglrenderer is pulled in
-      # automatically as a libkrun dependency. See ./mvmctl.nix.
-      # NOTE: the upstream `slp/krun` tap was renamed/redirected to
-      # `libkrun/krun`; using the old name leaves both taps present and
-      # Homebrew errors with "Formulae found in multiple taps".
-      "libkrun/krun/libkrun"
-      "libkrun/krun/libkrunfw"
-      "libkrun/krun/gvproxy"
-    ];
-
     # Casks installed on all macOS hosts.
     casks = [
       "obsidian"
@@ -47,7 +35,6 @@
     # reads ~/.homebrew/trust.json — interactive `brew trust` (which wrote
     # ~/.config/homebrew/trust.json) does not apply. See https://docs.brew.sh/Tap-Trust
     extraConfig = ''
-      tap "libkrun/krun", trusted: true
       tap "betterleaks/tap", trusted: true
     '';
   };

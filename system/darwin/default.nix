@@ -12,7 +12,6 @@ in
     ./finder.nix
     ./keyboard.nix
     ./limits.nix
-    ./lldpd.nix
     ./login.nix
     ./brew.nix
     ./fonts.nix

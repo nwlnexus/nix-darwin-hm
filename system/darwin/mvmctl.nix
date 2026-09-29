@@ -1,8 +1,9 @@
 # Recent mvmctl (microVM CLI) provisioned from the pinned prebuilt GitHub
 # release. There is no Homebrew formula, and crates.io only carries the older
 # Lima-based 0.13.0 (wrong architecture for Apple Silicon), so we fetch the
-# release binary and re-sign it. The libkrun/libkrunfw/gvproxy runtime deps
-# come from Homebrew (libkrun/krun tap) — see ./brew.nix.
+# release binary and re-sign it. NOTE: the libkrun/libkrunfw/gvproxy
+# runtime deps (libkrun/krun tap) are no longer installed, so the libkrun
+# microVM backend is unavailable until they are re-added to ./brew.nix.
 #
 # Bump: change `version` + `hash` (get hash via `nix hash file <tarball>`).
 { pkgs, lib, ... }:
