@@ -20,21 +20,38 @@ let
   # One shared target dir for every project, so dependency builds are not
   # duplicated per-repo and there is a single place to sweep. `cargo-sweep`
   # discovers `.fingerprint` dirs by walking, so it sweeps this cleanly.
-  cargoTargetDir = "${config.home.homeDirectory}/.cache/cargo/target";
+  #
+  # Lives under ~/projects (the external disk) on purpose: the internal boot
+  # volume filled up when this sat in ~/.cache (91 GB of target dirs).
+  #
+  # Set ONLY via ~/.cargo/config.toml ([build] target-dir, below), never via the
+  # CARGO_TARGET_DIR env var: the env var overrides config.toml, so a stale copy
+  # (session variable, launchctl setenv) silently sends builds back to the
+  # wrong disk. Per-worktree overrides (e.g. itpulse) can still export it.
+  cargoCacheDir = "${config.home.homeDirectory}/projects/.cache/cargo";
+  cargoTargetDir = "${cargoCacheDir}/target";
 
   sweepLogDir = "${config.home.homeDirectory}/.cache/cargo-sweep";
 
-  # Time-based sweep of the shared target dir plus any per-project `target/`
-  # dirs (leftovers, or repos that override CARGO_TARGET_DIR). `--time` mode
-  # needs no rustc/rustup, so it runs fine under launchd's bare environment.
+  # Time-based sweep. cargo-sweep only discovers *Rust projects* (dirs with a
+  # Cargo.toml) and resolves each one's target dir through `cargo metadata`,
+  # which honours CARGO_TARGET_DIR. A shared target dir has no Cargo.toml beside
+  # it, so it is never found by pointing cargo-sweep at the cache dir; instead
+  # run one pass per target dir with CARGO_TARGET_DIR set, over every project.
+  # That also covers per-worktree `target-*` siblings (e.g. target-itpulse-*).
+  # `cargo` comes from the launchd PATH (/run/current-system/sw/bin, rustup).
+  # Stray in-tree `target/` dirs are left to `reclaim-disk`.
   cargo-sweep-scheduled = pkgs.writeShellApplication {
     name = "cargo-sweep-scheduled";
     runtimeInputs = [ pkgs.cargo-sweep ];
     text = ''
-      for root in "$HOME/.cache/cargo" "$HOME/projects"; do
-        [ -d "$root" ] || continue
-        echo "sweeping $root (artifacts unused > 30 days)"
-        cargo-sweep --recursive --time 30 "$root" || true
+      projects="$HOME/projects"
+      [ -d "$projects" ] || exit 0
+
+      for tdir in ${lib.escapeShellArg cargoCacheDir}/target* "$HOME"/.cache/cargo/target*; do
+        [ -d "$tdir" ] || continue
+        echo "sweeping $tdir (artifacts unused > 30 days)"
+        CARGO_TARGET_DIR="$tdir" cargo-sweep sweep --recursive --time 30 "$projects" || true
       done
     '';
   };
@@ -55,9 +72,14 @@ lib.mkMerge [
     home.sessionVariables = {
       # Cap the sccache cache so it cannot grow without bound.
       SCCACHE_CACHE_SIZE = "10G";
-      # Consolidate all cargo build output into one shared, sweepable location.
-      CARGO_TARGET_DIR = cargoTargetDir;
     };
+
+    # Consolidate all cargo build output into one shared, sweepable location.
+    # Deliberately not CARGO_TARGET_DIR -- see the note on cargoCacheDir.
+    home.file.".cargo/config.toml".text = ''
+      [build]
+      target-dir = "${cargoTargetDir}"
+    '';
   }
 
   # launchd + the reclaim helper are macOS-only. The dev fleet is Darwin; a

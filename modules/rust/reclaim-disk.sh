@@ -19,7 +19,7 @@ human()  { du -sh "$1" 2>/dev/null | cut -f1; }
 note()   { printf '  %-48s %s\n' "$1" "$2"; }
 run()    { if [ "$DRY_RUN" = 1 ]; then echo "  [dry-run] $*"; else eval "$@"; fi; }
 
-CARGO_TARGET_DIR_DEFAULT="$HOME/.cache/cargo/target"
+CARGO_TARGET_DIR_DEFAULT="$HOME/projects/.cache/cargo/target"
 PROJECTS="$HOME/projects"
 
 echo "Disk before:"
@@ -35,7 +35,8 @@ echo
 # AUTOMATIC — regenerable only. Safe.
 # ---------------------------------------------------------------------------
 echo "== Rust build artifacts (usually the biggest win) =="
-# Shared target dir (set by home-manager via CARGO_TARGET_DIR).
+# Shared target dir (home-manager writes it to ~/.cargo/config.toml; an exported
+# CARGO_TARGET_DIR, if any, takes precedence).
 shared="${CARGO_TARGET_DIR:-$CARGO_TARGET_DIR_DEFAULT}"
 if [ -d "$shared" ]; then
   note "shared target dir" "$(human "$shared")"
