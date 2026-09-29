@@ -26,10 +26,6 @@ in
       useUserPackages = true;
       backupFileExtension = "backup";
 
-      sharedModules = [
-        inputs.mac-app-util.homeManagerModules.default
-      ];
-
       extraSpecialArgs = {
         inherit
           version

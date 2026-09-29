@@ -33,8 +33,6 @@
     # Devshell
     treefmt-nix.url = "github:numtide/treefmt-nix";
 
-    mac-app-util.url = "github:hraban/mac-app-util";
-
     op-secrets.url = "github:nwlnexus/nix-op-secrets";
     op-secrets.inputs.nixpkgs.follows = "nixpkgs-stable";
 
@@ -92,7 +90,6 @@
 
         modules = [
           inputs.hm.darwinModules.home-manager
-          inputs.mac-app-util.darwinModules.default
           ./system/darwin
         ];
       };
@@ -104,7 +101,6 @@
 
         modules = [
           inputs.hm.darwinModules.home-manager
-          inputs.mac-app-util.darwinModules.default
           ./system/darwin
         ];
       };
