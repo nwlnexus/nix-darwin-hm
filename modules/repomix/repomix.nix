@@ -62,7 +62,9 @@ in
   home.packages = [ repomix-pack ];
 
   launchd.agents.repomix-pack = {
-    enable = true;
+    # Disabled: the scheduled sweep was filling ~/.cache/repomix-pipeline on the
+    # internal disk. The repomix-pack CLI above stays available for manual runs.
+    enable = false;
     config = {
       ProgramArguments = [
         "${repomix-pack}/bin/repomix-pack"
