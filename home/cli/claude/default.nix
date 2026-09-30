@@ -57,7 +57,7 @@
   # NOT on the activation script's PATH either — so the old path failed with
   # `env: node: No such file or directory` and, being `|| true`, failed silently
   # on every rebuild. The shim is the mise binary itself and resolves its own
-  # node. (modules/repomix/repomix.nix resolves both mise globals the same way.)
+  # node.
   # Fail-soft: a fresh host may not have the mise global installed yet.
   home.activation.gitnexusSetup = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     GITNEXUS_BIN="${config.home.homeDirectory}/.local/share/mise/shims/gitnexus"

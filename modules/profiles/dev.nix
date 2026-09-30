@@ -8,8 +8,19 @@
 {
   config = lib.mkIf config.d.profiles.dev.enable {
     d.hm = [
-      ../repomix/repomix.nix
-      ../memory-watchdog/memory-watchdog.nix
+      # memory-watchdog and the repomix-pack sweep are retired. Home Manager
+      # unloads the memory-watchdog launchd agent on its own; this removes the
+      # state/log caches they left behind, until every host has switched —
+      # then delete this block. Idempotent and fail-soft.
+      (
+        { config, lib, ... }:
+        {
+          home.activation.retiredAgentsCleanup = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+            rm -rf "${config.home.homeDirectory}/.cache/memory-watchdog" \
+                   "${config.home.homeDirectory}/.cache/repomix-pipeline" || true
+          '';
+        }
+      )
     ]
     ++ lib.optionals config.d.profiles.dev.rust.enable [ ../rust/rust.nix ];
 

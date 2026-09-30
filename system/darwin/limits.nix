@@ -5,7 +5,7 @@
   # login shell — launchd agents, GUI apps, and every AI-agent/MCP-server
   # process they fork — inherits launchd's 256 soft default and starts
   # throwing EMFILE under fan-out workloads (observed alongside the
-  # 2026-07-13 NWL-MMINI session storms; see modules/memory-watchdog).
+  # 2026-07-13 NWL-MMINI session storms).
   #
   # 65535 stays well under kern.maxfilesperproc (92160 on current macOS), so
   # no sysctl surgery is needed. The classic mechanism is the only supported
