@@ -8,6 +8,7 @@ let
   suites = [
     ./harness.nix
     ./standalone.nix
+    ./portability.nix
   ];
 in
 lib.debug.runTests (lib.foldl' (acc: f: acc // import f { inherit flake lib; }) { } suites)
