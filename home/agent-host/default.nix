@@ -73,6 +73,15 @@ in
       precmd_functions+=(_agent_host_account)
     '';
 
+    # Codex refuses to start when CODEX_HOME doesn't exist; create every
+    # account's config dirs up front (private: they hold credentials).
+    home.activation.agentHostDirs = lib.hm.dag.entryAfter [ "writeBoundary" ] (
+      lib.concatMapStrings (acct: ''
+        run install -d -m 0700 ${claudeDir acct}
+        run install -d -m 0700 ${codexDir acct}
+      '') accts
+    );
+
     # Per-account gitnexus Claude integration (home/cli/claude does ~/.claude).
     home.activation.agentHostGitnexus = lib.hm.dag.entryAfter [ "writeBoundary" ] (
       lib.concatMapStrings (acct: ''

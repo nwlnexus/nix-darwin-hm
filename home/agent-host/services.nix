@@ -53,6 +53,8 @@ let
         . ${lib.escapeShellArg sessionVars}
       fi
       export ${t.dirVar}=${lib.escapeShellArg (t.dir acct)}
+      # Codex refuses a CODEX_HOME that doesn't exist yet.
+      mkdir -p "''${${t.dirVar}}"
       if [ -f ${lib.escapeShellArg envFile} ]; then
         set -a
         . ${lib.escapeShellArg envFile}
