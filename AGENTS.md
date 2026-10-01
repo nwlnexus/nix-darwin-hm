@@ -185,6 +185,7 @@ To add a new host configuration:
 - Remote Control: user units `claude-rc-<acct>` and `codex-rc-<acct>` start at boot (lingering) and are skipped until that account is logged in. Manage them with `agents status | restart [unit] | logs <unit>`. Native-installer updates take effect on `agents restart`.
 - Log in once per account: run `claude-<acct>` inside its tree (trust prompt, then `/login`), and `codex-<acct> login --device-auth`.
 - Not managed: the sshd service, Tailscale, and apt packages (including the `op` beta). system-manager only adds `/etc/ssh/sshd_config.d/05-nix-hardening.conf`; `scripts/linux-switch.sh` validates it (`sshd -t`) before reloading.
+- Linuxbrew (`d.linuxbrew`, `home/linuxbrew.nix`) carries only formulae nixpkgs lacks or lags badly on. home-manager writes `~/.Brewfile` (non-official taps as `trusted: true`) and each switch runs `brew bundle install --no-upgrade`: install-only, never upgrades or removes, and a failure only warns. Brew's `bin` is appended last to PATH (shells and Remote Control services) so it never shadows Nix/mise.
 - `d.apps.onepassword.gui = false` turns off the 1Password desktop integration (agent socket, op-ssh-sign, autostart); git then signs with `~/.ssh/id_ed25519`.
 
 ### Updating Dependencies

@@ -19,6 +19,19 @@
         };
       };
 
+      # Only what nixpkgs lacks or lags badly on; Nix stays the default.
+      d.linuxbrew = {
+        enable = true;
+        taps = [ "nwlnexus/olympus" ];
+        brews = [
+          "nwlnexus/olympus/atlas"
+          "neonctl"
+          "flyctl"
+          "gemini-cli"
+          "argocd"
+        ];
+      };
+
       d.agentHost = {
         enable = true;
         accounts = {
