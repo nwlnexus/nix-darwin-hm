@@ -35,6 +35,10 @@
 
     op-secrets.url = "github:nwlnexus/nix-op-secrets";
     op-secrets.inputs.nixpkgs.follows = "nixpkgs-stable";
+
+    # OS layer for non-NixOS Linux hosts (hosts/linux/*.nix → systemConfigs).
+    system-manager.url = "github:numtide/system-manager/v1.1.0";
+    system-manager.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs =
@@ -97,6 +101,30 @@
           }
         )
       ) linuxHosts;
+
+      systemConfigs = mapAttrs (
+        hostname: host:
+        inputs.system-manager.lib.makeSystemConfig {
+          extraSpecialArgs = sharedArgs // {
+            inherit inputs hostname;
+          };
+          modules = [
+            ./system/linux
+            host.os
+          ];
+        }
+      ) (filterAttrs (_: host: host ? os) linuxHosts);
+
+      # CLIs pinned by flake.lock, used by scripts/linux-switch.sh.
+      linuxPackages = listToAttrs (
+        map (host: {
+          name = host.platform;
+          value = {
+            system-manager = inputs.system-manager.packages.${host.platform}.default;
+            home-manager = inputs.hm.packages.${host.platform}.default;
+          };
+        }) (builtins.attrValues linuxHosts)
+      );
 
       nixosConfig = {
         system = "x86_64-linux";
@@ -219,6 +247,7 @@
     in
     base
     // {
-      inherit homeConfigurations;
+      inherit homeConfigurations systemConfigs;
+      packages = recursiveUpdate (base.packages or { }) linuxPackages;
     };
 }

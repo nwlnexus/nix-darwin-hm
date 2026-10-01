@@ -97,7 +97,7 @@ materialize-nix-github-token:
     pat="$(/usr/bin/grep -E '^GITHUB_PERSONAL_ACCESS_TOKEN=' ~/projects/personal/.env | /usr/bin/head -n1 | /usr/bin/cut -d= -f2- | tr -d '"' | tr -d "'")"
     [ -n "$pat" ] || { echo "no GITHUB_PERSONAL_ACCESS_TOKEN in ~/projects/personal/.env (rebuild home-manager first)"; exit 1; }
     printf 'access-tokens = github.com=%s\n' "$pat" | sudo tee /etc/nix/github-token.conf >/dev/null
-    sudo chmod 600 /etc/nix/github-token.conf && sudo chown root:wheel /etc/nix/github-token.conf
+    sudo chmod 600 /etc/nix/github-token.conf && sudo chown "root:$(id -gn root)" /etc/nix/github-token.conf
     echo "Wrote /etc/nix/github-token.conf (root:wheel 0600)"
     echo
     echo "BOOTSTRAP NOTE: the !include of this file only lands in /etc/nix/nix.conf"

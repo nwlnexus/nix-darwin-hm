@@ -4,8 +4,6 @@
 {
   config,
   lib,
-  user,
-  hostname,
   ...
 }:
 let
@@ -36,5 +34,5 @@ in
   # rustup's toolchain (native install); ~/.zshenv no longer sources ~/.cargo/env.
   home.sessionPath = [ "${home}/.cargo/bin" ];
 
-  home.shellAliases.switch = "home-manager switch -b backup --flake ${repo}#${user}@${hostname}";
+  home.shellAliases.switch = "${repo}/scripts/linux-switch.sh";
 }
