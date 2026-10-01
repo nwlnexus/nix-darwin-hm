@@ -34,7 +34,6 @@
         rustup
         direnv
         starship
-        atuin
         p7zip.out
         libisoburn
         sops
