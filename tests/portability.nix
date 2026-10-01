@@ -30,4 +30,30 @@ in
     expr = hm.home.file."nix-darwin-reinit".enable;
     expected = false;
   };
+  testGitDefaultSigningKey = {
+    expr = hm.programs.git.signing.key;
+    expected = "~/.ssh/id_ed25519";
+  };
+  testNoSshAuthSock = {
+    expr = hm.home.sessionVariables ? SSH_AUTH_SOCK;
+    expected = false;
+  };
+  testNo1PasswordGuiAutostart = {
+    expr = hm.systemd.user.services ? _1password-gui;
+    expected = false;
+  };
+  # op-secrets drops the module-level token whenever a secret sets `account`
+  # (all of ours do), so every secret needs its own token command.
+  testEverySecretHasToken = {
+    expr = lib.all (s: s.serviceAccountTokenCommand != null) (lib.attrValues hm.op-secrets.secrets);
+    expected = true;
+  };
+  testWorkEnvUsesWorkToken = {
+    expr = hm.op-secrets.secrets.work-env.serviceAccountTokenCommand;
+    expected = "cat /home/nwilliams-lucas/.config/work/1penv";
+  };
+  testPersonalKeyUsesPersonalToken = {
+    expr = hm.op-secrets.secrets.github-personal.serviceAccountTokenCommand;
+    expected = "cat /home/nwilliams-lucas/.config/personal/1penv";
+  };
 }
