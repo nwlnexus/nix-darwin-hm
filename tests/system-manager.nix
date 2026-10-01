@@ -56,4 +56,16 @@ in
       "system-manager"
     ];
   };
+  # Ubuntu owns /etc/passwd and /etc/group; system-manager's userborn would
+  # rewrite them (e.g. root's shell to a Nix-store path). Never enable it.
+  testUserbornDisabled = {
+    expr = [
+      sm.services.userborn.enable
+      (sm.systemd.services ? userborn && sm.systemd.services.userborn.enable)
+    ];
+    expected = [
+      false
+      false
+    ];
+  };
 }

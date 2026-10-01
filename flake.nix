@@ -37,8 +37,12 @@
     op-secrets.inputs.nixpkgs.follows = "nixpkgs-stable";
 
     # OS layer for non-NixOS Linux hosts (hosts/linux/*.nix → systemConfigs).
-    system-manager.url = "github:numtide/system-manager/v1.1.0";
-    system-manager.inputs.nixpkgs.follows = "nixpkgs";
+    # Pinned to upstream main after v1.1.0 and NOT following our nixpkgs: its
+    # NixOS-module imports must match its own pinned nixpkgs (the combination
+    # upstream CI builds and tests). v1.1.0 + our nixpkgs failed its test suite
+    # (fixed upstream in f0f397bd0, "add writable $HOME directory in tests");
+    # main + our nixpkgs fails on removed NixOS modules. Move to a tag later.
+    system-manager.url = "github:numtide/system-manager/2473258afe1f7fbaa6229dc77961dd8a89ca713e";
   };
 
   outputs =
@@ -105,7 +109,7 @@
       systemConfigs = mapAttrs (
         hostname: host:
         inputs.system-manager.lib.makeSystemConfig {
-          extraSpecialArgs = sharedArgs // {
+          specialArgs = sharedArgs // {
             inherit inputs hostname;
           };
           modules = [
