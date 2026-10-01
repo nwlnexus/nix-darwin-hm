@@ -27,7 +27,7 @@ run() {
   if [ "$DRY" = 1 ]; then printf '  + %s\n' "$*"; else "$@"; fi
 }
 
-say "1/7 Nix (multi-user, nix-installer)"
+say "1/8 Nix (multi-user, nix-installer)"
 if [ -d /nix ]; then
   echo "  already installed"
 else
@@ -38,7 +38,7 @@ if [ -e /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]; then
   . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
 fi
 
-say "2/7 1Password service-account tokens"
+say "2/8 1Password service-account tokens"
 for acct in personal work; do
   f="$HOME/.config/$acct/1penv"
   if [ -s "$f" ]; then
@@ -61,7 +61,7 @@ for acct in personal work; do
   unset tok
 done
 
-say "3/7 Remove native installs that home-manager now provides"
+say "3/8 Remove native installs that home-manager now provides"
 if [ -d "$HOME/.atuin/bin" ]; then run rm -rf "$HOME/.atuin/bin"; fi
 if [ -d "$HOME/.config/atuin" ] && [ ! -L "$HOME/.config/atuin" ] && [ ! -e "$HOME/.config/atuin.pre-nix" ]; then
   run mv "$HOME/.config/atuin" "$HOME/.config/atuin.pre-nix"
@@ -79,17 +79,24 @@ for rc in "$HOME/.bashrc" "$HOME/.profile"; do
 done
 echo "  kept: ~/.local/share/atuin (history), claude, codex, rustup, apt op"
 
-say "4/7 Flake checkout"
+say "4/8 Flake checkout"
 if [ ! -d "$REPO/.git" ]; then
   run git clone "$REPO_URL" "$REPO"
 else
   echo "  $REPO present"
 fi
 
-say "5/7 Switch (system-manager, then home-manager)"
+say "5/8 Linuxbrew (formulae nixpkgs lacks; see home/linuxbrew.nix)"
+if [ ! -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
+  run env NONINTERACTIVE=1 bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" </dev/null
+else
+  echo "  /home/linuxbrew/.linuxbrew present"
+fi
+
+say "6/8 Switch (system-manager, then home-manager)"
 run "$REPO/scripts/linux-switch.sh"
 
-say "6/7 GitHub token for private flake inputs"
+say "7/8 GitHub token for private flake inputs"
 if [ ! -s /etc/nix/github-token.conf ]; then
   env_file="$HOME/projects/personal/.env"
   pat=""
@@ -112,7 +119,7 @@ else
   echo "  /etc/nix/github-token.conf present"
 fi
 
-say "7/7 Manual follow-ups"
+say "8/8 Manual follow-ups"
 cat <<'EOF'
   For each account (personal, work):
     cd ~/projects/<acct> && claude-<acct>          # accept trust prompt, then /login (paste code)

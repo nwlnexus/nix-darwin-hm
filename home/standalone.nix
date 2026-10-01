@@ -10,6 +10,7 @@
     ./shell.nix
     ./linux-shell.nix
     ./agent-host
+    ./linuxbrew.nix
     ./cli
     ../modules/rust/rust.nix
     ./default.nix

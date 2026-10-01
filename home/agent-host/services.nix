@@ -28,16 +28,23 @@ let
   };
 
   # Services get no login shell, so give agent sessions the user's tool PATH.
-  agentPath = lib.concatStringsSep ":" [
-    "${home}/.local/bin"
-    "${home}/.local/share/mise/shims"
-    "${home}/.nix-profile/bin"
-    "/nix/var/nix/profiles/default/bin"
-    "${home}/.cargo/bin"
-    "/usr/local/bin"
-    "/usr/bin"
-    "/bin"
-  ];
+  agentPath = lib.concatStringsSep ":" (
+    [
+      "${home}/.local/bin"
+      "${home}/.local/share/mise/shims"
+      "${home}/.nix-profile/bin"
+      "/nix/var/nix/profiles/default/bin"
+      "${home}/.cargo/bin"
+      "/usr/local/bin"
+      "/usr/bin"
+      "/bin"
+    ]
+    # Last, as in the shell (home/linuxbrew.nix): brew never shadows Nix/mise.
+    ++ lib.optionals (config.d.linuxbrew.enable or false) [
+      "${config.d.linuxbrew.prefix}/bin"
+      "${config.d.linuxbrew.prefix}/sbin"
+    ]
+  );
 
   # Pin the account, load its tree's op-provisioned .env (tokens), exec the
   # native binary. Used interactively and as the services' ExecStart.
