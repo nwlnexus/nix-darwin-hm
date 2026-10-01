@@ -73,4 +73,10 @@ in
     expr = lib.hasInfix "export NIX_CONFIG=\"extra-experimental-features = nix-command flakes\"" switch;
     expected = true;
   };
+  # Non-interactive shells (ssh host cmd, systemd) don't get the installer's
+  # PATH hooks, so the script loads Nix itself when it isn't on PATH.
+  testSwitchLoadsNixWhenMissing = {
+    expr = lib.hasInfix ". /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh" switch;
+    expected = true;
+  };
 }

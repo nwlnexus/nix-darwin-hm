@@ -10,6 +10,13 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOST="$(hostname -s)"
 
+# Non-interactive shells (e.g. `ssh host cmd`) don't get the installer's
+# PATH hooks (/etc/zsh/zshrc, /etc/profile.d), so load Nix if it's missing.
+if ! command -v nix >/dev/null 2>&1 && [ -e /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]; then
+  # shellcheck disable=SC1091
+  . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+fi
+
 # The upstream nix-installer leaves flakes off, and the first switch runs
 # before system-manager writes nix.conf. NIX_CONFIG also reaches the nix
 # calls that system-manager and home-manager make internally.
