@@ -10,6 +10,12 @@
 #
 set -euo pipefail
 
+# Everything runs inside main(), called on the last line: under `curl | bash`
+# bash reads the whole function before executing any of it, so a dropped
+# connection can't run half a script and child processes can't swallow the
+# rest of it from stdin.
+main() {
+
 DRY=0
 if [ "${1:-}" = "--dry-run" ]; then DRY=1; fi
 
@@ -57,7 +63,7 @@ done
 
 say "3/7 Remove native installs that home-manager now provides"
 if [ -d "$HOME/.atuin/bin" ]; then run rm -rf "$HOME/.atuin/bin"; fi
-if [ -d "$HOME/.config/atuin" ] && [ ! -L "$HOME/.config/atuin" ]; then
+if [ -d "$HOME/.config/atuin" ] && [ ! -L "$HOME/.config/atuin" ] && [ ! -e "$HOME/.config/atuin.pre-nix" ]; then
   run mv "$HOME/.config/atuin" "$HOME/.config/atuin.pre-nix"
 fi
 if [ -e /usr/local/bin/starship ]; then run sudo rm -f /usr/local/bin/starship; fi
@@ -88,7 +94,7 @@ if [ ! -s /etc/nix/github-token.conf ]; then
   env_file="$HOME/projects/personal/.env"
   pat=""
   if [ -f "$env_file" ]; then
-    pat="$(grep -E '^GITHUB_PERSONAL_ACCESS_TOKEN=' "$env_file" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'")"
+    pat="$(grep -E '^GITHUB_PERSONAL_ACCESS_TOKEN=' "$env_file" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" || true)"
   fi
   if [ -n "$pat" ]; then
     if [ "$DRY" = 1 ]; then
@@ -116,3 +122,6 @@ cat <<'EOF'
   If Tailscale shows "Logged out":
     sudo tailscale up
 EOF
+}
+
+main "$@"

@@ -57,4 +57,9 @@ in
     expr = hm.home.sessionVariables.STARSHIP_LOG;
     expected = "error";
   };
+  # Removing the native mise leaves its shims pointing at a deleted binary.
+  testMiseReshimOnActivation = {
+    expr = lib.hasInfix "/bin/mise reshim" (hm.home.activation.miseReshim.data or "");
+    expected = true;
+  };
 }

@@ -8,8 +8,18 @@ in
 {
   # Never reload sshd on a config it rejects (would risk losing ssh access).
   testSwitchValidatesSshd = {
-    expr = lib.hasInfix "if sudo sshd -t; then" switch && lib.hasInfix "systemctl reload ssh" switch;
-    expected = true;
+    expr = map (s: lib.hasInfix s switch) [
+      # Ubuntu socket-activates sshd: /run/sshd may not exist, and `sshd -t` needs it.
+      "sudo install -d -m 0755 /run/sshd"
+      "if sudo sshd -t; then"
+      # No-op when ssh.service is inactive (socket activation picks up the file).
+      "sudo systemctl try-reload-or-restart ssh"
+    ];
+    expected = [
+      true
+      true
+      true
+    ];
   };
   # Every mutating bootstrap step is behind a check, so re-runs are no-ops.
   testBootstrapIdempotentGuards = {
@@ -39,6 +49,21 @@ in
   # Run as `curl … | bash`, stdin is the script itself: prompts must read the tty.
   testBootstrapPromptsFromTty = {
     expr = lib.hasInfix "read -rsp \"  $acct service-account token: \" tok </dev/tty" bootstrap;
+    expected = true;
+  };
+  # A second run must not nest ~/.config/atuin inside atuin.pre-nix.
+  testBootstrapAtuinMoveOnce = {
+    expr = lib.hasInfix "[ ! -e \"$HOME/.config/atuin.pre-nix\" ]" bootstrap;
+    expected = true;
+  };
+  # `curl | bash` executes while streaming: define everything, then call it.
+  testBootstrapRunsAsOneFunction = {
+    expr = lib.hasInfix "\nmain() {\n" bootstrap && lib.hasSuffix "\nmain \"$@\"\n" bootstrap;
+    expected = true;
+  };
+  # A .env without the PAT must reach the "re-run later" branch, not die on pipefail.
+  testBootstrapPatLookupTolerant = {
+    expr = lib.hasInfix "| tr -d \"'\" || true)\"" bootstrap;
     expected = true;
   };
 }

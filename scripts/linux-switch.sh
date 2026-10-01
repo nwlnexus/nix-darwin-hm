@@ -14,8 +14,12 @@ echo "==> system-manager switch ($HOST)"
 nix run "$REPO#system-manager" -- switch --flake "$REPO#$HOST" --sudo
 
 echo "==> sshd: validate drop-ins, then reload"
+# Ubuntu socket-activates sshd, so /run/sshd may not exist; `sshd -t` needs it.
+sudo install -d -m 0755 /run/sshd
 if sudo sshd -t; then
-  sudo systemctl reload ssh
+  # No-op when ssh.service is inactive: socket-activated sshd reads the new
+  # drop-in on the next connection.
+  sudo systemctl try-reload-or-restart ssh
 else
   echo "sshd rejected its config; NOT reloading (current daemon keeps running)" >&2
   exit 1

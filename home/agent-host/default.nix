@@ -44,17 +44,6 @@ in
         assertion = cfg.accounts ? ${cfg.defaultAccount};
         message = "d.agentHost.defaultAccount must name an entry in d.agentHost.accounts";
       }
-      {
-        # Each account extends that tree's HM-managed direnv hook (home/default.nix).
-        assertion = lib.all (
-          a:
-          builtins.elem a [
-            "personal"
-            "work"
-          ]
-        ) accts;
-        message = "d.agentHost.accounts: only `personal` and `work` have direnv hooks";
-      }
     ];
 
     home.sessionVariables = {
@@ -65,13 +54,24 @@ in
     home.file = lib.mkMerge (
       map (acct: {
         ".claude-${acct}/commands/brain.md".source = ../cli/claude/commands/brain.md;
-        "direnv-hook-${acct}".text = lib.mkAfter ''
-          # Agent account for this tree (home/agent-host).
-          export CLAUDE_CONFIG_DIR="${claudeDir acct}"
-          export CODEX_HOME="${codexDir acct}"
-        '';
       }) accts
     );
+
+    # Pick the account from $PWD at every prompt. Runs after direnv's hook
+    # (registered earlier in .zshrc), so a repo's own .envrc can't drop it --
+    # direnv only loads the nearest .envrc, which is why this isn't one.
+    programs.zsh.initContent = lib.mkOrder 2000 ''
+      _agent_host_account() {
+        case "$PWD/" in
+      ${
+        lib.concatMapStrings (acct: ''
+          ${cfg.accounts.${acct}.root}/*) export CLAUDE_CONFIG_DIR=${claudeDir acct} CODEX_HOME=${codexDir acct} ;;
+        '') accts
+      }    *) export CLAUDE_CONFIG_DIR=${claudeDir cfg.defaultAccount} CODEX_HOME=${codexDir cfg.defaultAccount} ;;
+        esac
+      }
+      precmd_functions+=(_agent_host_account)
+    '';
 
     # Per-account gitnexus Claude integration (home/cli/claude does ~/.claude).
     home.activation.agentHostGitnexus = lib.hm.dag.entryAfter [ "writeBoundary" ] (

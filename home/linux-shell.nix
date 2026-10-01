@@ -31,6 +31,12 @@ in
   # home/default.nix disables this because nix-darwin activates mise itself.
   programs.mise.enableZshIntegration = lib.mkForce true;
 
+  # mise shims are symlinks to the mise binary; the bootstrap removes the
+  # native one, so point them at this generation's mise.
+  home.activation.miseReshim = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    run ${config.programs.mise.package}/bin/mise reshim || true
+  '';
+
   # rustup's toolchain (native install); ~/.zshenv no longer sources ~/.cargo/env.
   home.sessionPath = [ "${home}/.cargo/bin" ];
 
