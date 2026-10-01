@@ -106,4 +106,21 @@ in
       true
     ];
   };
+  # Codex refuses to start when CODEX_HOME doesn't exist ("that path does not exist").
+  testConfigDirsCreated = {
+    expr =
+      map (d: lib.hasInfix "install -d -m 0700 ${h}/${d}" (hm.home.activation.agentHostDirs.data or ""))
+        [
+          ".claude-personal"
+          ".claude-work"
+          ".codex-personal"
+          ".codex-work"
+        ];
+    expected = [
+      true
+      true
+      true
+      true
+    ];
+  };
 }
