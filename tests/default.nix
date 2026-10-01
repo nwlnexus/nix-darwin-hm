@@ -11,6 +11,7 @@ let
     ./portability.nix
     ./system-manager.nix
     ./scripts.nix
+    ./agent-host.nix
   ];
 in
 lib.debug.runTests (lib.foldl' (acc: f: acc // import f { inherit flake lib; }) { } suites)

@@ -9,6 +9,7 @@
     inputs.op-secrets.hmModules.default
     ./shell.nix
     ./linux-shell.nix
+    ./agent-host
     ./cli
     ../modules/rust/rust.nix
     ./default.nix
