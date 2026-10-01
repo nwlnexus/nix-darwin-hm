@@ -10,6 +10,11 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOST="$(hostname -s)"
 
+# The upstream nix-installer leaves flakes off, and the first switch runs
+# before system-manager writes nix.conf. NIX_CONFIG also reaches the nix
+# calls that system-manager and home-manager make internally.
+export NIX_CONFIG="extra-experimental-features = nix-command flakes"
+
 echo "==> system-manager switch ($HOST)"
 nix run "$REPO#system-manager" -- switch --flake "$REPO#$HOST" --sudo
 
