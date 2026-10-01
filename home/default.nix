@@ -217,14 +217,14 @@ in
     enableZshIntegration = false;
     globalConfig = {
       tools = {
-        node = "24.18.0";
-        pnpm = "11.9.0";
+        node = "26.10.0";
+        pnpm = "12.8.1";
         # Migrated from the retired ~/.tool-versions (asdf global) so these
         # stay globally available but declaratively. Pinned to latest.
-        bun = "1.3.14";
-        terraform = "1.15.7";
-        terraform-ls = "0.38.8";
-        packer = "1.15.4";
+        bun = "1.4.2";
+        terraform = "1.16.4";
+        terraform-ls = "0.39.0";
+        packer = "1.16.1";
         "npm:repomix" = "latest";
         # gitnexus needs native postinstall (tree-sitter grammars, onnxruntime, etc.).
         # mise passes --ignore-scripts=true for npm globals by default; with npm 11.16+

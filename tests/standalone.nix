@@ -62,4 +62,34 @@ in
     expr = lib.hasInfix "/bin/mise reshim" (hm.home.activation.miseReshim.data or "");
     expected = true;
   };
+  # The host's history DB was migrated by the native atuin 18.23.0; an older
+  # binary refuses it ("migration ... was previously applied but is missing").
+  testAtuinReadsHostDb = {
+    expr = lib.versionAtLeast hm.programs.atuin.package.version "18.23.0";
+    expected = true;
+  };
+  testMisePins = {
+    expr = lib.getAttrs [
+      "node"
+      "pnpm"
+      "bun"
+      "terraform"
+      "terraform-ls"
+      "packer"
+    ] hm.programs.mise.globalConfig.tools;
+    expected = {
+      node = "26.10.0";
+      pnpm = "12.8.1";
+      bun = "1.4.2";
+      terraform = "1.16.4";
+      terraform-ls = "0.39.0";
+      packer = "1.16.1";
+    };
+  };
+  # Sync is on: every host must run the same atuin.
+  testAtuinSameOnMacs = {
+    expr =
+      flake.darwinConfigurations.NWL-MMINI.config.home-manager.users.nwilliams-lucas.programs.atuin.package.version;
+    expected = hm.programs.atuin.package.version;
+  };
 }

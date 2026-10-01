@@ -36,6 +36,12 @@
     op-secrets.url = "github:nwlnexus/nix-op-secrets";
     op-secrets.inputs.nixpkgs.follows = "nixpkgs-stable";
 
+    # atuin source (built in home/cli/atuin.nix): one atuin version on every
+    # host for sync, newer than nixpkgs ships. Source only: the flake fetches
+    # its Rust toolchain at eval time (IFD), which breaks cross-platform eval.
+    atuin.url = "github:atuinsh/atuin/v18.23.0";
+    atuin.flake = false;
+
     # OS layer for non-NixOS Linux hosts (hosts/linux/*.nix → systemConfigs).
     # Pinned to upstream main after v1.1.0 and NOT following our nixpkgs: its
     # NixOS-module imports must match its own pinned nixpkgs (the combination
