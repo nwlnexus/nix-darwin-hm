@@ -1,16 +1,24 @@
 {
   config,
-  pkgs,
   lib,
   user,
   ...
 }:
 
 with lib;
-with pkgs.stdenv;
 
 let
-  module = {
+  cfg = config.d.shell;
+  profiles = config.d.profiles;
+
+  # FIXME: remove later
+  cfgHome = config.home-manager.users.${user}.d.shell;
+in
+
+{
+  # System-level d.shell. Values set here are forwarded into home-manager,
+  # where home/shell.nix applies them alongside the hm-level definitions.
+  options.d.shell = {
     enable = mkOption {
       type = types.bool;
       default = profiles.base.enable;
@@ -32,46 +40,15 @@ let
     };
   };
 
-  cfg = config.d.shell;
-  profiles = config.d.profiles;
-
-  # FIXME: remove later
-  cfgHome = config.home-manager.users.${user}.d.shell;
-
-  aliases =
-    cfg.aliases
-    //
-      # FIXME: remove later
-      cfgHome.aliases
-    // {
-      ".." = "cd ..";
-      "..." = "cd ../..";
-      "...." = "cd ../../..";
-
-      clear = "tput reset";
-      grep = "rg";
-      mkdir = "mkdir -p";
-    };
-
-  variables = cfg.variables // cfgHome.variables;
-in
-
-{
-  options.d.shell = module;
-
   config = {
     # FIXME: remove later
     d.shell.sources = cfgHome.sources;
 
     d.hm = [
+      ../home/shell.nix
       {
-        # FIXME: remove later
-        options.d.shell = module;
-
-        config = {
-          home.sessionVariables = variables;
-          home.shellAliases = aliases;
-        };
+        d.shell.aliases = cfg.aliases;
+        d.shell.variables = cfg.variables;
       }
     ];
   };
