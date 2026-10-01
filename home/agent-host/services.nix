@@ -22,8 +22,19 @@ let
       dirVar = "CODEX_HOME";
       dir = acct: "${home}/.codex-${acct}";
       creds = "auth.json";
-      # Foreground form; `remote-control start` would daemonize away from systemd.
-      serverArgs = [ "remote-control" ];
+      # Codex 0.159's foreground `remote-control` fails its socket-parent
+      # check ("socket parent must be owned by the user or root ..."), while
+      # its managed daemon works, so the unit starts/stops the daemon.
+      daemon = {
+        start = [
+          "remote-control"
+          "start"
+        ];
+        stop = [
+          "remote-control"
+          "stop"
+        ];
+      };
     };
   };
 
@@ -123,19 +134,35 @@ lib.mkIf cfg.enable {
       p:
       lib.nameValuePair (unitName p) {
         Unit.Description = "${p.tool} Remote Control (${p.acct})";
-        Service = {
-          Type = "simple";
-          WorkingDirectory = p.account.root;
-          Environment = [ "PATH=${agentPath}" ];
-          # Skip (not fail) until this account is logged in.
-          ExecCondition = "${pkgs.coreutils}/bin/test -f ${tools.${p.tool}.dir p.acct}/${tools.${p.tool}.creds}";
-          ExecStart = "${p.launcher}/bin/${p.tool}-${p.acct} ${
-            lib.escapeShellArgs tools.${p.tool}.serverArgs
-          }";
-          Restart = "always";
-          RestartSec = 10;
-          StandardInput = "null";
-        };
+        Service =
+          let
+            t = tools.${p.tool};
+            bin = "${p.launcher}/bin/${p.tool}-${p.acct}";
+          in
+          {
+            WorkingDirectory = p.account.root;
+            Environment = [ "PATH=${agentPath}" ];
+            # Skip (not fail) until this account is logged in.
+            ExecCondition = "${pkgs.coreutils}/bin/test -f ${t.dir p.acct}/${t.creds}";
+            RestartSec = 10;
+            StandardInput = "null";
+          }
+          // (
+            if t ? daemon then
+              {
+                Type = "oneshot";
+                RemainAfterExit = true;
+                ExecStart = "${bin} ${lib.escapeShellArgs t.daemon.start}";
+                ExecStop = "${bin} ${lib.escapeShellArgs t.daemon.stop}";
+                Restart = "on-failure";
+              }
+            else
+              {
+                Type = "simple";
+                ExecStart = "${bin} ${lib.escapeShellArgs t.serverArgs}";
+                Restart = "always";
+              }
+          );
         Install.WantedBy = [ "default.target" ];
       }
     ) pairs

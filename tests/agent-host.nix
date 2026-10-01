@@ -26,12 +26,27 @@ in
     expr = lib.hasSuffix "/bin/claude-work remote-control" (str svc.claude-rc-work.Service.ExecStart);
     expected = true;
   };
-  # Foreground form, so systemd supervises it (not `remote-control start`).
-  testCodexForeground = {
-    expr = lib.hasSuffix "/bin/codex-personal remote-control" (
-      str svc.codex-rc-personal.Service.ExecStart
-    );
-    expected = true;
+  # Codex 0.159's foreground `remote-control` fails its socket-parent check;
+  # the managed daemon (`start`/`stop`) works, so the unit drives that.
+  testCodexDaemonManaged = {
+    expr =
+      let
+        u = svc.codex-rc-personal.Service;
+      in
+      [
+        (u.Type or null)
+        (u.RemainAfterExit or false)
+        (lib.hasSuffix "/bin/codex-personal remote-control start" (str (u.ExecStart or "")))
+        (lib.hasSuffix "/bin/codex-personal remote-control stop" (str (u.ExecStop or "")))
+        (u.Restart or null)
+      ];
+    expected = [
+      "oneshot"
+      true
+      true
+      true
+      "on-failure"
+    ];
   };
   testClaudeCondition = {
     expr = lib.hasSuffix "/bin/test -f ${h}/.claude-work/.credentials.json" (
