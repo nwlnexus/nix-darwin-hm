@@ -10,6 +10,9 @@
     {
       d.apps.onepassword = {
         gui = false;
+        # Reads the dtlr Employee vault, which service accounts can't access;
+        # ~/projects/work/.env is copied by hand on this host instead.
+        excludeSecrets = [ "work-env" ];
         tokenFiles = {
           personal = "${config.home.homeDirectory}/.config/personal/1penv";
           work = "${config.home.homeDirectory}/.config/work/1penv";

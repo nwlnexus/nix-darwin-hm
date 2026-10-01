@@ -48,9 +48,23 @@ in
     expr = lib.all (s: s.serviceAccountTokenCommand != null) (lib.attrValues hm.op-secrets.secrets);
     expected = true;
   };
-  testWorkEnvUsesWorkToken = {
-    expr = hm.op-secrets.secrets.work-env.serviceAccountTokenCommand;
-    expected = "cat /home/nwilliams-lucas/.config/work/1penv";
+  # work-env reads the dtlr built-in Employee vault, which 1Password service
+  # accounts can't access; agent hosts keep a hand-copied .env instead.
+  testWorkEnvSkippedOnAgentHost = {
+    expr = hm.op-secrets.secrets ? work-env;
+    expected = false;
+  };
+  testOtherSecretsKept = {
+    expr = lib.attrNames hm.op-secrets.secrets;
+    expected = [
+      "github-personal"
+      "gitlab-work"
+      "moneta-cf-access-client-id"
+      "moneta-cf-access-client-secret"
+      "moneta-token"
+      "op-connect-env"
+      "personal-env"
+    ];
   };
   testPersonalKeyUsesPersonalToken = {
     expr = hm.op-secrets.secrets.github-personal.serviceAccountTokenCommand;
