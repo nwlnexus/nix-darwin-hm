@@ -307,6 +307,22 @@
     },
     "nixpkgs_5": {
       "locked": {
+        "lastModified": 1790463110,
+        "narHash": "sha256-hKlVl12B1dF0Q5vd9dY3lIJM5mFGWYSlXwSLAqHZ1+s=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "e158d9ed9b51c98974c5e66e1ba1c9e0255fecaa",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_6": {
+      "locked": {
         "lastModified": 1770107345,
         "narHash": "sha256-tbS0Ebx2PiA1FRW8mt8oejR0qMXmziJmPaU1d4kYY9g=",
         "owner": "nixos",
@@ -428,23 +444,21 @@
     "system-manager": {
       "inputs": {
         "flake-compat": "flake-compat",
-        "nixpkgs": [
-          "nixpkgs"
-        ],
+        "nixpkgs": "nixpkgs_5",
         "userborn": "userborn"
       },
       "locked": {
-        "lastModified": 1773316396,
-        "narHash": "sha256-r0/UDbEeYmVqhtxiuJSUfYhjBjtLKHDWhMScpe1RkOA=",
+        "lastModified": 1790615532,
+        "narHash": "sha256-YZqUkgbUEWdb+f8LtyM47NBhxnh2GLYEdzOYM9uTTOs=",
         "owner": "numtide",
         "repo": "system-manager",
-        "rev": "96cfa2041673dcc093cd06b1fe49a96a28203a13",
+        "rev": "2473258afe1f7fbaa6229dc77961dd8a89ca713e",
         "type": "github"
       },
       "original": {
         "owner": "numtide",
-        "ref": "v1.1.0",
         "repo": "system-manager",
+        "rev": "2473258afe1f7fbaa6229dc77961dd8a89ca713e",
         "type": "github"
       }
     },
@@ -480,7 +494,7 @@
     },
     "treefmt-nix": {
       "inputs": {
-        "nixpkgs": "nixpkgs_5"
+        "nixpkgs": "nixpkgs_6"
       },
       "locked": {
         "lastModified": 1780220602,

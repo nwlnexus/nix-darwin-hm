@@ -7,6 +7,13 @@
   ...
 }:
 {
+  # system-manager leaves its nix module off by default; we own nix.conf.
+  nix.enable = true;
+
+  # Ubuntu owns users and groups. system-manager enables userborn by default,
+  # which would rewrite /etc/passwd and /etc/group from its NixOS defaults.
+  services.userborn.enable = false;
+
   nix.settings = {
     experimental-features = [
       "nix-command"
