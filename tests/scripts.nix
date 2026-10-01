@@ -66,4 +66,11 @@ in
     expr = lib.hasInfix "| tr -d \"'\" || true)\"" bootstrap;
     expected = true;
   };
+  # The upstream nix-installer doesn't enable flakes; the first switch runs
+  # before system-manager writes nix.conf, so the script must enable them.
+  testSwitchEnablesFlakes = {
+    # NIX_CONFIG also reaches the nix calls system-manager/home-manager make.
+    expr = lib.hasInfix "export NIX_CONFIG=\"extra-experimental-features = nix-command flakes\"" switch;
+    expected = true;
+  };
 }
