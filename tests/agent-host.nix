@@ -65,14 +65,25 @@ in
       "${h}/.codex-personal"
     ];
   };
-  testWorkDirenv = {
-    expr =
-      lib.hasInfix ''export CLAUDE_CONFIG_DIR="${h}/.claude-work"''
-        hm.home.file."direnv-hook-work".text;
-    expected = true;
+  # The account follows $PWD at every prompt (after direnv), so nested repos
+  # with their own .envrc keep the right account.
+  testAccountPromptHook = {
+    expr = map (x: lib.hasInfix x hm.programs.zsh.initContent) [
+      "precmd_functions+=(_agent_host_account)"
+      "${h}/projects/work/*) export CLAUDE_CONFIG_DIR=${h}/.claude-work CODEX_HOME=${h}/.codex-work ;;"
+      "${h}/projects/personal/*) export CLAUDE_CONFIG_DIR=${h}/.claude-personal CODEX_HOME=${h}/.codex-personal ;;"
+      "*) export CLAUDE_CONFIG_DIR=${h}/.claude-personal CODEX_HOME=${h}/.codex-personal ;;"
+    ];
+    expected = [
+      true
+      true
+      true
+      true
+    ];
   };
-  testPersonalDirenvNoWork = {
-    expr = lib.hasInfix ".claude-work" hm.home.file."direnv-hook-personal".text;
+  # The tree-level .envrc no longer carries the account (nearest-.envrc-only).
+  testDirenvHooksCarryNoAccount = {
+    expr = lib.hasInfix "CLAUDE_CONFIG_DIR" hm.home.file."direnv-hook-work".text;
     expected = false;
   };
   testBrainCommandLinked = {
