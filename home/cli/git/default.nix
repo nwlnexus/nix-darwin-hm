@@ -64,6 +64,9 @@ let
     gp = "git pull";
     gP = "git push";
   };
+
+  op = config.d.apps.onepassword;
+  opGui = op.enable && (op.gui or true);
 in
 
 {
@@ -129,11 +132,18 @@ in
       settings.user.email = "4689066+nwlucas@users.noreply.github.com";
       ignores = [ ".DS_Store" ];
 
-      #Signing is done via the 1Password app
-      signing = lib.mkIf (config.d.apps.onepassword.enable or false) {
-        signByDefault = true;
-        key = config.d.apps.onepassword.ssh.key;
-      };
+      # Signing is done via the 1Password app where it runs; headless hosts
+      # sign with the on-disk personal key that op-secrets materializes.
+      signing = lib.mkMerge [
+        (lib.mkIf opGui {
+          signByDefault = true;
+          key = op.ssh.key;
+        })
+        (lib.mkIf (!opGui) {
+          signByDefault = true;
+          key = "~/.ssh/id_ed25519";
+        })
+      ];
 
       # NOTE: the `gitdir:` patterns are deliberately written WITHOUT a `~/`
       # prefix. `~/projects` is a symlink to an external volume on this host
@@ -176,7 +186,11 @@ in
 
       settings.gpg = {
         format = "ssh";
-        ssh.program = "/Applications/1Password.app/Contents/MacOS/op-ssh-sign";
+        ssh.program =
+          if opGui && pkgs.stdenv.isDarwin then
+            "/Applications/1Password.app/Contents/MacOS/op-ssh-sign"
+          else
+            "${pkgs.openssh}/bin/ssh-keygen";
       };
 
       settings.log = {

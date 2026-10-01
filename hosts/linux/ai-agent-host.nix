@@ -5,5 +5,15 @@
 {
   platform = "x86_64-linux";
 
-  home = { };
+  home =
+    { config, ... }:
+    {
+      d.apps.onepassword = {
+        gui = false;
+        tokenFiles = {
+          personal = "${config.home.homeDirectory}/.config/personal/1penv";
+          work = "${config.home.homeDirectory}/.config/work/1penv";
+        };
+      };
+    };
 }

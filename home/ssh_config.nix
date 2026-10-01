@@ -1,4 +1,17 @@
-{ lib, user, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  user,
+  ...
+}:
+let
+  cloudflared =
+    if pkgs.stdenv.isDarwin then
+      "/opt/homebrew/bin/cloudflared"
+    else
+      "${pkgs.cloudflared}/bin/cloudflared";
+in
 {
   programs.ssh = {
     enable = true;
@@ -32,7 +45,7 @@
         header = "Host *.ssh.nwlnexus.net";
         HostName = "%h";
         User = user;
-        ProxyCommand = "/opt/homebrew/bin/cloudflared access ssh --hostname %n";
+        ProxyCommand = "${cloudflared} access ssh --hostname %n";
       };
 
       ghPersonal = {
@@ -75,7 +88,7 @@
         header = "Host *.ssh.dtlronline.com";
         HostName = "%h";
         User = user;
-        ProxyCommand = "/opt/homebrew/bin/cloudflared access ssh --hostname %n";
+        ProxyCommand = "${cloudflared} access ssh --hostname %n";
       };
 
       sshDTLRSTORES = lib.hm.dag.entryBefore [ "sshDTLRONLINE" ] {
@@ -83,7 +96,7 @@
         HostName = "%h";
         User = "dtlr_it";
         ForwardAgent = true;
-        ProxyCommand = "/opt/homebrew/bin/cloudflared access ssh --hostname %n";
+        ProxyCommand = "${cloudflared} access ssh --hostname %n";
       };
 
       tailScaleHosts = {
@@ -92,7 +105,7 @@
         Compression = true;
       };
 
-      onePassword = {
+      onePassword = lib.mkIf (pkgs.stdenv.isDarwin && (config.d.apps.onepassword.gui or true)) {
         header = ''Host * exec "test -z $SSH_TTY"'';
         IdentityAgent = ''"~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"'';
       };

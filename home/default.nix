@@ -21,6 +21,7 @@ in
   home = {
     file = {
       "nix-darwin-reinit" = {
+        enable = pkgs.stdenv.isDarwin;
         text = ''
           #!/usr/bin/env bash
           #
@@ -292,6 +293,4 @@ in
       fi
     '';
   };
-
-  xsession.numlock.enable = pkgs.stdenv.isLinux;
 }
