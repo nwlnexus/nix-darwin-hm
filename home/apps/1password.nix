@@ -69,6 +69,13 @@ in
     # set, each secret gets a per-secret serviceAccountTokenCommand for its
     # account (op-secrets drops the module-level token for any secret that
     # sets `account`, which all of ours do).
+    # Secrets to leave out on this host, by name (e.g. ones whose vault a
+    # service account can't read).
+    excludeSecrets = mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+    };
+
     tokenFiles = {
       personal = mkOption {
         type = types.nullOr types.str;
@@ -130,63 +137,65 @@ in
       # `serviceAccountTokenCommand` pointing at a work-account token file.
       op-secrets = {
         enable = true;
-        secrets = mapAttrs (_: withToken) {
-          gitlab-work = {
-            type = "sshKey";
-            account = "my.1password.com";
-            source = "op://Dev/44adgxe36ozbj2jyhwg3dfdyui";
-            dest = "${config.home.homeDirectory}/.ssh/gitlab-work-gl";
-            writePublicKey = true;
-          };
-          github-personal = {
-            type = "sshKey";
-            account = "my.1password.com";
-            source = "op://Dev/ta7qkekssx6z5v2f27bksaotzi";
-            dest = "${config.home.homeDirectory}/.ssh/id_ed25519";
-            writePublicKey = true;
-            # No per-secret overrides — inherits module-level account + token.
-          };
-          personal-env = {
-            account = "my.1password.com";
-            template = ../secrets/personal-env.tpl;
-            dest = "${config.home.homeDirectory}/projects/personal/.env";
-            mode = "0600";
-          };
-          work-env = {
-            account = "dtlrinc.1password.com";
-            template = ../secrets/work-env.tpl;
-            dest = "${config.home.homeDirectory}/projects/work/.env";
-            mode = "0600";
-          };
-          op-connect-env = {
-            account = "my.1password.com";
-            template = ../secrets/op-connect.tpl;
-            dest = "${config.home.homeDirectory}/projects/personal/.op-connect";
-            mode = "0600";
-          };
-          # File-backed moneta/CF-Access credentials for mnemosyne (nwlnexus/mnemosyne#30),
-          # replacing the retired nix wrapper's `.env`-sourcing trick — hook commands run
-          # as children of the agent process, not a login shell, so these three files are
-          # the only way the credentials reliably reach them. See home/cli/claude/default.nix.
-          moneta-token = {
-            account = "my.1password.com";
-            template = ../secrets/moneta-token.tpl;
-            dest = "${config.home.homeDirectory}/.config/moneta/token";
-            mode = "0600";
-          };
-          moneta-cf-access-client-id = {
-            account = "my.1password.com";
-            template = ../secrets/moneta-cf-access-client-id.tpl;
-            dest = "${config.home.homeDirectory}/.config/moneta/cf-access-client-id";
-            mode = "0600";
-          };
-          moneta-cf-access-client-secret = {
-            account = "my.1password.com";
-            template = ../secrets/moneta-cf-access-client-secret.tpl;
-            dest = "${config.home.homeDirectory}/.config/moneta/cf-access-client-secret";
-            mode = "0600";
-          };
-        };
+        secrets = mapAttrs (_: withToken) (
+          removeAttrs {
+            gitlab-work = {
+              type = "sshKey";
+              account = "my.1password.com";
+              source = "op://Dev/44adgxe36ozbj2jyhwg3dfdyui";
+              dest = "${config.home.homeDirectory}/.ssh/gitlab-work-gl";
+              writePublicKey = true;
+            };
+            github-personal = {
+              type = "sshKey";
+              account = "my.1password.com";
+              source = "op://Dev/ta7qkekssx6z5v2f27bksaotzi";
+              dest = "${config.home.homeDirectory}/.ssh/id_ed25519";
+              writePublicKey = true;
+              # No per-secret overrides — inherits module-level account + token.
+            };
+            personal-env = {
+              account = "my.1password.com";
+              template = ../secrets/personal-env.tpl;
+              dest = "${config.home.homeDirectory}/projects/personal/.env";
+              mode = "0600";
+            };
+            work-env = {
+              account = "dtlrinc.1password.com";
+              template = ../secrets/work-env.tpl;
+              dest = "${config.home.homeDirectory}/projects/work/.env";
+              mode = "0600";
+            };
+            op-connect-env = {
+              account = "my.1password.com";
+              template = ../secrets/op-connect.tpl;
+              dest = "${config.home.homeDirectory}/projects/personal/.op-connect";
+              mode = "0600";
+            };
+            # File-backed moneta/CF-Access credentials for mnemosyne (nwlnexus/mnemosyne#30),
+            # replacing the retired nix wrapper's `.env`-sourcing trick — hook commands run
+            # as children of the agent process, not a login shell, so these three files are
+            # the only way the credentials reliably reach them. See home/cli/claude/default.nix.
+            moneta-token = {
+              account = "my.1password.com";
+              template = ../secrets/moneta-token.tpl;
+              dest = "${config.home.homeDirectory}/.config/moneta/token";
+              mode = "0600";
+            };
+            moneta-cf-access-client-id = {
+              account = "my.1password.com";
+              template = ../secrets/moneta-cf-access-client-id.tpl;
+              dest = "${config.home.homeDirectory}/.config/moneta/cf-access-client-id";
+              mode = "0600";
+            };
+            moneta-cf-access-client-secret = {
+              account = "my.1password.com";
+              template = ../secrets/moneta-cf-access-client-secret.tpl;
+              dest = "${config.home.homeDirectory}/.config/moneta/cf-access-client-secret";
+              mode = "0600";
+            };
+          } cfg.excludeSecrets
+        );
       };
     }
   ]);
