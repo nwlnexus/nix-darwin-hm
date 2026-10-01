@@ -9,6 +9,7 @@ let
     ./harness.nix
     ./standalone.nix
     ./portability.nix
+    ./system-manager.nix
   ];
 in
 lib.debug.runTests (lib.foldl' (acc: f: acc // import f { inherit flake lib; }) { } suites)
