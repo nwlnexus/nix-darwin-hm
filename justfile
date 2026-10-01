@@ -120,3 +120,34 @@ darwin-rebuild-bootstrap host="":
     fi
     DARWIN_REBUILD_NIX_CONFIG="$(sudo cat /etc/nix/github-token.conf)" \
       ./scripts/darwin-rebuild.sh switch {{ host }}
+
+# Run the Nix evaluation tests in tests/ (prints failures; [] = all pass)
+test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    out="$(nix eval --impure --json --expr 'import ./tests { }')"
+    echo "$out" | jq .
+    [ "$out" = "[]" ]
+
+# Print a normalized snapshot of a darwin host's evaluated config.
+# With a ref, evaluates that git revision of this repo instead of the working tree.
+darwin-snapshot host="NWL-MMINI" ref="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -n "{{ ref }}" ]; then
+      # The main checkout (not a linked worktree) shares the object store.
+      main="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
+      src="git+file://$main?rev=$(git rev-parse {{ ref }})"
+    else
+      src="$(pwd)"
+    fi
+    nix eval --impure --json --expr \
+      "import ./tests/lib/darwin-snapshot.nix { flake = builtins.getFlake \"$src\"; host = \"{{ host }}\"; }" \
+      | jq -S .
+
+# Fail (and show the diff) if a darwin host's config differs from ref
+check-darwin host="NWL-MMINI" ref="origin/main":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    diff -u <(just darwin-snapshot {{ host }} {{ ref }}) <(just darwin-snapshot {{ host }}) \
+      && echo "darwin {{ host }}: unchanged vs {{ ref }}"

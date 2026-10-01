@@ -45,6 +45,59 @@
       inherit (inputs.nixpkgs.lib) listToAttrs hasSuffix removeSuffix;
       PROJECT_ROOT = builtins.toString ./.;
 
+      inherit (inputs.nixpkgs.lib)
+        filterAttrs
+        mapAttrs
+        mapAttrs'
+        nameValuePair
+        recursiveUpdate
+        ;
+
+      sharedArgs = {
+        user = "nwilliams-lucas";
+        theme = "catppuccin";
+        version = "26.05";
+        inherit PROJECT_ROOT;
+      };
+
+      sharedOverlays = [
+        inputs.vscode-extensions.overlays.default
+        inputs.rust-overlay.overlays.default
+      ];
+
+      # Linux hosts managed by standalone home-manager (+ system-manager).
+      # hosts/linux/<hostname>.nix returns { platform; home; os?; }.
+      linuxHosts = listToAttrs (
+        map (f: {
+          name = removeSuffix ".nix" (baseNameOf f);
+          value = import f;
+        }) (builtins.filter (hasSuffix ".nix") (listFilesRecursive ./hosts/linux))
+      );
+
+      pkgsFor =
+        platform:
+        import inputs.nixpkgs-stable {
+          system = platform;
+          config.allowUnfree = true;
+          overlays = sharedOverlays;
+        };
+
+      homeConfigurations = mapAttrs' (
+        hostname: host:
+        nameValuePair "${sharedArgs.user}@${hostname}" (
+          inputs.hm.lib.homeManagerConfiguration {
+            pkgs = pkgsFor host.platform;
+            extraSpecialArgs = sharedArgs // {
+              inherit inputs hostname;
+            };
+            modules = [
+              ./home/standalone.nix
+              host.home
+            ];
+          }
+        )
+      ) linuxHosts;
+
       nixosConfig = {
         system = "x86_64-linux";
 
@@ -120,49 +173,52 @@
         );
 
     in
-    mkFlake {
-      inherit self inputs;
+    let
+      base = mkFlake {
+        inherit self inputs;
 
-      channelsConfig = {
-        allowUnfree = true;
-      };
-
-      channels = {
-        nixpkgs = { };
-        nixpkgs-stable = { };
-      };
-
-      sharedOverlays = [
-        inputs.vscode-extensions.overlays.default
-        inputs.rust-overlay.overlays.default
-      ];
-
-      hostDefaults = {
-        channelName = "nixpkgs-stable";
-        modules = [ ./system ];
-
-        extraArgs = {
-          user = "nwilliams-lucas";
-          theme = "catppuccin";
-          version = "26.05";
-          PROJECT_ROOT = PROJECT_ROOT;
+        channelsConfig = {
+          allowUnfree = true;
         };
-      };
 
-      hosts =
-        (mkHosts ./hosts/nixos)
-        // (mkHosts ./hosts/nixos-arm)
-        // (mkHosts ./hosts/darwinM)
-        // (mkHosts ./hosts/darwin);
+        channels = {
+          nixpkgs = { };
+          nixpkgs-stable = { };
+        };
 
-      outputsBuilder = channels: {
-        formatter = inputs.treefmt-nix.lib.mkWrapper channels.nixpkgs-stable {
-          projectRootFile = "flake.nix";
-          programs.nixfmt = {
-            enable = true;
-            package = channels.nixpkgs-stable.nixfmt;
+        inherit sharedOverlays;
+
+        hostDefaults = {
+          channelName = "nixpkgs-stable";
+          modules = [ ./system ];
+
+          extraArgs = {
+            user = "nwilliams-lucas";
+            theme = "catppuccin";
+            version = "26.05";
+            PROJECT_ROOT = PROJECT_ROOT;
+          };
+        };
+
+        hosts =
+          (mkHosts ./hosts/nixos)
+          // (mkHosts ./hosts/nixos-arm)
+          // (mkHosts ./hosts/darwinM)
+          // (mkHosts ./hosts/darwin);
+
+        outputsBuilder = channels: {
+          formatter = inputs.treefmt-nix.lib.mkWrapper channels.nixpkgs-stable {
+            projectRootFile = "flake.nix";
+            programs.nixfmt = {
+              enable = true;
+              package = channels.nixpkgs-stable.nixfmt;
+            };
           };
         };
       };
+    in
+    base
+    // {
+      inherit homeConfigurations;
     };
 }
