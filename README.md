@@ -16,7 +16,8 @@ The repository is organized as follows:
 
 * `flake.nix`: The entry point for the Nix Flake, defining inputs and outputs.
 * `hosts/`: Contains host-specific configurations for each machine.
-* `system/`: Contains system-level configurations, separated for `nixos` and `darwin`.
+* `system/`: Contains system-level configurations, separated for `nixos`, `darwin`, and `linux` (system-manager).
+* `tests/`: Nix evaluation tests (`just test`) and the darwin config-snapshot gate (`just check-darwin`).
 * `home/`: Contains user-level configurations managed by `home-manager`.
 * `modules/`: Contains reusable Nix modules used across different configurations.
 * `users/`: Contains user definitions.
@@ -37,6 +38,14 @@ To apply the configuration on a NixOS machine, run the following command, replac
 
 ```bash
 sudo nixos-rebuild switch --flake .#<hostname>
+```
+
+### Applying on a Linux agent host (Ubuntu)
+
+Headless Ubuntu hosts are managed by standalone home-manager plus [system-manager](https://github.com/numtide/system-manager). Bootstrap a new host with `scripts/bootstrap-agent-host.sh` (see the "Agent hosts" section of `AGENTS.md`), then apply changes with:
+
+```bash
+scripts/linux-switch.sh
 ```
 
 ### Applying on macOS

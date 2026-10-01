@@ -14,6 +14,7 @@ This provides guidance to AI assistants when working with this nix-darwin + Home
 # Apply configuration
 darwin-rebuild switch --flake .        # macOS
 nixos-rebuild switch --flake .         # NixOS
+scripts/linux-switch.sh                # Linux agent hosts (alias: switch)
 
 # macOS maintenance
 nix-darwin-reinit [flake-path]         # Fix nix-darwin after macOS upgrades
@@ -23,6 +24,8 @@ nix flake show                         # List all outputs
 nix flake update                       # Update dependencies
 nix fmt                                # Format all Nix files
 just                                   # List available tasks
+just test                              # Nix evaluation tests (tests/)
+just check-darwin                      # Prove darwin config unchanged vs origin/main
 ```
 
 ## Core Technologies
@@ -42,15 +45,18 @@ just                                   # List available tasks
 │   ├── darwinM/          # Apple Silicon macOS (aarch64-darwin)
 │   ├── darwin/           # Intel macOS (x86_64-darwin)
 │   ├── nixos/            # x86_64 Linux
-│   └── nixos-arm/        # ARM64 Linux
+│   ├── nixos-arm/        # ARM64 Linux
+│   └── linux/            # Ubuntu agent hosts (standalone HM + system-manager)
 ├── system/               # System-level configs
 │   ├── darwin/          # macOS: dock, finder, fonts, brew
-│   └── nixos/           # NixOS: boot, users, hardware
+│   ├── nixos/           # NixOS: boot, users, hardware
+│   └── linux/           # system-manager OS layer for hosts/linux
 ├── home/                # Home Manager user configs
 │   ├── cli/             # CLI tools: git, starship, bat, etc.
 │   └── apps/            # Applications: iterm2, 1password
 ├── modules/             # Shared Nix modules
 │   └── profiles/        # Profile modules (base, dev, gui-full, etc.)
+├── tests/               # Nix evaluation tests (just test)
 └── users/               # User configuration schema
 ```
 
@@ -171,6 +177,16 @@ To add a new host configuration:
 - A weekly launchd agent (`cargo-sweep`, Sundays 11:00, darwin-only) removes build artifacts unused for 30+ days. Logs: `~/.cache/cargo-sweep/launchd.*.log`.
 - `reclaim-disk` (installed to `~/.local/bin`, source `modules/rust/reclaim-disk.sh`) is an on-demand, non-destructive space reclaim for regenerable caches. Run `reclaim-disk --dry-run` first to preview.
 
+### Agent hosts (Linux)
+
+- Headless Ubuntu hosts live in `hosts/linux/<host>.nix`, which returns `{ platform; home; os; }`. Each produces `homeConfigurations."nwilliams-lucas@<host>"` (standalone home-manager, entry `home/standalone.nix`) and `systemConfigs.<host>` (system-manager, `system/linux/`).
+- Bootstrap a new host with `scripts/bootstrap-agent-host.sh --dry-run`, then without `--dry-run`. It prompts once for the 1Password service-account tokens (`~/.config/{personal,work}/1penv`), which every op-secrets secret uses via `d.apps.onepassword.tokenFiles`.
+- Accounts: `personal` → `~/projects/personal`, `work` → `~/projects/work` (`d.agentHost.accounts`). Plain `claude`/`codex` follow the tree you are in (direnv sets `CLAUDE_CONFIG_DIR`/`CODEX_HOME`); `claude-<acct>`/`codex-<acct>` pick one explicitly; `personal` is the default elsewhere.
+- Remote Control: user units `claude-rc-<acct>` and `codex-rc-<acct>` start at boot (lingering) and are skipped until that account is logged in. Manage them with `agents status | restart [unit] | logs <unit>`. Native-installer updates take effect on `agents restart`.
+- Log in once per account: run `claude-<acct>` inside its tree (trust prompt, then `/login`), and `codex-<acct> login --device-auth`.
+- Not managed: the sshd service, Tailscale, and apt packages (including the `op` beta). system-manager only adds `/etc/ssh/sshd_config.d/05-nix-hardening.conf`; `scripts/linux-switch.sh` validates it (`sshd -t`) before reloading.
+- `d.apps.onepassword.gui = false` turns off the 1Password desktop integration (agent socket, op-ssh-sign, autostart); git then signs with `~/.ssh/id_ed25519`.
+
 ### Updating Dependencies
 
 To update all flake inputs to their latest versions:
@@ -197,6 +213,7 @@ For in-depth architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 - **darwinM:** DTLR-NWLMMINI, MACST-01, MACST-02, NWL-MBM2, NWL-MMINI, NWL-STUDIO, NWL-STUDIO-DTLR
 - **nixos-arm:** nixos-parallels, rpi-01
+- **linux (standalone home-manager + system-manager):** ai-agent-host
 
 ## Notes for AI Assistants
 

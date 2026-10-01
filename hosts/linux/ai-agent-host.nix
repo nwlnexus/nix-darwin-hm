@@ -15,6 +15,14 @@
           work = "${config.home.homeDirectory}/.config/work/1penv";
         };
       };
+
+      d.agentHost = {
+        enable = true;
+        accounts = {
+          personal.root = "${config.home.homeDirectory}/projects/personal";
+          work.root = "${config.home.homeDirectory}/projects/work";
+        };
+      };
     };
 
   os = {
