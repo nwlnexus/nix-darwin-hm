@@ -169,6 +169,13 @@ To add a new host configuration:
 - The default iTerm2 profile is a **Dynamic Profile** (`home/apps/iterm2/`) that auto-launches `tmux -CC` (control mode). The gateway window is hidden via `AutoHideTmuxClientSession`. The profile is made default by matching `Default Bookmark Guid` (system) to the profile `Guid` (home) — keep these two in sync.
 - To refresh the profile template from a host's live settings: `just export-iterm-profile`, then commit `home/apps/iterm2/profile.json`.
 
+### mvmctl (microVMs)
+
+- `system/darwin/mvmctl.nix` installs the pinned prebuilt mvmctl release (aarch64-darwin only) and ad-hoc re-signs `mvmctl` and `mvm-hvf-supervisor` with the entitlement profiles shipped in the release's `assets/`, the same way upstream's `install.sh` does.
+- On macOS 26+ it uses the built-in HVF backend, so it needs **no Homebrew deps**. Don't re-add the libkrun stack (libkrun, libkrunfw, gvproxy, virglrenderer-krun, libepoxy). `mvmctl doctor` checks the host; run `mvmctl bootstrap` once per host to prewarm the caches.
+- To bump: update `version` + `hash` (sha256 from the release's `checksums-sha256.txt`, converted with `nix hash convert --hash-algo sha256 --to sri`).
+- A manual `curl … | sh` install in `~/.local/bin` shadows the Nix one on PATH, so remove it.
+
 ### Rust build hygiene
 
 - Rust tooling is templated fleet-wide in `modules/rust/rust.nix`, gated on `d.profiles.dev.rust.enable` (which follows the dev profile). It does **not** install a toolchain — `rustup` from `base.nix` owns that. It only sets global config and helpers.
