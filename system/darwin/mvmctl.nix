@@ -74,4 +74,24 @@ let
 in
 {
   environment.systemPackages = lib.optionals pkgs.stdenv.hostPlatform.isAarch64 [ mvmctl ];
+
+  # A manual `curl … | sh` install puts mvmctl + mvm-* helpers in ~/.local/bin
+  # (newer installers symlink them into ~/.local/lib/mvm). ~/.local/bin is ahead
+  # of /run/current-system/sw/bin on PATH, so it would shadow this package.
+  # Idempotent: gated on ~/.local/bin/mvmctl, so it's a no-op once removed.
+  # `run` honours home-manager's dry-run mode.
+  d.hm = [
+    (
+      { config, lib, ... }:
+      {
+        home.activation.mvmctlManualInstallCleanup = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+          mvmBin="${config.home.homeDirectory}/.local/bin"
+          if [ -e "$mvmBin/mvmctl" ] || [ -L "$mvmBin/mvmctl" ]; then
+            run rm -f "$mvmBin/mvmctl" "$mvmBin"/mvm-*
+            run rm -rf "${config.home.homeDirectory}/.local/lib/mvm"
+          fi
+        '';
+      }
+    )
+  ];
 }
