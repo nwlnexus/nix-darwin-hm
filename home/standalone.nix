@@ -11,6 +11,7 @@
     ./linux-shell.nix
     ./agent-host
     ./linuxbrew.nix
+    ../modules/mvmctl/home.nix
     ./cli
     ../modules/rust/rust.nix
     ./default.nix

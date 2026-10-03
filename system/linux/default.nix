@@ -1,12 +1,15 @@
 # system-manager OS layer shared by every Linux agent host. Deliberately
 # small: Ubuntu keeps owning sshd, Tailscale, apt and users; this manages
-# Nix's config, GC, user lingering, and an sshd hardening drop-in.
+# Nix's config, GC, user lingering, an sshd hardening drop-in, and
+# /dev/kvm access for mvmctl (./kvm.nix).
 {
   config,
   user,
   ...
 }:
 {
+  imports = [ ./kvm.nix ];
+
   # system-manager leaves its nix module off by default; we own nix.conf.
   nix.enable = true;
 

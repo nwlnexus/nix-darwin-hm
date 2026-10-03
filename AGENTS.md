@@ -171,9 +171,12 @@ To add a new host configuration:
 
 ### mvmctl (microVMs)
 
-- `system/darwin/mvmctl.nix` installs the pinned prebuilt mvmctl release (aarch64-darwin only) and ad-hoc re-signs `mvmctl` and `mvm-hvf-supervisor` with the entitlement profiles shipped in the release's `assets/`, the same way upstream's `install.sh` does.
-- On macOS 26+ it uses the built-in HVF backend, so it needs **no Homebrew deps**. Don't re-add the libkrun stack (libkrun, libkrunfw, gvproxy, virglrenderer-krun, libepoxy). `mvmctl doctor` checks the host; run `mvmctl bootstrap` once per host to prewarm the caches.
-- To bump: update `version` + `hash` (sha256 from the release's `checksums-sha256.txt`, converted with `nix hash convert --hash-algo sha256 --to sri`).
+- `modules/mvmctl/package.nix` packages the pinned prebuilt mvmctl release (aarch64-darwin, x86_64-linux, aarch64-linux). `modules/mvmctl/home.nix` installs it via home-manager. macOS hosts get it through `system/darwin/mvmctl.nix`, and Linux agent hosts through `home/standalone.nix`.
+- macOS 26+ uses the built-in HVF backend and needs **no Homebrew deps**, so don't re-add the libkrun stack (libkrun, libkrunfw, gvproxy, virglrenderer-krun, libepoxy). The package ad-hoc re-signs `mvmctl` and `mvm-hvf-supervisor` with the entitlement profiles in the release's `assets/`, the same way upstream's `install.sh` does.
+- Linux uses Firecracker (mvmctl downloads it) and needs `/dev/kvm`. `system/linux/kvm.nix` grants the user an rw ACL on it with a udev rule, which needs no group change or re-login. The rule must sort after `73-seat-late.rules`, because `uaccess` rewrites the device's ACLs.
+- On Linux, mvmctl runs through a wrapper that puts a `systemd-run` shim on its PATH. The shim adds `--expand-environment=no`, because systemd-run >= 254 expands mvm's `$$` and every Firecracker boot fails. Drop the shim once upstream fixes this.
+- `mvmctl doctor` checks the host. Run `mvmctl bootstrap` once per host to prewarm its caches.
+- To bump: update `version` and every `hash` (sha256 from the release's `checksums-sha256.txt`, converted with `nix hash convert --hash-algo sha256 --to sri`).
 - A manual `curl … | sh` install in `~/.local/bin` would shadow the Nix one on PATH. A home-manager activation step (`mvmctlManualInstallCleanup`) removes it; once it is gone, the step does nothing.
 
 ### Rust build hygiene
@@ -191,7 +194,7 @@ To add a new host configuration:
 - Accounts: `personal` → `~/projects/personal`, `work` → `~/projects/work` (`d.agentHost.accounts`). Plain `claude`/`codex` follow the tree you are in (a zsh prompt hook sets `CLAUDE_CONFIG_DIR`/`CODEX_HOME` from `$PWD`, after direnv, so repos with their own `.envrc` keep the right account); `claude-<acct>`/`codex-<acct>` pick one explicitly; `personal` is the default elsewhere.
 - Remote Control: user units `claude-rc-<acct>` and `codex-rc-<acct>` start at boot (lingering) and are skipped until that account is logged in. Manage them with `agents status | restart [unit] | logs <unit>`. Native-installer updates take effect on `agents restart`.
 - Log in once per account: run `claude-<acct>` inside its tree (trust prompt, then `/login`), and `codex-<acct> login --device-auth`.
-- Not managed: the sshd service, Tailscale, and apt packages (including the `op` beta). system-manager only adds `/etc/ssh/sshd_config.d/05-nix-hardening.conf`; `scripts/linux-switch.sh` validates it (`sshd -t`) before reloading.
+- Not managed: the sshd service, Tailscale, and apt packages (including the `op` beta). system-manager only adds `/etc/ssh/sshd_config.d/05-nix-hardening.conf` (`scripts/linux-switch.sh` validates it with `sshd -t` before reloading) and the `/dev/kvm` udev ACL rule.
 - Linuxbrew (`d.linuxbrew`, `home/linuxbrew.nix`) carries only formulae nixpkgs lacks or lags badly on. home-manager writes `~/.Brewfile` (non-official taps as `trusted: true`) and each switch runs `brew bundle install --no-upgrade`: install-only, never upgrades or removes, and a failure only warns. Brew's `bin` is appended last to PATH (shells and Remote Control services) so it never shadows Nix/mise.
 - `d.apps.onepassword.gui = false` turns off the 1Password desktop integration (agent socket, op-ssh-sign, autostart); git then signs with `~/.ssh/id_ed25519`.
 
