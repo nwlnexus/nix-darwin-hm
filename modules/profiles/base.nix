@@ -60,6 +60,9 @@
         "gh"
         # mise now provided by home-manager (programs.mise) — see home/default.nix
         "pkgconf"
+        # olympus-sdk VM test harness (vms/harness/vm.sh): qemu-system-* + qemu-img
+        # + edk2 UEFI firmware. Declared here so `cleanup = "uninstall"` keeps it.
+        "qemu"
       ];
       casks = [
         "1password-cli"
