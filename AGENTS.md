@@ -133,7 +133,7 @@ Interactive `brew trust` is not enough for `darwin-rebuild`: activation runs `br
 
 #### 1Password CLI (beta)
 
-macOS hosts install `op` from the `1password-cli@beta` cask (`modules/profiles/base.nix`). It conflicts with the stable `1password-cli` cask, so a `preActivation` step uninstalls the stable cask before `brew bundle` runs. Once it is gone, the step does nothing. op-secrets keeps using its own Nix-pinned `op`.
+macOS hosts install `op` from the `1password-cli@beta` cask (`modules/profiles/base.nix`). It conflicts with the stable `1password-cli` cask, so a `preActivation` step uninstalls the stable cask before `brew bundle` runs. Once it is gone, the step does nothing.
 
 ### Adding Hosts
 
