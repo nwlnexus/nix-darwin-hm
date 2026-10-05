@@ -131,9 +131,9 @@ Homebrew 6.0+ requires non-official taps to be explicitly trusted. nix-darwin's 
 
 Interactive `brew trust` is not enough for `darwin-rebuild`: activation runs `brew bundle` via `sudo --user=… --set-home` without `XDG_CONFIG_HOME`, so Homebrew reads `~/.homebrew/trust.json` rather than `~/.config/homebrew/trust.json`. Declare trust in the Brewfile (`extraConfig` / fully-qualified entries) so bundle applies it during activation.
 
-#### 1Password CLI (beta)
+#### 1Password (beta)
 
-macOS hosts install `op` from the `1password-cli@beta` cask (`modules/profiles/base.nix`). It conflicts with the stable `1password-cli` cask, so a `preActivation` step uninstalls the stable cask before `brew bundle` runs. Once it is gone, the step does nothing.
+All macOS hosts install `op` from the `1password-cli@beta` cask (`modules/profiles/base.nix`). `gui-full` hosts also install the desktop app from `1password@beta` (`modules/profiles/gui-full.nix`). Each beta cask conflicts with its stable cask (`1password-cli`, `1password`), so a `preActivation` step uninstalls the stable cask before `brew bundle` runs. Uninstall keeps vaults and settings. Once the stable cask is gone, the step does nothing. The beta app keeps the same `1Password.app` path and agent socket.
 
 ### Adding Hosts
 
