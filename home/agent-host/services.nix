@@ -24,7 +24,11 @@ let
       creds = "auth.json";
       # Codex 0.159's foreground `remote-control` fails its socket-parent
       # check ("socket parent must be owned by the user or root ..."), while
-      # its managed daemon works, so the unit starts/stops the daemon.
+      # its managed daemon works, so the unit starts/stops the daemon. The
+      # daemon's own updater keeps it current; systemd only sees the oneshot,
+      # so a timer (below) restarts the unit if the daemon stops running.
+      # Its sandbox needs Ubuntu's apt `bubblewrap`: only /usr/bin/bwrap is
+      # exempt from AppArmor's unprivileged-userns restriction.
       daemon = {
         start = [
           "remote-control"
@@ -94,6 +98,25 @@ let
 
   unitName = p: "${p.tool}-rc-${p.acct}";
   units = map unitName pairs;
+  daemonPairs = lib.filter (p: tools.${p.tool} ? daemon) pairs;
+
+  # Restart the unit when its daemon isn't running. Re-checks once before
+  # acting so a self-update's brief app-server restart isn't interrupted.
+  mkHealthCheck =
+    p:
+    let
+      bin = "${p.launcher}/bin/${p.tool}-${p.acct}";
+      status = "${pkgs.coreutils}/bin/timeout 30 ${bin} app-server daemon version 2>/dev/null | ${pkgs.jq}/bin/jq -r .status 2>/dev/null";
+    in
+    pkgs.writeShellScript "${unitName p}-health" ''
+      for attempt in 1 2; do
+        s="$(${status})" || true
+        [ "$s" = running ] && exit 0
+        [ "$attempt" = 1 ] && ${pkgs.coreutils}/bin/sleep 90
+      done
+      echo "daemon status '$s'; restarting ${unitName p}"
+      exec systemctl --user restart ${unitName p}.service
+    '';
 
   agents = pkgs.writeShellApplication {
     name = "agents";
@@ -166,5 +189,31 @@ lib.mkIf cfg.enable {
         Install.WantedBy = [ "default.target" ];
       }
     ) pairs
+    ++ map (
+      p:
+      lib.nameValuePair "${unitName p}-health" {
+        Unit.Description = "${p.tool} Remote Control (${p.acct}) health check";
+        Service = {
+          Type = "oneshot";
+          Environment = [ "PATH=${agentPath}" ];
+          ExecCondition = "${pkgs.coreutils}/bin/test -f ${tools.${p.tool}.dir p.acct}/${tools.${p.tool}.creds}";
+          ExecStart = "${mkHealthCheck p}";
+        };
+      }
+    ) daemonPairs
+  );
+
+  systemd.user.timers = lib.listToAttrs (
+    map (
+      p:
+      lib.nameValuePair "${unitName p}-health" {
+        Unit.Description = "Check ${p.tool} Remote Control (${p.acct}) every 5 minutes";
+        Timer = {
+          OnBootSec = "5min";
+          OnUnitActiveSec = "5min";
+        };
+        Install.WantedBy = [ "timers.target" ];
+      }
+    ) daemonPairs
   );
 }

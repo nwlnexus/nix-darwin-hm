@@ -15,7 +15,43 @@ in
       "claude-rc-personal"
       "claude-rc-work"
       "codex-rc-personal"
+      "codex-rc-personal-health"
       "codex-rc-work"
+      "codex-rc-work-health"
+    ];
+  };
+  # systemd only sees the daemon's oneshot launcher, so a timer restarts the
+  # unit when the self-updating daemon stops running. Claude runs in the
+  # foreground under Restart=always and needs none.
+  testCodexHealthTimers = {
+    expr = lib.sort lib.lessThan (lib.attrNames hm.systemd.user.timers);
+    expected = [
+      "codex-rc-personal-health"
+      "codex-rc-work-health"
+    ];
+  };
+  testCodexHealthCheck = {
+    expr =
+      let
+        u = svc.codex-rc-work-health.Service;
+        t = hm.systemd.user.timers.codex-rc-work-health;
+        script = builtins.readFile (str u.ExecStart);
+      in
+      [
+        (str u.Type)
+        (lib.hasSuffix "/bin/test -f ${h}/.codex-work/auth.json" (str u.ExecCondition))
+        (lib.hasInfix "/bin/codex-work app-server daemon version" script)
+        (lib.hasInfix "systemctl --user restart codex-rc-work.service" script)
+        (str t.Timer.OnUnitActiveSec)
+        t.Install.WantedBy
+      ];
+    expected = [
+      "oneshot"
+      true
+      true
+      true
+      "5min"
+      [ "timers.target" ]
     ];
   };
   testClaudeWorkingDirectory = {
