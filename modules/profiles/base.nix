@@ -65,7 +65,9 @@
         "qemu"
       ];
       casks = [
-        "1password-cli"
+        # Beta channel of the 1Password CLI (`op`). Conflicts with the stable
+        # `1password-cli` cask; see the preActivation migration below.
+        "1password-cli@beta"
         "tailscale-app"
       ];
 
@@ -80,5 +82,20 @@
         tap "nwlnexus/olympus", trusted: true
       '';
     };
+
+    # `1password-cli@beta` conflicts with the stable `1password-cli` cask (both
+    # ship `op`). `brew bundle` installs before it cleans up, so the beta install
+    # would fail while the stable cask is still present. Remove the stable cask
+    # first. Idempotent: a no-op once it's gone. Delete once every host has
+    # switched.
+    system.activationScripts.preActivation.text = ''
+      if [ -x /opt/homebrew/bin/brew ] \
+        && sudo --user=${config.system.primaryUser} --set-home \
+          /opt/homebrew/bin/brew list --cask 1password-cli >/dev/null 2>&1; then
+        echo >&2 "removing stable 1password-cli cask (replaced by 1password-cli@beta)..."
+        sudo --user=${config.system.primaryUser} --set-home \
+          /opt/homebrew/bin/brew uninstall --cask 1password-cli
+      fi
+    '';
   };
 }
