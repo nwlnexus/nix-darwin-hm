@@ -88,25 +88,25 @@ in
     # `gitnexus setup -c claude` ignores CLAUDE_CONFIG_DIR: it always writes the
     # MCP server to ~/.claude.json and the skills to ~/.claude/skills. Running
     # it per account therefore configured nothing for the account dirs, so
-    # sessions using ~/.claude-<acct> had no gitnexus MCP tools. Mirror setup's
-    # output into every account dir at user scope (not per repo): the
-    # mcpServers.gitnexus entry (copied from ~/.claude.json so the pinned
-    # version tracks setup) and the gitnexus-* skills. Idempotent, fail-soft.
+    # sessions using ~/.claude-<acct> had no gitnexus MCP tools. Write the
+    # user-scope mcpServers.gitnexus entry and mirror the gitnexus-* skills
+    # into every account dir. The entry runs the installed mise shim, not
+    # `npx -y gitnexus@x mcp`: npx re-resolves against the registry on every
+    # start (slow, and a TLS/network hiccup blows the 30s MCP connect timeout),
+    # while the shim starts in <1s offline and resolves its own node.
+    # Idempotent, fail-soft.
     home.activation.agentHostGitnexus = lib.hm.dag.entryAfter [ "gitnexusSetup" ] (
       lib.concatMapStrings (acct: ''
-        SRC_JSON=${lib.escapeShellArg "${home}/.claude.json"}
+        SHIM=${lib.escapeShellArg "${home}/.local/share/mise/shims/gitnexus"}
         ACCT_DIR=${lib.escapeShellArg (claudeDir acct)}
-        if [ -f "$SRC_JSON" ]; then
-          ENTRY="$(${pkgs.jq}/bin/jq -c '.mcpServers.gitnexus // empty' "$SRC_JSON" 2>/dev/null || true)"
-          if [ -n "$ENTRY" ]; then
-            DST_JSON="$ACCT_DIR/.claude.json"
-            [ -f "$DST_JSON" ] || { echo '{}' > "$DST_JSON"; chmod 600 "$DST_JSON"; }
-            TMP="$(mktemp)"
-            if ${pkgs.jq}/bin/jq --argjson e "$ENTRY" '.mcpServers.gitnexus = $e' "$DST_JSON" > "$TMP" 2>/dev/null; then
-              if cmp -s "$TMP" "$DST_JSON"; then rm -f "$TMP"; else chmod 600 "$TMP"; mv "$TMP" "$DST_JSON"; fi
-            else
-              rm -f "$TMP"
-            fi
+        if [ -x "$SHIM" ]; then
+          DST_JSON="$ACCT_DIR/.claude.json"
+          [ -f "$DST_JSON" ] || { echo '{}' > "$DST_JSON"; chmod 600 "$DST_JSON"; }
+          TMP="$(mktemp)"
+          if ${pkgs.jq}/bin/jq --arg c "$SHIM" '.mcpServers.gitnexus = {command: $c, args: ["mcp"]}' "$DST_JSON" > "$TMP" 2>/dev/null; then
+            if cmp -s "$TMP" "$DST_JSON"; then rm -f "$TMP"; else chmod 600 "$TMP"; mv "$TMP" "$DST_JSON"; fi
+          else
+            rm -f "$TMP"
           fi
         fi
         for SKILL in ${home}/.claude/skills/gitnexus-*; do
