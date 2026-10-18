@@ -4,6 +4,7 @@
 {
   config,
   lib,
+  pkgs,
   ...
 }:
 let
@@ -83,12 +84,36 @@ in
     );
 
     # Per-account gitnexus Claude integration (home/cli/claude does ~/.claude).
-    home.activation.agentHostGitnexus = lib.hm.dag.entryAfter [ "writeBoundary" ] (
+    #
+    # `gitnexus setup -c claude` ignores CLAUDE_CONFIG_DIR: it always writes the
+    # MCP server to ~/.claude.json and the skills to ~/.claude/skills. Running
+    # it per account therefore configured nothing for the account dirs, so
+    # sessions using ~/.claude-<acct> had no gitnexus MCP tools. Mirror setup's
+    # output into every account dir at user scope (not per repo): the
+    # mcpServers.gitnexus entry (copied from ~/.claude.json so the pinned
+    # version tracks setup) and the gitnexus-* skills. Idempotent, fail-soft.
+    home.activation.agentHostGitnexus = lib.hm.dag.entryAfter [ "gitnexusSetup" ] (
       lib.concatMapStrings (acct: ''
-        GITNEXUS_BIN="${home}/.local/share/mise/shims/gitnexus"
-        if [ -x "$GITNEXUS_BIN" ]; then
-          CLAUDE_CONFIG_DIR=${lib.escapeShellArg (claudeDir acct)} "$GITNEXUS_BIN" setup -c claude || true
+        SRC_JSON=${lib.escapeShellArg "${home}/.claude.json"}
+        ACCT_DIR=${lib.escapeShellArg (claudeDir acct)}
+        if [ -f "$SRC_JSON" ]; then
+          ENTRY="$(${pkgs.jq}/bin/jq -c '.mcpServers.gitnexus // empty' "$SRC_JSON" 2>/dev/null || true)"
+          if [ -n "$ENTRY" ]; then
+            DST_JSON="$ACCT_DIR/.claude.json"
+            [ -f "$DST_JSON" ] || { echo '{}' > "$DST_JSON"; chmod 600 "$DST_JSON"; }
+            TMP="$(mktemp)"
+            if ${pkgs.jq}/bin/jq --argjson e "$ENTRY" '.mcpServers.gitnexus = $e' "$DST_JSON" > "$TMP" 2>/dev/null; then
+              if cmp -s "$TMP" "$DST_JSON"; then rm -f "$TMP"; else chmod 600 "$TMP"; mv "$TMP" "$DST_JSON"; fi
+            else
+              rm -f "$TMP"
+            fi
+          fi
         fi
+        for SKILL in ${home}/.claude/skills/gitnexus-*; do
+          [ -d "$SKILL" ] || continue
+          run install -d -m 0755 "$ACCT_DIR/skills"
+          run cp -rT "$SKILL" "$ACCT_DIR/skills/$(basename "$SKILL")"
+        done
       '') accts
     );
   };

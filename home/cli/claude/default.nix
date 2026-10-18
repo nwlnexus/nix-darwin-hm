@@ -48,6 +48,8 @@
   '';
 
   # gitnexus ships its own installer; it is idempotent and non-interactive.
+  # NOTE it only ever targets ~/.claude (ignores CLAUDE_CONFIG_DIR); agent-host
+  # mirrors its output into the per-account dirs (home/agent-host).
   # gitnexus is a mise global (npm:gitnexus, see home/default.nix), not a
   # nixpkgs package, so it has no nix store path and isn't on the activation
   # script's PATH — resolve it by absolute path instead.
