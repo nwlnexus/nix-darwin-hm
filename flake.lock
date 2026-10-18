@@ -1,5 +1,21 @@
 {
   "nodes": {
+    "agent-skills": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792367009,
+        "narHash": "sha256-anuBhkopqeAv7ITcYnwgK4aTY53Ix84u1o2pNds23gs=",
+        "owner": "nwlnexus",
+        "repo": "agent-skills",
+        "rev": "70c13e49215280bbb0722a54af78433e51bd7c88",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nwlnexus",
+        "repo": "agent-skills",
+        "type": "github"
+      }
+    },
     "atuin": {
       "inputs": {
         "fenix": "fenix",
@@ -515,6 +531,7 @@
     },
     "root": {
       "inputs": {
+        "agent-skills": "agent-skills",
         "atuin": "atuin",
         "darwin": "darwin",
         "flake-parts": "flake-parts_2",

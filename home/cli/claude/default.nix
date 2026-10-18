@@ -3,11 +3,32 @@
   pkgs,
   lib,
   config,
+  inputs,
   ...
 }:
+let
+  agentSkills = inputs.agent-skills;
+  # Our reusable skills (github:nwlnexus/agent-skills, flake input): every
+  # skills/<name> becomes <claude dir>/skills/<name>. Ours, not gitnexus's, so
+  # they are nix-managed symlinks and the gitnexus-* mirroring in
+  # home/agent-host skips them (it builds the same set per account dir).
+  skillDirs = lib.attrNames (
+    lib.filterAttrs (_: type: type == "directory") (builtins.readDir "${agentSkills}/skills")
+  );
+  skillFiles =
+    claudeDir:
+    lib.listToAttrs (
+      map (
+        name: lib.nameValuePair "${claudeDir}/skills/${name}" { source = "${agentSkills}/skills/${name}"; }
+      ) skillDirs
+    );
+in
 {
-  # /brain slash command (consult + ingest the second-brain wiki).
-  home.file.".claude/commands/brain.md".source = ./commands/brain.md;
+  home.file = {
+    # /brain slash command (consult + ingest the second-brain wiki).
+    ".claude/commands/brain.md".source = ./commands/brain.md;
+  }
+  // skillFiles ".claude";
 
   home.sessionVariables = {
     SECOND_BRAIN_PATH = "${config.home.homeDirectory}/Documents/Obsidian Vault/brain";

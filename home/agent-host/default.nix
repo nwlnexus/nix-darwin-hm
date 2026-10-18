@@ -5,9 +5,11 @@
   config,
   lib,
   pkgs,
+  inputs,
   ...
 }:
 let
+  agentSkills = inputs.agent-skills;
   cfg = config.d.agentHost;
   home = config.home.homeDirectory;
   claudeDir = acct: "${home}/.claude-${acct}";
@@ -52,10 +54,27 @@ in
       CODEX_HOME = codexDir cfg.defaultAccount;
     };
 
+    # Per account: /brain command + every skills/<name> from the agent-skills
+    # input (same set home/cli/claude puts under ~/.claude).
     home.file = lib.mkMerge (
-      map (acct: {
-        ".claude-${acct}/commands/brain.md".source = ../cli/claude/commands/brain.md;
-      }) accts
+      map (
+        acct:
+        {
+          ".claude-${acct}/commands/brain.md".source = ../cli/claude/commands/brain.md;
+        }
+        // lib.listToAttrs (
+          map
+            (
+              name:
+              lib.nameValuePair ".claude-${acct}/skills/${name}" { source = "${agentSkills}/skills/${name}"; }
+            )
+            (
+              lib.attrNames (
+                lib.filterAttrs (_: type: type == "directory") (builtins.readDir "${agentSkills}/skills")
+              )
+            )
+        )
+      ) accts
     );
 
     # Pick the account from $PWD at every prompt. Runs after direnv's hook
@@ -111,6 +130,9 @@ in
         fi
         for SKILL in ${home}/.claude/skills/gitnexus-*; do
           [ -d "$SKILL" ] || continue
+          # Our agent-skills are nix-managed symlinks in both places; cp onto
+          # a store symlink would fail. Only mirror real (gitnexus-written) dirs.
+          [ -L "$SKILL" ] && continue
           run install -d -m 0755 "$ACCT_DIR/skills"
           run cp -rT "$SKILL" "$ACCT_DIR/skills/$(basename "$SKILL")"
         done

@@ -42,6 +42,12 @@
     atuin.url = "github:atuinsh/atuin/v18.23.0";
     atuin.flake = false;
 
+    # Reusable coding-agent skills (SKILL.md dirs under skills/). Source only;
+    # home/cli/claude and home/agent-host symlink them into the Claude config
+    # dirs. Bump with `nix flake update agent-skills`.
+    agent-skills.url = "github:nwlnexus/agent-skills";
+    agent-skills.flake = false;
+
     # OS layer for non-NixOS Linux hosts (hosts/linux/*.nix → systemConfigs).
     # Pinned to upstream main after v1.1.0 and NOT following our nixpkgs: its
     # NixOS-module imports must match its own pinned nixpkgs (the combination
