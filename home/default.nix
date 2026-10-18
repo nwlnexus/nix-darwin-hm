@@ -194,6 +194,15 @@ in
       HOMEBREW_BAT = "1";
       HOMEBREW_CURLRC = "1";
       GOPATH = "${homePrefix}/${user}/go";
+      # Node (Homebrew/mise builds, so npx and every npx-launched MCP server)
+      # ships its own CA list and ignores the system store, so it fails TLS to
+      # registry.npmjs.org (UNABLE_TO_GET_ISSUER_CERT_LOCALLY) behind a
+      # TLS-inspecting proxy / custom roots and MCP servers time out on
+      # connect. Point it at the system bundle (additive to Node's own).
+      # The agent-host launchers source hm-session-vars.sh, so the Remote
+      # Control services inherit this too.
+      NODE_EXTRA_CA_CERTS =
+        if pkgs.stdenv.isDarwin then "/etc/ssl/cert.pem" else "/etc/ssl/certs/ca-certificates.crt";
     };
 
     sessionPath = [
