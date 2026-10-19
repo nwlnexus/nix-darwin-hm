@@ -82,9 +82,11 @@ Test files live beside their module as `*.test.ts`.
 **Why first:** independently valuable, and it is what makes `--skip-skills` (Task 3) safe fleet-wide. It also fixes a bug that exists **today**: gitnexus's 7 skills, its hooks, and its MCP registration were written by an imperative one-off `gitnexus setup` on a single machine and live nowhere in nix. A fresh nix-darwin host gets the binary and none of the integration.
 
 **Files:**
+
 - Modify: `home/cli/claude/default.nix`
 
 **Interfaces:**
+
 - Produces: gitnexus skills + hooks + MCP registration present on **every** nix-darwin host after rebuild. Consumed by Task 3's `--skip-skills`.
 
 - [x] **Step 1: Resolve the gitnexus binary in nix.** It is a mise global (`npm:gitnexus`), not a nixpkgs package, so it is not on the activation script's `PATH` by default. Resolve it from the mise install prefix (`~/.local/share/mise/installs/npm-gitnexus/latest/bin/gitnexus`). Guard on existence — if mise has not installed it yet on a fresh host, the activation must **no-op, not fail**.
@@ -126,9 +128,11 @@ git commit -m "feat(gitnexus): nix-manage skills/hooks/MCP via setup activation 
 **Why:** `~/.gitnexus/registry.json` is a single file every repo in the sweep wants to write, and the sweep is concurrent. This is a lost-update race. It must be closed **before** anything writes the registry.
 
 **Files:**
+
 - Create: `scripts/repomix-pack/src/registry.ts`, `src/registry.test.ts`
 
 **Interfaces:**
+
 - Produces:
 
 ```ts
@@ -165,9 +169,11 @@ Expected: all pass, including the concurrent-append test.
 ## Task 3: `graph.ts` — commit gate, analyze, re-anchor
 
 **Files:**
+
 - Create: `scripts/repomix-pack/src/graph.ts`, `src/graph.test.ts`
 
 **Interfaces:**
+
 - Consumes: `RepoTarget` (Task 4), `registry.ts` (Task 2).
 - Produces: `export async function refreshGraph(target: RepoTarget, cachePath: string): Promise<GraphResult>` where `GraphResult = { status: "analyzed" | "skipped" | "failed"; nodes?: number; bytes?: number; error?: string }`.
 
@@ -175,7 +181,7 @@ Expected: all pass, including the concurrent-append test.
 
 - [x] **Step 2: Invoke `analyze`.** Command:
 
-```
+```text
 gitnexus analyze --no-stats --skip-skills --name <alias> <cache-path>
 ```
 
@@ -201,6 +207,7 @@ gitnexus analyze --no-stats --skip-skills --name <alias> <cache-path>
 ## Task 4: Config — `graph` opt-out + dev-clone path
 
 **Files:**
+
 - Modify: `scripts/repomix-pack/src/types.ts`, `src/config.ts`, `src/config.test.ts`, `modules/repomix/repos.toml`
 
 - [x] **Step 1: Extend `RepoTarget`** with `graph: boolean` (default `true`) and `devClonePath: string` (derived from the group's existing `base_dir` + repo name, with `~` expanded).
@@ -218,6 +225,7 @@ gitnexus analyze --no-stats --skip-skills --name <alias> <cache-path>
 **Why:** today the PR fires when the **pack's** content hash changes. Once the graph stage can also modify `CLAUDE.md`, a graph-only refresh would be **silently dropped**. This is the subtlest correctness risk in the phase.
 
 **Files:**
+
 - Modify: `scripts/repomix-pack/src/git-pr.ts`, `src/git-pr.test.ts`
 
 - [x] **Step 1: Write the regression test first** — it must fail against current `main`: pack unchanged + `CLAUDE.md` changed ⇒ a PR is still created/updated.
@@ -233,6 +241,7 @@ gitnexus analyze --no-stats --skip-skills --name <alias> <cache-path>
 ## Task 6: Orchestration + CLI + disk budget
 
 **Files:**
+
 - Modify: `scripts/repomix-pack/src/index.ts`, `src/index.test.ts`
 
 - [x] **Step 1: Wire the graph stage** into the per-repo flow, after checkout and before the PR step, so its `CLAUDE.md` edit is staged by Task 5's gate.
@@ -252,6 +261,7 @@ gitnexus analyze --no-stats --skip-skills --name <alias> <cache-path>
 ## Task 7: Integration test + single-repo pilot
 
 **Files:**
+
 - Create: `scripts/repomix-pack/src/graph.integration.test.ts`
 
 - [x] **Step 1: Integration test** against a sandbox repo, asserting the properties the spike established:

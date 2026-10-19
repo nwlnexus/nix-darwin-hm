@@ -26,9 +26,11 @@
 ### Task 1: Spike workspace bootstrap
 
 **Files:**
+
 - Create: `/tmp/codebase-brain-openwiki-spike/bin/00-bootstrap.sh`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: `$SPIKE_ROOT/repos/{moneta,olympus-sdk}` clones; `$SPIKE_ROOT/artifacts/{moneta,olympus-sdk}/` dirs; `$SPIKE_ROOT/.env.spike` with shared env.
 
@@ -84,10 +86,12 @@ Expected: `moneta` and `olympus-sdk` listed; two 40-char SHAs printed.
 ### Task 2: Shared producers (repomix + gitnexus + syft)
 
 **Files:**
+
 - Create: `/tmp/codebase-brain-openwiki-spike/bin/10-producers.sh`
 - Reference: `modules/repomix/repomix.config.json` (shared repomix config in nix-darwin-hm)
 
 **Interfaces:**
+
 - Consumes: `$SPIKE_ROOT/repos/<repo>` (Task 1).
 - Produces per repo: `artifacts/<repo>/repomix.xml`, `artifacts/<repo>/graph/` (gitnexus `.gitnexus/`), `artifacts/<repo>/sbom.cdx.json`.
 
@@ -139,9 +143,11 @@ Expected: files present; `"CycloneDX"` printed and a non-negative component coun
 ### Task 3: Studio Ollama connectivity + openwiki install
 
 **Files:**
+
 - Create: `/tmp/codebase-brain-openwiki-spike/bin/20-llm-check.sh`
 
 **Interfaces:**
+
 - Consumes: `$SPIKE_ROOT/.env.spike`.
 - Produces: `artifacts/_llm/model.txt` (resolved model id that answered), verified openwiki binary.
 
@@ -190,9 +196,11 @@ Expected: `llm OK: qwen3.6:27b-mlx` (or the fallback). If it errors, confirm `ST
 ### Task 4: Path O — openwiki code mode (OKF)
 
 **Files:**
+
 - Create: `/tmp/codebase-brain-openwiki-spike/bin/30-path-o.sh`
 
 **Interfaces:**
+
 - Consumes: `$SPIKE_ROOT/repos/<repo>`, resolved model (Task 3).
 - Produces per repo: `artifacts/<repo>/openwiki-okf/` (copied OKF wiki), `artifacts/<repo>/openwiki-okf/_raw-tree.txt` (record of what openwiki generated).
 
@@ -240,6 +248,7 @@ Expected: at least one `.md` per repo; at least one file with a `type:` frontmat
 ### Task 5: Path C — custom slotted docs (Bun/TS)
 
 **Files:**
+
 - Create: `/tmp/codebase-brain-openwiki-spike/gen/package.json`
 - Create: `/tmp/codebase-brain-openwiki-spike/gen/src/llm.ts`
 - Create: `/tmp/codebase-brain-openwiki-spike/gen/src/inventory.ts`
@@ -247,6 +256,7 @@ Expected: at least one `.md` per repo; at least one file with a `type:` frontmat
 - Test: `/tmp/codebase-brain-openwiki-spike/gen/src/inventory.test.ts`
 
 **Interfaces:**
+
 - Consumes: `artifacts/<repo>/{repomix.xml,sbom.cdx.json}`, resolved model, `STUDIO_OLLAMA_URL`.
 - Produces per repo: `artifacts/<repo>/custom-mdx/overview.md`, `artifacts/<repo>/custom-mdx/tech-inventory.md`.
 - Exposes for Task 6: `renderInventory(sbom): string`, `chatComplete(baseUrl, model, prompt): Promise<string>`.
@@ -421,10 +431,12 @@ Expected: overview has OKF+extended frontmatter then `## TL;DR`; inventory has t
 ### Task 6: Dry-run Moneta nugget generator
 
 **Files:**
+
 - Create: `/tmp/codebase-brain-openwiki-spike/gen/src/nuggets.ts`
 - Test: `/tmp/codebase-brain-openwiki-spike/gen/src/nuggets.test.ts`
 
 **Interfaces:**
+
 - Consumes: `artifacts/<repo>/openwiki-okf/**` (Path O) and `artifacts/<repo>/custom-mdx/**` (Path C).
 - Produces per repo: `artifacts/<repo>/moneta-dry-run.openwiki.json`, `artifacts/<repo>/moneta-dry-run.custom.json`.
 - Exposes: `nuggetsFromMarkdown(md, {repo, docType, sha, brainPath}): Nugget[]`.
@@ -590,11 +602,13 @@ Expected: `no capture calls`; each JSON reports an integer length.
 ### Task 7: Scorecards + recommendation
 
 **Files:**
+
 - Create: `/tmp/codebase-brain-openwiki-spike/artifacts/moneta/scorecard.md`
 - Create: `/tmp/codebase-brain-openwiki-spike/artifacts/olympus-sdk/scorecard.md`
 - Create: `/tmp/codebase-brain-openwiki-spike/artifacts/scorecard-summary.md`
 
 **Interfaces:**
+
 - Consumes: all artifacts from Tasks 2–6.
 - Produces: filled scorecards + a recommendation (adopt / keep / hybrid).
 
@@ -658,6 +672,7 @@ Expected: `summary OK`, and both per-repo scorecards have no empty required cell
 ## Self-Review
 
 **Spec coverage** (against `2026-07-17-codebase-brain-openwiki-spike-design.md`):
+
 - §4/§5/§6 workspace + producers + run sequence → Tasks 1–4.
 - Path O openwiki OKF → Task 4. Path C custom → Task 5. Dry-run Moneta → Task 6.
 - §7 rubric + §10 success (scorecards, recommendation, monorepo notes, Ollama reliability) → Task 7.

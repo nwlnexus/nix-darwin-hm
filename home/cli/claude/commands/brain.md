@@ -9,11 +9,13 @@ You are maintaining the second-brain wiki at `$SECOND_BRAIN_PATH`
 Arguments: `$ARGUMENTS`
 
 ## Routing
+
 - `ingest` (no path) → process every file with frontmatter `status: new` under `raw/_inbox/` (candidates written by the mnemosyne capture pipeline).
 - `ingest <path>` → ingest just that file/URL (may be outside `_inbox`).
 - anything else → treat `$ARGUMENTS` as a QUERY; answer from `wiki/`; if the wiki is thin, say so and suggest a source to ingest rather than inventing an answer.
 
 ## INGEST loop (per source)
+
 1. `git -C "$SECOND_BRAIN_PATH" pull` first. Per SCHEMA DISCIPLINE, disable Obsidian Remotely Save Sync-On-Save (or confirm Obsidian is closed) before editing.
 2. Read the source. Summarize key takeaways; confirm with the human before writing wiki pages.
 3. Set the source frontmatter `status: ingested` (+ `ingested:` date).

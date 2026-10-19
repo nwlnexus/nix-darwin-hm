@@ -66,7 +66,7 @@ made reproducible**:
 
 A new home-manager module **`home/cli/claude/`**:
 
-```
+```text
 nix-darwin-hm/home/cli/claude/
   default.nix            # module: packages, home.file (script + hook), home.activation (enable --no-verify)
   mem0ctl.sh             # canonical unified script — source of truth, subcommand-dispatched
@@ -153,6 +153,7 @@ twice. The merge is **keyed replace-or-skip**:
 - Write atomically (temp + mv). Never rewrite unrelated keys.
 
 Sketch:
+
 ```bash
 jq --arg cmd "$HOOK_PATH" '
   .hooks //= {} | .hooks.SessionStart //= [] |
@@ -169,12 +170,14 @@ Thin bash wrapper keeps the existing fail-open contract (any error →
 The **formatting** moves into `mem0_recall_format.py` so it's unit-testable.
 
 Compact output (replaces the verbose block):
-```
+
+```text
 Recalled <N> memories for <basename(cwd)> — top 3:
 1. <memory truncated to ~200 chars, single line>
 2. ...
 3. ...
 ```
+
 `N` = total hits; only the top 3 are shown, each truncated to one line. Keeps the
 SessionStart `additionalContext` well under the harness persist threshold so it
 renders inline. Empty/valid-but-no-hits response → `{"continue":true}` (no block).

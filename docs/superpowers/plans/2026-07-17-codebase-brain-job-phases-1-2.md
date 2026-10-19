@@ -6,7 +6,7 @@
 
 **Architecture:** New Bun/TS app under `scripts/codebase-brain/` reuses `scripts/repomix-pack` pack/graph helpers and `modules/repomix/{repos.toml,repomix.config.json}`. Stages are pure-ish modules with digests; a thin CLI orchestrates them. Argo Events/Workflows and ExternalSecrets live in **olympus-gitops** (out of this repo) and invoke the Job image. Moneta capture and shared GitNexus MCP serve are **out of scope** (phases 3–4).
 
-**Tech Stack:** Bun/TypeScript, Zod, repomix, gitnexus, openwiki@0.2.x, syft, AWS S3 API (R2), `gh`/`git`, Anthropic API (openwiki native provider).
+**Tech Stack:** Bun/TypeScript, Zod, repomix, gitnexus, <openwiki@0.2.x>, syft, AWS S3 API (R2), `gh`/`git`, Anthropic API (openwiki native provider).
 
 **Spec:** [`docs/superpowers/specs/2026-07-15-codebase-brain-pipeline-design.md`](../specs/2026-07-15-codebase-brain-pipeline-design.md)  
 **Spike evidence:** [`docs/superpowers/specs/2026-07-17-codebase-brain-openwiki-spike-results.md`](../specs/2026-07-17-codebase-brain-openwiki-spike-results.md)
@@ -70,12 +70,14 @@ docs/superpowers/plans/…        # this plan
 ### Task 1: Scaffold `scripts/codebase-brain`
 
 **Files:**
+
 - Create: `scripts/codebase-brain/package.json`
 - Create: `scripts/codebase-brain/tsconfig.json`
 - Create: `scripts/codebase-brain/src/types.ts`
 - Create: `scripts/codebase-brain/src/index.ts` (stub CLI)
 
 **Interfaces:**
+
 - Produces: `JobContext`, `Digests`, `GraphRef` types used by all later stages
 
 - [ ] **Step 1: Create package.json and tsconfig**
@@ -235,10 +237,12 @@ git commit -m "feat(codebase-brain): scaffold Job CLI and types"
 ### Task 2: Digests + skip gate
 
 **Files:**
+
 - Create: `scripts/codebase-brain/src/digests.ts`
 - Create: `scripts/codebase-brain/src/digests.test.ts`
 
 **Interfaces:**
+
 - Produces: `sha256Hex(bytes)`, `fileDigest(path)`, `shouldSkipLlm(current, previous)`, `TEMPLATE_VERSION`
 
 - [ ] **Step 1: Write failing tests**
@@ -319,10 +323,12 @@ git commit -m "feat(codebase-brain): add digest helpers and LLM skip gate"
 ### Task 3: Syft SBOM stage
 
 **Files:**
+
 - Create: `scripts/codebase-brain/src/stages/sbom.ts`
 - Create: `scripts/codebase-brain/src/stages/sbom.test.ts`
 
 **Interfaces:**
+
 - Consumes: `JobContext`
 - Produces: `runSbom(ctx) → { sbomPath, sbomDigest }`
 
@@ -392,10 +398,12 @@ git commit -m "feat(codebase-brain): add syft CycloneDX stage"
 ### Task 4: Inventory renderer (syft → MD)
 
 **Files:**
+
 - Create: `scripts/codebase-brain/src/stages/inventory.ts`
 - Create: `scripts/codebase-brain/src/stages/inventory.test.ts`
 
 **Interfaces:**
+
 - Consumes: CycloneDX JSON
 - Produces: `renderInventory(sbom): string`, `writeInventoryPage(ctx, sbomPath, digests, graphRef)`
 
@@ -503,12 +511,14 @@ git commit -m "feat(codebase-brain): deterministic syft inventory page"
 ### Task 5: Frontmatter Zod + normalize OKF pages
 
 **Files:**
+
 - Create: `scripts/codebase-brain/src/schema/frontmatter.ts`
 - Create: `scripts/codebase-brain/src/schema/frontmatter.test.ts`
 - Create: `scripts/codebase-brain/src/stages/normalize.ts`
 - Create: `scripts/codebase-brain/src/stages/normalize.test.ts`
 
 **Interfaces:**
+
 - Produces: `NwlFrontmatterSchema`, `stampNwlExtensions(rawMd, ctx, digests, graph) → string`, `normalizeWikiDir(...)`
 
 - [ ] **Step 1: Failing schema test**
@@ -673,10 +683,12 @@ git commit -m "feat(codebase-brain): Zod OKF+nwl normalize for wiki pages"
 ### Task 6: Strip openwiki side effects
 
 **Files:**
+
 - Create: `scripts/codebase-brain/src/stages/strip-side-effects.ts`
 - Create: `scripts/codebase-brain/src/stages/strip-side-effects.test.ts`
 
 **Interfaces:**
+
 - Produces: `isPublishableWikiRel(rel): boolean`, `SIDE_EFFECT_PATTERNS`
 
 - [ ] **Step 1–4: TDD**
@@ -708,12 +720,14 @@ git commit -m "feat(codebase-brain): filter openwiki side-effect files from publ
 ### Task 7: Clone + pack + analyze stages
 
 **Files:**
+
 - Create: `scripts/codebase-brain/src/stages/clone.ts`
 - Create: `scripts/codebase-brain/src/stages/pack.ts`
 - Create: `scripts/codebase-brain/src/stages/analyze.ts`
 - Create: `scripts/codebase-brain/src/stages/facets.ts`
 
 **Interfaces:**
+
 - Reuse: `runPack` from `scripts/repomix-pack/src/pack.ts` via relative import or duplicated thin wrapper calling `repomix` CLI (prefer CLI in Job image for isolation).
 - Produces: `cloneAtSha`, `runPackStage`, `runAnalyzeStage` → `{ graphDir, graphDigest, tarballPath }`, `runFacetsStage`
 
@@ -821,10 +835,12 @@ git commit -m "feat(codebase-brain): clone, pack, analyze, facets stages"
 ### Task 8: OpenWiki stage (Anthropic)
 
 **Files:**
+
 - Create: `scripts/codebase-brain/src/stages/openwiki.ts`
 - Create: `scripts/codebase-brain/src/stages/openwiki.test.ts` (unit: env + copy filter only)
 
 **Interfaces:**
+
 - Consumes: `JobContext` with `anthropicApiKey`
 - Produces: `runOpenWiki(ctx) → { wikiDir, wallClockSeconds }`
 
@@ -906,10 +922,12 @@ git commit -m "feat(codebase-brain): openwiki Anthropic narrative stage"
 ### Task 9: R2 graph publish
 
 **Files:**
+
 - Create: `scripts/codebase-brain/src/publish/r2-graph.ts`
 - Create: `scripts/codebase-brain/src/publish/r2-graph.test.ts`
 
 **Interfaces:**
+
 - Produces: `buildGraphRef(ctx, graphDigest)`, `publishGraph(ctx, tarballPath, graphDigest)`  
 - Dry-run: write `graph-ref.json` + skip upload when `ctx.dryRun` or missing R2 creds
 
@@ -946,9 +964,11 @@ git commit -m "feat(codebase-brain): R2 graph tarball + graph-ref publish"
 ### Task 10: Brain PR publisher
 
 **Files:**
+
 - Create: `scripts/codebase-brain/src/publish/brain-pr.ts`
 
 **Interfaces:**
+
 - Consumes: normalized `outDir/brain-docs/{repo}/**`
 - Produces: PR on `second-brain` branch `automation/brain-{repo}`
 
@@ -975,9 +995,11 @@ git commit -m "feat(codebase-brain): publish normalized docs via brain PR"
 ### Task 11: Wire orchestrator (`phase 1|2|all`)
 
 **Files:**
+
 - Modify: `scripts/codebase-brain/src/index.ts`
 
 **Interfaces:**
+
 - Produces: end-to-end `main()` calling stages in order; write `outDir/manifest.json` with digests + skip decision
 
 - [ ] **Step 1: Implement run pipeline**
@@ -1054,6 +1076,7 @@ git commit -m "feat(codebase-brain): wire phase 1–2 Job orchestrator"
 ### Task 12: Job Containerfile
 
 **Files:**
+
 - Create: `scripts/codebase-brain/Containerfile`
 
 ```dockerfile
@@ -1099,6 +1122,7 @@ git commit -m "feat(codebase-brain): add Job Containerfile with required CLIs"
 ### Task 13: olympus-gitops checklist (external)
 
 **Files:**
+
 - Create: `docs/superpowers/plans/2026-07-17-codebase-brain-argo-checklist.md` (in this repo, executed in olympus-gitops)
 
 Document exact resources to add in olympus-gitops (do not invent cluster YAML here beyond the checklist):
@@ -1123,6 +1147,7 @@ git commit -m "docs: Argo/olympus-gitops checklist for codebase-brain Job"
 ### Task 14: Docs + README for the Job
 
 **Files:**
+
 - Create: `scripts/codebase-brain/README.md`
 - Modify: `docs/superpowers/specs/2026-07-15-codebase-brain-pipeline-design.md` §10 — note provisional brain repo `second-brain`
 

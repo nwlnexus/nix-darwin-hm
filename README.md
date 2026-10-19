@@ -61,4 +61,3 @@ Or if you don't have `darwin-rebuild` in your path:
 ```bash
 nix run nix-darwin -- switch --flake .#<hostname>
 ```
-

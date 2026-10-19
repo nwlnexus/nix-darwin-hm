@@ -97,11 +97,13 @@ Test files live beside their module as `*.test.ts`.
 ## Task 1: Nix globals + config scaffolding
 
 **Files:**
+
 - Modify: `home/default.nix` (the `programs.mise` block, ~line 206)
 - Create: `modules/repomix/repos.toml`
 - Create: `modules/repomix/repomix.config.json`
 
 **Interfaces:**
+
 - Produces: `modules/repomix/repos.toml` (schema below) and `modules/repomix/repomix.config.json`, consumed by Tasks 2 and 10. `repomix` + `gitnexus` on `PATH` after rebuild.
 
 - [x] **Step 1: Add mise globals.** In `home/default.nix`, inside `programs.mise` `globalConfig.tools`, add:
@@ -167,12 +169,14 @@ git commit -m "feat(repomix): mise globals + shared config scaffolding (#<ticket
 ## Task 2: Runner scaffold + config parser
 
 **Files:**
+
 - Create: `scripts/repomix-pack/package.json`, `tsconfig.json`
 - Create: `scripts/repomix-pack/src/types.ts`
 - Create: `scripts/repomix-pack/src/config.ts`
 - Test: `scripts/repomix-pack/src/config.test.ts`
 
 **Interfaces:**
+
 - Consumes: `modules/repomix/repos.toml` (Task 1).
 - Produces:
   - `types.ts`: `interface RepoTarget { owner: string; name: string; slug: string; sshHost: string; originUrl: string; defaultBranch: string | null; packPath: string; branch: string; group: string; }`
@@ -347,10 +351,12 @@ git commit -m "feat(repomix): config parser + RepoTarget (#<ticket>)"
 ## Task 3: Isolated origin checkout
 
 **Files:**
+
 - Create: `scripts/repomix-pack/src/checkout.ts`
 - Test: `scripts/repomix-pack/src/checkout.test.ts`
 
 **Interfaces:**
+
 - Consumes: `RepoTarget` (Task 2).
 - Produces: `checkout(target: RepoTarget, cacheRoot: string): Promise<{ dir: string; defaultBranch: string; headSha: string }>`
 
@@ -445,10 +451,12 @@ git commit -m "feat(repomix): isolated origin checkout (#<ticket>)"
 ## Task 4: Pack + content-hash gate
 
 **Files:**
+
 - Create: `scripts/repomix-pack/src/hash.ts`, `src/pack.ts`
 - Test: `scripts/repomix-pack/src/pack.test.ts`
 
 **Interfaces:**
+
 - Consumes: `RepoTarget`, checkout `dir` (Task 3).
 - Produces:
   - `hash.ts`: `contentHash(bytes: Uint8Array | string): string` (sha256 hex)
@@ -550,10 +558,12 @@ git commit -m "feat(repomix): pack runner + content-hash change gate (#<ticket>)
 ## Task 5: Gitignore-guarantee
 
 **Files:**
+
 - Create: `scripts/repomix-pack/src/gitignore.ts`
 - Test: `scripts/repomix-pack/src/gitignore.test.ts`
 
 **Interfaces:**
+
 - Produces: `ensureTracked(dir: string, packPath: string): Promise<{ patched: boolean }>` — guarantees `packPath` is not gitignored, writing a `!/<dir>/` negation to `.gitignore` if needed.
 
 - [x] **Step 1: Write the failing test** `src/gitignore.test.ts`:
@@ -636,10 +646,12 @@ git commit -m "feat(repomix): guarantee pack stays git-tracked (#<ticket>)"
 ## Task 6: Branch → PR create-or-update
 
 **Files:**
+
 - Create: `scripts/repomix-pack/src/git-pr.ts`
 - Test: `scripts/repomix-pack/src/git-pr.test.ts`
 
 **Interfaces:**
+
 - Consumes: checkout `dir`, `RepoTarget`.
 - Produces: `commitToBranch(dir: string, target: RepoTarget, base: string, files: string[]): Promise<void>` (deterministic branch, reset to base, commit, force-push) and `openOrUpdatePr(target: RepoTarget, base: string, title: string, body: string): Promise<{ url: string; created: boolean }>` (idempotent via `gh`).
 
@@ -742,10 +754,12 @@ git commit -m "feat(repomix): deterministic branch + idempotent PR (#<ticket>)"
 ## Task 7: Brain sink stub (StagingSink)
 
 **Files:**
+
 - Create: `scripts/repomix-pack/src/sink.ts`
 - Test: `scripts/repomix-pack/src/sink.test.ts`
 
 **Interfaces:**
+
 - Produces:
   - `interface RepoMeta { slug: string; owner: string; name: string; commit: string; hash: string; bytes: number; ts: string; }`
   - `interface PackSink { write(packBytes: Uint8Array, meta: RepoMeta): Promise<void>; }`
@@ -823,10 +837,12 @@ git commit -m "feat(repomix): brain sink seam + StagingSink (#<ticket>)"
 ## Task 8: Slack notify
 
 **Files:**
+
 - Create: `scripts/repomix-pack/src/notify.ts`
 - Test: `scripts/repomix-pack/src/notify.test.ts`
 
 **Interfaces:**
+
 - Produces:
   - `buildSlackPayload(p: { slug: string; base: string; prUrl: string; created: boolean; bytes: number }): object` (pure, testable).
   - `notifySlack(webhook: string, payload: object): Promise<void>` (posts; skipped when `webhook` is empty).
@@ -910,10 +926,12 @@ git commit -m "feat(repomix): slack notification payload + sender (#<ticket>)"
 ## Task 9: Runner orchestration + CLI
 
 **Files:**
+
 - Create: `scripts/repomix-pack/src/index.ts`
 - Test: `scripts/repomix-pack/src/index.test.ts` (integration; requires real `repomix` on PATH — Task 1)
 
 **Interfaces:**
+
 - Consumes: all of Tasks 2–8.
 - Produces: CLI `repomix-pack [--group g] [--only slug…] [--dry-run] [--no-pr] [--brain-only] [--no-notify]`, and `run(opts): Promise<RunSummary>` where `RunSummary = { succeeded: string[]; skipped: string[]; failed: {slug:string;error:string}[]; prs: {slug:string;url:string}[] }`.
 
@@ -1095,9 +1113,11 @@ git commit -m "feat(repomix): runner orchestration + CLI (#<ticket>)"
 ## Task 10: Reusable CI workflow
 
 **Files:**
+
 - Create: `.github/workflows/repomix-pack.yml`
 
 **Interfaces:**
+
 - Produces: a `workflow_call` workflow referenced by caller repos as `nwlnexus/nix-darwin-hm/.github/workflows/repomix-pack.yml@main`.
 
 - [x] **Step 1: Create `.github/workflows/repomix-pack.yml`:**
@@ -1183,9 +1203,11 @@ git commit -m "feat(repomix): reusable CI workflow for per-repo packs (#<ticket>
 ## Task 11: Pilot caller on olympus-sdk
 
 **Files:**
+
 - Create (in the **olympus-sdk** repo, separate checkout): `.github/workflows/pack.yml`
 
 **Interfaces:**
+
 - Consumes: the reusable workflow (Task 10).
 
 - [x] **Step 1: In an isolated checkout of `nwlnexus/olympus-sdk`, create `.github/workflows/pack.yml`:**
@@ -1225,10 +1247,12 @@ Expected: run succeeds; an `automation/repomix-pack` PR appears with `.llm/repom
 ## Task 12: Nix PATH install + launchd
 
 **Files:**
+
 - Create: `modules/repomix/repomix.nix`
 - Modify: the host/profile module that imports `modules/repomix/` (follow the existing import pattern in `modules/profiles/dev.nix`)
 
 **Interfaces:**
+
 - Consumes: the runner (Task 9).
 - Produces: `repomix-pack` on `PATH`; a launchd agent running it on a schedule.
 
@@ -1280,9 +1304,11 @@ git commit -m "feat(repomix): PATH install + launchd schedule (#<ticket>)"
 ## Task 13: Fan-out callers + work sweep
 
 **Files:**
+
 - Create (per personal repo): `.github/workflows/pack.yml` (identical to Task 11, adjusting default branch if not `main`)
 
 **Interfaces:**
+
 - Consumes: Tasks 11 (proven pilot) and 12 (local runner installed).
 
 - [x] **Step 1: Add the caller workflow (Task 11 Step 1 content) via PR to each remaining personal repo:** `olympus-gitops`, `olympus-infra`, `nix-darwin-hm`, `moneta`, `nix-op-secrets`, `second-brain`, `olympus-tailnet`, `homebrew-olympus`. Each PR: `ci: generate repomix context pack on push`, label `automation`, referencing this task's sub-issue.

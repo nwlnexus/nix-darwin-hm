@@ -373,4 +373,3 @@ gitnexus facet cluster pages only when openwiki flattens packages.
    `docs/superpowers/` after review.
 7. Exact R2 key layout / signed URL shape for later mnemosyne on-demand graph pull (parent spec
    already sketches `graphs/{owner}/{repo}/{sha}.tgz` — spike only needs a compatible ref JSON).
-

@@ -36,7 +36,7 @@ Produce an always-current, LLM-optimized **context pack** for each active repo, 
 
 One home (`nix-darwin-hm`), two runners sharing one config and one pack format. Both runners operate on a **clean origin checkout — never a dev working clone.**
 
-```
+```text
 nix-darwin-hm/
 ├─ modules/repomix/repos.toml            # source of truth: grouped repo list
 ├─ modules/repomix/repomix.config.json   # shared repomix defaults
@@ -128,7 +128,7 @@ Bun chosen for: native TOML import, alignment with the TS-heavy stack (olympus-s
 
 ### 4.2 CLI surface
 
-```
+```text
 repomix-pack [--group personal|work|all] [--only owner/name ...]
              [--dry-run] [--no-pr] [--brain-only] [--no-notify]
 ```
