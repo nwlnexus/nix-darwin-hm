@@ -1,1 +1,1 @@
-{{ op://Dev/moneta/auth_token }}
+{{ op://CI/moneta/auth_token }}
