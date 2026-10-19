@@ -92,7 +92,7 @@ User-specific packages should be added to the home-manager configuration, organi
 }
 ```
 
-4. **Import the new file** in `home/apps/default.nix` or `home/cli/default.nix`:
+Finally, **import the new file** in `home/apps/default.nix` or `home/cli/default.nix`:
 
 ```nix
 # home/cli/default.nix

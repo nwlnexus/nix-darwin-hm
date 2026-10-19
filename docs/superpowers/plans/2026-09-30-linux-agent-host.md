@@ -108,6 +108,7 @@ for Tasks 1–3.
 ### Task 1: Evaluation test harness and darwin snapshot gate
 
 **Files:**
+
 - Create: `tests/lib/hm-snapshot.nix`
 - Create: `tests/lib/darwin-snapshot.nix`
 - Create: `tests/default.nix`
@@ -115,6 +116,7 @@ for Tasks 1–3.
 - Modify: `justfile` (append three recipes)
 
 **Interfaces:**
+
 - Produces:
   - `import ./tests { }` evaluates to a list of failed tests (`[]` means all
     pass).
@@ -305,10 +307,12 @@ a *system* module. This task makes that a plain home-manager module, which the
 system module then imports. Darwin output must be unchanged.
 
 **Files:**
+
 - Create: `home/shell.nix`
 - Modify: `modules/shell.nix` (whole file)
 
 **Interfaces:**
+
 - Produces: the home-manager module `home/shell.nix`. It defines
   `options.d.shell.{aliases (attrs), variables (attrs), sources (listOf str)}`
   and applies `home.shellAliases = aliases // <built-ins>` and
@@ -453,6 +457,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ### Task 3: Standalone home-manager output for `ai-agent-host`
 
 **Files:**
+
 - Create: `home/standalone.nix`
 - Create: `home/linux-shell.nix`
 - Create: `hosts/linux/ai-agent-host.nix`
@@ -461,6 +466,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `tests/default.nix` (the suite list)
 
 **Interfaces:**
+
 - Consumes: `home/shell.nix` (Task 2).
 - Produces:
   - The output `homeConfigurations."nwilliams-lucas@ai-agent-host"`.
@@ -706,14 +712,14 @@ reuse the binding:
 ```
 
 Finally, bind the `mkFlake` result and merge the new output into it. Change
-the line `    mkFlake {` (directly after `in`) to:
+the line `mkFlake {` (directly after `in`) to:
 
 ```nix
     let
       base = mkFlake {
 ```
 
-and change the closing `    };` of the `mkFlake` call (the last line before
+and change the closing `};` of the `mkFlake` call (the last line before
 `}` closes `outputs`) to:
 
 ```nix
@@ -773,7 +779,8 @@ gh pr view feat/standalone-home-manager --json state --jq .state
 ```
 
 Expected: `MERGED`.
-```
+
+```text
 
 ---
 
@@ -786,6 +793,7 @@ cd /Volumes/REALTEK/projects/personal/nix-darwin-hm && git worktree add -b fix/l
 ### Task 4: Gate macOS-only paths in git, ssh and `home/default.nix`
 
 **Files:**
+
 - Modify: `home/cli/git/default.nix` (the `signing = …` block and `settings.gpg`)
 - Modify: `home/ssh_config.nix` (the arguments, the three `ProxyCommand`s, the
   `onePassword` block)
@@ -795,6 +803,7 @@ cd /Volumes/REALTEK/projects/personal/nix-darwin-hm && git worktree add -b fix/l
 - Modify: `tests/default.nix` (the suite list)
 
 **Interfaces:**
+
 - Consumes: `d.apps.onepassword.gui` (bool), added in Task 5. This task reads
   it with `or true`, so it evaluates before Task 5 lands.
 - Produces: none for other tasks.
@@ -989,12 +998,14 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ### Task 5: Split the 1Password module into secrets (always) and GUI (opt-out)
 
 **Files:**
+
 - Modify: `home/apps/1password.nix` (the options block and the `config = …`
   block)
 - Modify: `hosts/linux/ai-agent-host.nix` (`home`)
 - Modify: `tests/portability.nix` (add tests)
 
 **Interfaces:**
+
 - Produces:
   - `d.apps.onepassword.gui` (bool, default `true`).
   - `d.apps.onepassword.tokenFiles.{personal,work}` (nullOr str, default
@@ -1201,6 +1212,7 @@ cd /Volumes/REALTEK/projects/personal/nix-darwin-hm && git worktree add -b feat/
 ### Task 6: system-manager input, `system/linux/`, and the `systemConfigs` output
 
 **Files:**
+
 - Modify: `flake.nix` (inputs; the `let` block; the merged outputs)
 - Create: `system/linux/default.nix`
 - Modify: `hosts/linux/ai-agent-host.nix` (add `os`)
@@ -1208,6 +1220,7 @@ cd /Volumes/REALTEK/projects/personal/nix-darwin-hm && git worktree add -b feat/
 - Modify: `tests/default.nix` (the suite list)
 
 **Interfaces:**
+
 - Consumes: `linuxHosts`, `sharedArgs` and `homeConfigurations` from `flake.nix`
   (Task 3).
 - Produces:
@@ -1471,6 +1484,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ### Task 7: Switch script, bootstrap script, and the token recipe fix
 
 **Files:**
+
 - Create: `scripts/linux-switch.sh`
 - Create: `scripts/bootstrap-agent-host.sh`
 - Modify: `justfile`, in `materialize-nix-github-token`: the line
@@ -1480,6 +1494,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `tests/default.nix` (the suite list)
 
 **Interfaces:**
+
 - Consumes: `packages.x86_64-linux.{system-manager,home-manager}` (Task 6).
 - Produces: `scripts/linux-switch.sh` (no arguments; host = `hostname -s`) and
   `scripts/bootstrap-agent-host.sh [--dry-run]`.
@@ -1761,6 +1776,7 @@ cd /Volumes/REALTEK/projects/personal/nix-darwin-hm && git worktree add -b feat/
 ### Task 8: Per-account Claude Code / Codex commands and Remote Control services
 
 **Files:**
+
 - Create: `home/agent-host/default.nix`
 - Create: `home/agent-host/services.nix`
 - Modify: `home/standalone.nix` (imports)
@@ -1769,6 +1785,7 @@ cd /Volumes/REALTEK/projects/personal/nix-darwin-hm && git worktree add -b feat/
 - Modify: `tests/default.nix` (the suite list)
 
 **Interfaces:**
+
 - Consumes: the `hostname` special arg (Task 3), and the
   `home.file."direnv-hook-<acct>"` entries in `home/default.nix`, whose `text`
   type is `lines`, so `mkAfter` appends.
@@ -2153,6 +2170,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ### Task 9: Documentation
 
 **Files:**
+
 - Modify: `AGENTS.md` (`CLAUDE.md`/`GEMINI.md` are symlinks to it; check with
   `ls -l CLAUDE.md`)
 - Modify: `README.md`
@@ -2235,6 +2253,7 @@ ssh ai-agent-host.local 'curl -fsSL https://raw.githubusercontent.com/nwlnexus/n
 ```
 
 Expected:
+
 - `+ sh -c 'curl … nix-installer …'`;
 - `+ prompt for the personal token`, `+ prompt for the work token`;
 - removals for `~/.atuin/bin`, `/usr/local/bin/starship`, `~/.local/bin/zoxide`,
@@ -2259,6 +2278,7 @@ ssh ai-agent-host.local 'set +e; ls -l ~/.ssh/id_ed25519 ~/.ssh/gitlab-work-gl ~
 ```
 
 Expected:
+
 - all four secret files exist, mode `-rw-------`;
 - both `.backup` files exist;
 - `nix.conf` shows `trusted-users = root nwilliams-lucas`,
@@ -2280,6 +2300,7 @@ ssh ai-agent-host.local '~/projects/personal/nix-darwin-hm/scripts/bootstrap-age
 ```
 
 Expected:
+
 - step 1 says `already installed`;
 - step 2 says `present` twice;
 - step 3 prints only the `kept:` line;
@@ -2305,6 +2326,7 @@ nix-darwin-hm checkout sits under `~/projects/personal`. For an empty
 `git -C ~/projects/work/.scratch`.
 
 Expected:
+
 - in `personal`: `4689066+nwlucas@users.noreply.github.com` and
   `/home/nwilliams-lucas/.claude-personal`;
 - in `work`: `59927973+nwilliams-lucas@users.noreply.github.com`,
@@ -2324,6 +2346,7 @@ ssh ai-agent-host.local 'agents status; systemctl --user show claude-rc-work -p 
 ```
 
 Expected:
+
 - four units `inactive (dead)`;
 - `claude-rc-work` shows `ActiveState=inactive` and `NRestarts=0`;
 - its status tail says the unit was skipped because of an unmet condition
@@ -2360,6 +2383,7 @@ ssh ai-agent-host.local 'ls -la ~/.claude-personal ~/.claude-work ~/.codex-perso
 ```
 
 Expected:
+
 - `.credentials.json` exists in both Claude directories and `auth.json` in both
   Codex directories;
 - all four units `active (running)`.

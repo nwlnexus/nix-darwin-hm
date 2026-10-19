@@ -23,7 +23,7 @@
 
 ## File Structure
 
-```
+```text
 home/cli/claude/
   default.nix              # NEW — nix module: mem0ctl pkg, home.file (hook+formatter), home.activation
   mem0ctl.sh               # NEW — unified script (disable-claude-mem | migrate | enable | bootstrap)
@@ -43,9 +43,11 @@ olympus-sdk (Task 9, separate PR): delete `tools/mem0-migrate/`; scrub live-tool
 ### Task 1: Move the Python migration tool into nix-darwin-hm
 
 **Files:**
+
 - Create: `home/cli/claude/mem0-migrate/` (verbatim copy of olympus-sdk `tools/mem0-migrate/`)
 
 **Interfaces:**
+
 - Produces: console script `mem0-migrate` (`mem0_migrate.run:main`), CLI flags `--db --url --user-id --mode {smoke,full} --checkpoint --concurrency --limit --app`. Runtime dep `httpx` is supplied at call time via `uv run --with httpx` (not a project dependency).
 
 - [ ] **Step 1: Copy the tool verbatim**
@@ -79,10 +81,12 @@ git commit -m "feat(claude): vendor mem0-migrate tool from olympus-sdk"
 ### Task 2: Recall formatter (`mem0_recall_format.py`)
 
 **Files:**
+
 - Create: `home/cli/claude/mem0_recall_format.py`
 - Test: `home/cli/claude/tests/test_recall_format.py`
 
 **Interfaces:**
+
 - Produces: `format_block(data: dict, cwd: str, top_k: int = 3, width: int = 200) -> str | None` and a `__main__` that reads API JSON on stdin, takes `cwd` as `argv[1]`, and prints either the SessionStart `hookSpecificOutput` JSON or `{"continue": true}`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -216,9 +220,11 @@ git commit -m "feat(claude): compact, unit-testable mem0 recall formatter"
 ### Task 3: Recall hook wrapper (`mem0-recall-hook.sh`)
 
 **Files:**
+
 - Create: `home/cli/claude/mem0-recall-hook.sh`
 
 **Interfaces:**
+
 - Consumes: `mem0_recall_format.py` (resolved as a sibling — works whether the hook is a nix-store symlink or an ad-hoc copy).
 - Produces: SessionStart hook output on stdout (JSON), fail-open on every error.
 
@@ -276,6 +282,7 @@ printf '%s' "$resp" | MEM0_TOP_K="$MEM0_TOP_K" python3 "$formatter" "$cwd" 2>/de
 - [ ] **Step 2: Lint + smoke-test fail-open**
 
 Run:
+
 ```bash
 chmod +x home/cli/claude/mem0-recall-hook.sh
 shellcheck home/cli/claude/mem0-recall-hook.sh
@@ -283,6 +290,7 @@ shellcheck home/cli/claude/mem0-recall-hook.sh
 ln -sf "$PWD/home/cli/claude/mem0_recall_format.py" home/cli/claude/mem0_recall_format.py 2>/dev/null || true
 echo '{"cwd":"/tmp/proj"}' | MEM0_URL="http://127.0.0.1:1" home/cli/claude/mem0-recall-hook.sh
 ```
+
 Expected: shellcheck clean; output is exactly `{"continue":true}`.
 
 - [ ] **Step 3: Commit**
@@ -297,10 +305,12 @@ git commit -m "feat(claude): fail-open mem0 SessionStart recall hook"
 ### Task 4: `mem0ctl` — script skeleton + `disable-claude-mem`
 
 **Files:**
+
 - Create: `home/cli/claude/mem0ctl.sh`
 - Test: `home/cli/claude/tests/test_mem0ctl.sh`
 
 **Interfaces:**
+
 - Produces: `mem0ctl disable-claude-mem` — kills claude-mem procs, disables across 3 layers, removes plugin cache, deletes live working set (keeps backup), idempotent. Env overrides `CLAUDE_DIR`, `CLAUDE_MEM_DIR`, `CLAUDE_JSON`.
 
 - [ ] **Step 1: Write the failing shell test (disable cases)**
@@ -484,10 +494,12 @@ git commit -m "feat(claude): mem0ctl disable-claude-mem (full local teardown)"
 ### Task 5: `mem0ctl enable` — hook install + SessionStart jq merge
 
 **Files:**
+
 - Modify: `home/cli/claude/mem0ctl.sh` (replace the `enable()` stub)
 - Modify: `home/cli/claude/tests/test_mem0ctl.sh` (add enable cases)
 
 **Interfaces:**
+
 - Produces: `mem0ctl enable [--no-verify]` — installs hook for non-nix hosts (skips nix-store symlink), keyed replace-or-skip merge of the SessionStart group, warn-only connectivity check unless `--no-verify`.
 
 - [ ] **Step 1: Add the failing enable tests**
@@ -576,9 +588,11 @@ git commit -m "feat(claude): mem0ctl enable (idempotent SessionStart jq merge)"
 ### Task 6: `mem0ctl migrate` + finalize dispatch
 
 **Files:**
+
 - Modify: `home/cli/claude/mem0ctl.sh` (replace the `migrate()` stub)
 
 **Interfaces:**
+
 - Produces: `mem0ctl migrate [--db PATH] [--mode smoke|full]` — defaults `--db` to the newest `*.premem0-*`, runs the vendored tool via `uv run --with httpx`, writing the checkpoint to a writable path (the store copy is read-only).
 
 - [ ] **Step 1: Replace the `migrate()` stub**
@@ -610,10 +624,12 @@ Also delete the temporary `migrate()`/`enable()` stubs added in Task 4 (the real
 - [ ] **Step 2: Verify usage + arg parsing without touching the network**
 
 Run:
+
 ```bash
 shellcheck home/cli/claude/mem0ctl.sh
 CLAUDE_MEM_DIR="$(mktemp -d)" home/cli/claude/mem0ctl.sh migrate ; echo "exit=$?"
 ```
+
 Expected: shellcheck clean; migrate prints `no migration DB found` and `exit=1` (no DB in the empty temp dir — confirms guard works).
 
 - [ ] **Step 3: Re-run full shell tests (no regression)**
@@ -633,10 +649,12 @@ git commit -m "feat(claude): mem0ctl migrate via vendored uv tool"
 ### Task 7: Nix module + wire into home-manager
 
 **Files:**
+
 - Create: `home/cli/claude/default.nix`
 - Modify: `home/cli/default.nix` (add `./claude` to imports)
 
 **Interfaces:**
+
 - Consumes: `mem0ctl.sh`, `mem0-recall-hook.sh`, `mem0_recall_format.py`, `mem0-migrate/` (all in this dir).
 - Produces: `mem0ctl` on `PATH` (deps bundled), `~/.claude/hooks/{mem0-recall-hook.sh,mem0_recall_format.py}` as store symlinks, and a `home.activation.mem0Enable` that runs `mem0ctl enable --no-verify`.
 
@@ -708,11 +726,13 @@ Expected: build succeeds; output references a new system closure. No evaluation 
 - [ ] **Step 4: Sanity-check the built artifacts in the store**
 
 Run:
+
 ```bash
 ls -l ./result/sw/bin/mem0ctl 2>/dev/null || nix path-info .#darwinConfigurations.*.config.system.build.toplevel >/dev/null
 # Confirm the wrapper resolves its resources:
 mem0ctl_pkg="$(nix-store -qR ./result | grep -m1 mem0ctl || true)"; echo "$mem0ctl_pkg"
 ```
+
 Expected: a `mem0ctl` derivation path is present in the closure.
 
 - [ ] **Step 5: Commit**
@@ -748,10 +768,12 @@ Expected: `none`. If any remain, a claude-mem daemon survived — inspect `insta
 - [ ] **Step 4: Verify settings + recall wiring**
 
 Run:
+
 ```bash
 jq '.enabledPlugins["claude-mem@thedotmack"]' ~/.claude/settings.json
 jq '[.hooks.SessionStart[].hooks[].command] | map(select(endswith("mem0-recall-hook.sh")))' ~/.claude/settings.json
 ```
+
 Expected: `false`; exactly one recall-hook command listed.
 
 - [ ] **Step 5: Verify recall connectivity + compact output**
@@ -782,6 +804,7 @@ gh pr create --title "feat(claude): mem0 host enablement + claude-mem decommissi
 ### Task 9: Remove the migration tool from olympus-sdk (separate PR)
 
 **Files (in `~/projects/personal/olympus-sdk`):**
+
 - Delete: `tools/mem0-migrate/`
 - Modify: any file referencing it as a *live* tool (verify with grep below).
 
@@ -830,6 +853,7 @@ gh pr create --title "chore(mem0): relocate mem0-migrate to nix-darwin-hm" \
 ## Self-Review
 
 **Spec coverage:**
+
 - Module location `home/cli/claude/` → Tasks 1–7. ✓
 - `home.file` (script+hook) + `home.activation` (enable) → Task 7. ✓
 - Python migrate tool moved, no olympus-sdk dep, kept in Python → Task 1, Task 9. ✓
