@@ -462,6 +462,23 @@
         "type": "github"
       }
     },
+    "olympus-sdk": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792615410,
+        "narHash": "sha256-xTIkaEhIkOD564HTqeVThs2e0POza8FBuPlhyalXt1Y=",
+        "ref": "main",
+        "rev": "9a79d93a9a0477918935fda2340581164abf13ef",
+        "revCount": 1283,
+        "type": "git",
+        "url": "ssh://git@github.com/nwlnexus/olympus-sdk"
+      },
+      "original": {
+        "ref": "main",
+        "type": "git",
+        "url": "ssh://git@github.com/nwlnexus/olympus-sdk"
+      }
+    },
     "op-secrets": {
       "inputs": {
         "nixpkgs": [
@@ -541,6 +558,7 @@
         "nixos-flake": "nixos-flake",
         "nixpkgs": "nixpkgs_3",
         "nixpkgs-stable": "nixpkgs-stable",
+        "olympus-sdk": "olympus-sdk",
         "op-secrets": "op-secrets",
         "persistence": "persistence",
         "rust-overlay": "rust-overlay",
