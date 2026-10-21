@@ -3,6 +3,7 @@
     ./bat
     ./claude
     ./git
+    ./memory
     ./starship
 
     ./android.nix
