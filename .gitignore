@@ -105,3 +105,5 @@ tags
 result
 TODO.md
 .direnv
+# Local git worktrees
+.worktrees/

@@ -13,6 +13,7 @@ let
     ./scripts.nix
     ./agent-host.nix
     ./linuxbrew.nix
+    ./memory.nix
   ];
 in
 lib.debug.runTests (lib.foldl' (acc: f: acc // import f { inherit flake lib; }) { } suites)

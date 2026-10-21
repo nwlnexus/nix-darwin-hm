@@ -48,6 +48,15 @@
     agent-skills.url = "github:nwlnexus/agent-skills";
     agent-skills.flake = false;
 
+    # Claude Code memory hooks (packages/memory-hooks) for home/cli/memory.
+    # olympus-sdk is PRIVATE, so this is read over ssh (the user's key; the
+    # 1Password agent on Macs), not through the github: fetcher. Source only
+    # (flake = false); only the packages/memory-hooks subtree is installed,
+    # the rest of the checkout never enters a host's closure. Pinned by
+    # flake.lock: bump with `nix flake update olympus-sdk` after hooks change.
+    olympus-sdk.url = "git+ssh://git@github.com/nwlnexus/olympus-sdk?ref=main";
+    olympus-sdk.flake = false;
+
     # OS layer for non-NixOS Linux hosts (hosts/linux/*.nix → systemConfigs).
     # Pinned to upstream main after v1.1.0 and NOT following our nixpkgs: its
     # NixOS-module imports must match its own pinned nixpkgs (the combination
