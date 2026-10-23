@@ -6,6 +6,19 @@
 }:
 
 let
+  # ssh-keygen uses an SSH agent whenever SSH_AUTH_SOCK is set and the
+  # signing key is loaded there. home/apps/1password.nix exports the
+  # 1Password agent socket for every shell and holds both keys, so without
+  # this wrapper every commit signature needs a 1Password approval, which
+  # nobody can give to an unattended agent. Signing therefore drops the
+  # agent and uses the on-disk key file named by user.signingkey (both keys
+  # are materialized by home/apps/1password.nix). SSH connections are
+  # unaffected: they already use `IdentityAgent none` per host
+  # (home/ssh_config.nix).
+  sshKeygenNoAgent = pkgs.writeShellScript "ssh-keygen-noagent" ''
+    exec env -u SSH_AUTH_SOCK ${pkgs.openssh}/bin/ssh-keygen "$@"
+  '';
+
   workGitProfile = _config: {
     user = {
       email = "59927973+nwilliams-lucas@users.noreply.github.com";
@@ -15,7 +28,7 @@ let
     commit.gpgsign = true;
     gpg = {
       format = "ssh";
-      ssh.program = "${pkgs.openssh}/bin/ssh-keygen";
+      ssh.program = "${sshKeygenNoAgent}";
     };
 
     # Route GitHub SSH through the `github.com-work` alias (see
@@ -45,7 +58,7 @@ let
     commit.gpgsign = true;
     gpg = {
       format = "ssh";
-      ssh.program = "${pkgs.openssh}/bin/ssh-keygen";
+      ssh.program = "${sshKeygenNoAgent}";
     };
   };
 

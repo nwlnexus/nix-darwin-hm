@@ -30,6 +30,14 @@ in
     expr = hm.home.file."nix-darwin-reinit".enable;
     expected = false;
   };
+  # Commit signing in the work and personal includes must never route
+  # through an SSH agent (the 1Password agent needs a human approval).
+  testIncludeSigningBypassesAgent = {
+    expr = lib.all (
+      inc: lib.hasSuffix "-ssh-keygen-noagent" (toString inc.contents.gpg.ssh.program)
+    ) hm.programs.git.includes;
+    expected = true;
+  };
   testGitDefaultSigningKey = {
     expr = hm.programs.git.signing.key;
     expected = "~/.ssh/id_ed25519";
