@@ -47,7 +47,6 @@
         "doctl"
         "kubectl"
         "helm"
-        "gemini-cli"
         "yq"
         "argocd"
         "neonctl"

@@ -54,7 +54,6 @@
       brews = [
         "cloudflared"
         "openssl@3"
-        "gemini-cli"
         "nwlnexus/olympus/atlas"
         # tmux is now managed by home-manager (home/cli/tmux.nix)
         "gh"
