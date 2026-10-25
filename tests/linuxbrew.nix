@@ -15,7 +15,6 @@ in
       brew "nwlnexus/olympus/atlas"
       brew "neonctl"
       brew "flyctl"
-      brew "gemini-cli"
       brew "argocd"
     '';
   };
@@ -37,7 +36,7 @@ in
     expr = lib.hasInfix "warnEcho \"linuxbrew: brew bundle failed" bundle;
     expected = true;
   };
-  # Brew's own deps (e.g. node for gemini-cli) must never shadow Nix/mise.
+  # Brew's own deps (e.g. node for neonctl) must never shadow Nix/mise.
   testBrewLastOnShellPath = {
     expr = lib.take 2 (lib.reverseList hm.home.sessionPath);
     expected = [

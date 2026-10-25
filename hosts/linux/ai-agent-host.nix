@@ -27,7 +27,6 @@
           "nwlnexus/olympus/atlas"
           "neonctl"
           "flyctl"
-          "gemini-cli"
           "argocd"
         ];
       };
