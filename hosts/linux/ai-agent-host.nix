@@ -39,17 +39,22 @@
         };
       };
 
-      # Memory gateway client (Claude Code MCP server + capture hooks, home/cli/memory). NOT enabled yet:
-      # first create the 1Password items and mint the keys (AGENTS.md, "Memory gateway client"). Then:
-      #
-      # d.memory = {
-      #   enable = true;
-      #   # mode = "tailnet";   # default; "public" for a machine off the tailnet
-      #   fallback = true;      # hooks fall back to the public URL when the tailnet is down (needs the Access token)
-      #   # Accounts default to ~/.claude plus one per d.agentHost.accounts (~/.claude-personal, ~/.claude-work).
-      #   # Drop ~/.claude, which no agent session uses here, so it needs no key:
-      #   # accounts.default.enable = false;
-      # };
+      # Memory gateway client (Claude Code MCP server + capture hooks, home/cli/memory; olympus-sdk #559).
+      # Keys: 1Password Dev/memory-gateway-keys, fields ai-agent-host-personal and ai-agent-host-work
+      # (client ids of the same name, minted with memory-admin). Tailnet only, no public fallback.
+      d.memory = {
+        enable = true;
+        mode = "tailnet";
+        fallback = false;
+        # The module's default account set (~/.claude plus one per d.agentHost.accounts) is replaced as soon
+        # as any accounts.* is defined, so list the accounts explicitly. ~/.claude is not used by any agent
+        # session here (owner decision), so it stays unwired.
+        accounts = {
+          default.enable = false;
+          personal = { };
+          work = { };
+        };
+      };
     };
 
   os = {
