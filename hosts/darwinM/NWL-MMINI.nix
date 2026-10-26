@@ -28,17 +28,25 @@ in
           # instead of the desktop app's CLI integration, so `just switch` does not
           # depend on an unlocked 1Password app. Create the file once:
           #   ~/.config/personal/1penv (0600), the raw OP_SERVICE_ACCOUNT_TOKEN.
-          # work-env reads the dtlr Employee vault, which no service account can
-          # read; it is excluded here as on ai-agent-host until that item moves to
-          # a shared vault (then add tokenFiles.work and drop the exclusion).
-          # moneta-token reads vault CI, which the personal service account cannot
-          # see, and only served the retired mnemosyne writer.
+          # work-env renders with the dtlr service-account token file
+          # (~/.config/work/1penv, 0600); its template no longer reads the Employee
+          # vault. moneta-token reads vault CI, which the personal service account
+          # cannot see, and only served the retired mnemosyne writer.
           d.apps.onepassword = {
-            tokenFiles.personal = "${config.home.homeDirectory}/.config/personal/1penv";
-            excludeSecrets = [
-              "work-env"
-              "moneta-token"
-            ];
+            tokenFiles = {
+              personal = "${config.home.homeDirectory}/.config/personal/1penv";
+              work = "${config.home.homeDirectory}/.config/work/1penv";
+            };
+            excludeSecrets = [ "moneta-token" ];
+          };
+
+          # Memory gateway client (olympus-sdk #444/#559): ~/.claude gets the capture
+          # hooks and the `memory` MCP server; key field `NWL-MMINI-default` in the
+          # 1Password item memory-gateway-keys (vault Dev). Tailnet mode, no fallback
+          # until the Cloudflare Access application exists.
+          d.memory = {
+            enable = true;
+            host = "NWL-MMINI";
           };
         };
     };
