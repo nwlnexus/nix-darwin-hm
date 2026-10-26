@@ -370,7 +370,7 @@ in
     expr =
       let
         sys =
-          (flake.darwinConfigurations.NWL-MMINI.extendModules {
+          (flake.darwinConfigurations.MACST-01.extendModules {
             modules = [ { home-manager.users.nwilliams-lucas.d.memory.enable = true; } ];
           }).config;
       in
