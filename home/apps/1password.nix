@@ -111,9 +111,12 @@ in
     {
 
       # SSH keys are materialized to disk via the nix-op-secrets module
-      # (imported in system/hm.nix). All secrets share the module-level
-      # personal-account auth: `serviceAccountTokenFile` reads a raw token
-      # written by you, out-of-band, before running nix:
+      # (imported in system/hm.nix). A secret gets a service-account token only
+      # when the host sets `d.apps.onepassword.tokenFiles.{personal,work}`
+      # (see `tokenCommand` above); otherwise op-secrets falls back to the
+      # desktop app's CLI integration, which fails under `darwin-rebuild` when
+      # the app is locked or the integration is off. Write the token file
+      # out-of-band before running nix:
       #
       #     mkdir -p ~/.config/personal && chmod 700 ~/.config/personal
       #     ( umask 077 \
