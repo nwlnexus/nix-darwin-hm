@@ -1,18 +1,34 @@
 # Claude Code memory-gateway client (home/cli/memory). Disabled by default; the enabled variants are evaluated
 # through extendModules on the agent host (eval only, nothing is built or activated).
+#
+# ai-agent-host itself enables the module (tailnet, personal + work, no ~/.claude: olympus-sdk #559), so the
+# generic option tests start from `base`, the host with that choice undone, and testAgentHostEnablesMemory
+# pins what the host really sets.
 { flake, lib }:
 let
-  base = flake.homeConfigurations."nwilliams-lucas@ai-agent-host";
+  deployed = flake.homeConfigurations."nwilliams-lucas@ai-agent-host";
+  base = deployed.extendModules {
+    modules = [
+      {
+        d.memory = {
+          enable = lib.mkForce false;
+          accounts.default.enable = lib.mkForce true;
+        };
+      }
+    ];
+  };
+  on = lib.mkOverride 40 true;
   h = "/home/nwilliams-lucas";
   with' =
     d:
     (base.extendModules {
       modules = [
         {
+          # Beat the host's own settings (mode, fallback) with a stronger priority.
           d.memory = {
-            enable = true;
+            enable = on;
           }
-          // d;
+          // lib.mapAttrs (_: lib.mkOverride 40) d;
         }
       ];
     }).config;
@@ -33,6 +49,37 @@ let
   short = builtins.substring 0 8 flake.inputs.olympus-sdk.rev;
 in
 {
+  # What hosts/linux/ai-agent-host.nix really sets: tailnet only, no fallback, ~/.claude left unwired.
+  testAgentHostEnablesMemory = {
+    expr =
+      let
+        m = deployed.config.d.memory;
+      in
+      [
+        m.enable
+        m.mode
+        m.fallback
+        (map (t: t.name) m.wiring.targets)
+        (map (s: s.ref) m.secrets)
+        (deployed.config.home.activation ? memoryWire)
+        (deployed.config.home.activation ? memorySecrets)
+      ];
+    expected = [
+      true
+      "tailnet"
+      false
+      [
+        "personal"
+        "work"
+      ]
+      [
+        "op://Dev/memory-gateway-keys/ai-agent-host-personal"
+        "op://Dev/memory-gateway-keys/ai-agent-host-work"
+      ]
+      true
+      true
+    ];
+  };
   # Merging changes nothing: no option set, no activation step, no secret.
   testDisabledByDefault = {
     expr = [
@@ -270,7 +317,7 @@ in
           (base.extendModules {
             modules = [
               {
-                d.memory.enable = true;
+                d.memory.enable = on;
                 d.apps.onepassword.excludeSecrets = [ "memory-key-work" ];
               }
             ];
