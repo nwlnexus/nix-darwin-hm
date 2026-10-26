@@ -69,7 +69,6 @@ in
       "gitlab-work"
       "moneta-cf-access-client-id"
       "moneta-cf-access-client-secret"
-      "moneta-token"
       "op-connect-env"
       "personal-env"
     ];
