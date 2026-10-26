@@ -14,6 +14,7 @@ let
     ./agent-host.nix
     ./linuxbrew.nix
     ./memory.nix
+    ./claude-harness.nix
   ];
 in
 lib.debug.runTests (lib.foldl' (acc: f: acc // import f { inherit flake lib; }) { } suites)

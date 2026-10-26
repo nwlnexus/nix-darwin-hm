@@ -156,3 +156,7 @@ check-darwin host="NWL-MMINI" ref="origin/main":
 test-memory-wire:
     bash tests/memory-wire.sh
     bash tests/memory-fetch-secrets.sh
+
+# Behaviour tests for the session-contract activation script (temp files only; no nix needed).
+test-claude-contract:
+    bash tests/claude-contract.sh

@@ -24,6 +24,9 @@ let
     );
 in
 {
+  # agents/ + the session-contract block in CLAUDE.md, per Claude dir.
+  imports = [ ./harness.nix ];
+
   home.file = {
     # /brain slash command (consult + ingest the second-brain wiki).
     ".claude/commands/brain.md".source = ./commands/brain.md;
