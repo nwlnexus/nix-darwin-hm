@@ -24,8 +24,12 @@ let
     );
 in
 {
-  # agents/ + the session-contract block in CLAUDE.md, per Claude dir.
-  imports = [ ./harness.nix ];
+  # agents/ + the session-contract block in CLAUDE.md + the progress-stale Stop hook, per Claude dir; the
+  # agent-session tmux launcher.
+  imports = [
+    ./harness.nix
+    ./agent-session.nix
+  ];
 
   home.file = {
     # /brain slash command (consult + ingest the second-brain wiki).

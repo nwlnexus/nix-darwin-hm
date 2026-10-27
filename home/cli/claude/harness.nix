@@ -1,8 +1,10 @@
 # Agent harness from github:nwlnexus/agent-skills (flake input, source only): every agents/<name>.md becomes
 # <claude dir>/agents/<name>.md, and fragments/session-contract.md is kept in a marked block at the end of
-# <claude dir>/CLAUDE.md (./contract.sh). Skills are linked by ./default.nix and home/agent-host.
+# <claude dir>/CLAUDE.md (./contract.sh). hooks/progress-stale.sh is linked to <claude dir>/hooks/ and merged into
+# <claude dir>/settings.json as a Stop hook entry (matcher "*") by ./hook-wire.sh, which edits only its own entry
+# and never replaces the file. Skills are linked by ./default.nix and home/agent-host.
 # Design: nwlnexus/olympus-sdk docs/superpowers/specs/2026-10-26-agent-harness-knowledge-and-hosts-design.md
-# (H1, H4, H5), issue olympus-sdk#560.
+# (H1, H3, H4, H5), issues olympus-sdk#560 and #561.
 #
 # Which Claude dirs: the per-account dirs on agent hosts (~/.claude-<acct>; ~/.claude stays unwired there,
 # owner decision H17), ~/.claude everywhere else (the Macs).
@@ -32,6 +34,21 @@ let
   fragmentName = "session-contract";
   fragment = "${agentSkills}/fragments/${fragmentName}.md";
   hasFragment = builtins.pathExists fragment;
+
+  hookName = "progress-stale.sh";
+  hookSrc = "${agentSkills}/hooks/${hookName}";
+  hasHook = builtins.pathExists hookSrc;
+  # Where the hook lands in a Claude dir; the Stop entry runs this path, so a flake bump never changes it.
+  hookPath = dir: "${home}/${dir}/hooks/${hookName}";
+
+  hookWire = pkgs.writeShellApplication {
+    name = "hook-wire";
+    runtimeInputs = [
+      pkgs.jq
+      pkgs.coreutils
+    ];
+    text = builtins.readFile ./hook-wire.sh;
+  };
 
   contractWire = pkgs.writeShellApplication {
     name = "contract-wire";
@@ -75,7 +92,20 @@ in
         lib.listToAttrs (
           map (f: lib.nameValuePair "${dir}/agents/${f}" { source = "${agentsDir}/${f}"; }) agentFiles
         )
+        // lib.optionalAttrs hasHook {
+          "${dir}/hooks/${hookName}".source = hookSrc;
+        }
       ) cfg.dirs
+    );
+
+    # The Stop hook entry in each dir's settings.json (Claude Code owns that file: jq-merge, own entry only).
+    # Fail-soft: a settings.json that does not parse is left alone.
+    home.activation.claudeProgressHook = lib.mkIf hasHook (
+      lib.hm.dag.entryAfter [ "writeBoundary" "agentHostDirs" ] (
+        lib.concatMapStringsSep "\n" (dir: ''
+          run ${hookWire}/bin/hook-wire Stop '*' ${lib.escapeShellArg "${lib.strings.escapeRegex hookName}"} ${lib.escapeShellArg (hookPath dir)} ${lib.escapeShellArg "${home}/${dir}/settings.json"} || true
+        '') cfg.dirs
+      )
     );
 
     # After agentHostDirs (when present), so a new account dir already exists with its 0700 mode.

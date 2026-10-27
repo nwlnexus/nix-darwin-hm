@@ -75,4 +75,56 @@ in
       true
     ];
   };
+
+  # The progress-stale Stop hook: linked into each account dir (never ~/.claude on the host) and merged into
+  # settings.json by hook-wire for exactly those dirs, as a Stop entry with matcher "*".
+  testHarnessHostHookLinks = {
+    expr = map (f: host.home.file ? ${f}) [
+      ".claude-personal/hooks/progress-stale.sh"
+      ".claude-work/hooks/progress-stale.sh"
+      ".claude/hooks/progress-stale.sh"
+    ];
+    expected = [
+      true
+      true
+      false
+    ];
+  };
+  testHarnessHostHookWire = {
+    expr =
+      let
+        data = host.home.activation.claudeProgressHook.data;
+      in
+      map (f: lib.hasInfix f data) [
+        "hook-wire Stop '*' 'progress-stale\\.sh' ${h}/.claude-personal/hooks/progress-stale.sh ${h}/.claude-personal/settings.json"
+        "hook-wire Stop '*' 'progress-stale\\.sh' ${h}/.claude-work/hooks/progress-stale.sh ${h}/.claude-work/settings.json"
+        "/.claude/settings.json"
+      ];
+    expected = [
+      true
+      true
+      false
+    ];
+  };
+  testHarnessMacHook = {
+    expr = [
+      (mac.home.file ? ".claude/hooks/progress-stale.sh")
+      (lib.hasInfix "hook-wire Stop '*' 'progress-stale\\.sh' ${m}/.claude/hooks/progress-stale.sh ${m}/.claude/settings.json" mac.home.activation.claudeProgressHook.data)
+    ];
+    expected = [
+      true
+      true
+    ];
+  };
+  # agent-session: ~/.local/bin on the host and the Mac, per-account config dir only on the host.
+  testAgentSessionInstalled = {
+    expr = [
+      (host.home.file ? ".local/bin/agent-session")
+      (mac.home.file ? ".local/bin/agent-session")
+    ];
+    expected = [
+      true
+      true
+    ];
+  };
 }

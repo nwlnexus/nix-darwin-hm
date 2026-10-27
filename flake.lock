@@ -3,11 +3,11 @@
     "agent-skills": {
       "flake": false,
       "locked": {
-        "lastModified": 1793056175,
-        "narHash": "sha256-oknTi0lS/S41EQf5h7XU/t964tkvH5qIx9+jhD+FlcU=",
+        "lastModified": 1793061839,
+        "narHash": "sha256-UiFpuI7wlNmLwGqVQN5uxvtXHCsHynXdbpUI/uxxoPU=",
         "owner": "nwlnexus",
         "repo": "agent-skills",
-        "rev": "7c74d283f21361ce94ff3a07e36fc63a482aea0d",
+        "rev": "be41837e35ad422d3daad295b7ea38dc9875c0c7",
         "type": "github"
       },
       "original": {
