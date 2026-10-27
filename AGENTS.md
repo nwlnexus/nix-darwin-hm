@@ -252,6 +252,7 @@ For in-depth architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
 - **Parallel work:** Always perform parallel work as much as possible to maximize efficiency
 - **Documentation updates:** Always ensure that documentation in README.md and AGENTS.md is up to date for non-trivial code changes/implementations
 - **Git commits:** Always use git commits pre and post non-trivial code changes to track progress and enable rollback
+- **CI:** `.github/workflows/validate.yml` (job `validate`, the required check) runs `nix fmt -- --fail-on-change`, `just test` and the `just test-*` bash recipes on GitHub-hosted runners. The repo is public, so CI cannot fetch the private `olympus-sdk` input: it re-points the input at `tests/fixtures/olympus-sdk-stub` in the runner's checkout only (never commit that `flake.lock` change). Keep the stub in step with whatever the tests read from `olympus-sdk`
 - **Merging:** label the PR `automerge` (`gh pr edit <n> --add-label automerge`) and `.github/workflows/automerge.yml` squash-merges it once the base branch's required checks pass (GitHub App credentials: olympus-sdk#576)
 - **Ask questions:** Ask questions for clarification if there are any ambiguities or if unsure about requirements
 

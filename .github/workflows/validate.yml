@@ -1,0 +1,66 @@
+name: validate
+
+# Required-check workflow (olympus-sdk#576, HW17): the ruleset on `main` requires the `validate` job below,
+# and automerge.yml re-checks a labelled PR when this workflow completes.
+#
+# The repository is PUBLIC, so this runs on GitHub-hosted runners only (never the self-hosted cluster
+# runners, which fork pull requests must not reach), with a read-only token and no secrets.
+#
+# The flake has a PRIVATE input, `olympus-sdk` (git+ssh://git@github.com/nwlnexus/olympus-sdk), which a
+# public runner cannot fetch, and we will not give CI a deploy key for it. `just test` does force it:
+# tests/memory.nix reads `flake.inputs.olympus-sdk.rev` and builds the memory-hooks package path from the
+# input. Nothing reads file contents from it, though, so the "Replace the private olympus-sdk input" step
+# re-points the input, in this runner's checkout only, at the stub under tests/fixtures/olympus-sdk-stub,
+# committed into a throwaway git repo so the input keeps a `rev`. flake.lock is not committed back.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
+
+      - name: Replace the private olympus-sdk input with the test stub
+        run: |
+          set -euo pipefail
+          stub="$RUNNER_TEMP/olympus-sdk-stub"
+          cp -r tests/fixtures/olympus-sdk-stub "$stub"
+          git -C "$stub" init -q -b main
+          git -C "$stub" add -A
+          git -C "$stub" -c user.name=ci -c user.email=ci@example.invalid commit -q -m stub
+          nix flake lock --override-input olympus-sdk "git+file://$stub"
+
+      - name: Formatting (treefmt / nixfmt)
+        run: nix fmt -- --fail-on-change
+
+      # just, jq and tmux come from the nixpkgs this flake locks, so the recipes run the same everywhere.
+      - name: Evaluation tests (just test)
+        run: nix shell --inputs-from . nixpkgs#just nixpkgs#jq -c just test
+
+      - name: Shell behaviour tests
+        run: >-
+          nix shell --inputs-from . nixpkgs#just nixpkgs#jq nixpkgs#tmux -c
+          bash -euo pipefail -c '
+          just test-memory-wire;
+          just test-claude-contract;
+          just test-claude-hook-wire;
+          just test-claude-agent-session'
