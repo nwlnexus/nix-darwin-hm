@@ -169,6 +169,10 @@ test-claude-hook-wire:
 test-claude-settings-wire:
     bash tests/claude-settings-wire.sh
 
+# Behaviour tests for the second-brain clone/pull script (local bare repos; needs git, no nix).
+test-second-brain-sync:
+    bash tests/second-brain-sync.sh
+
 # Behaviour tests for the agent-session launcher (dry runs plus a private tmux server; needs tmux, no nix).
 test-claude-agent-session:
     bash tests/claude-agent-session.sh

@@ -101,6 +101,38 @@ in
     expr = lib.hasInfix "CLAUDE_CONFIG_DIR" hm.home.file."direnv-hook-work".text;
     expected = false;
   };
+  # Second-brain wiki (olympus-sdk #562): a checkout path outside both project trees, set for every session,
+  # an activation clone, and an hourly pull timer that can only fast-forward.
+  testSecondBrainPath = {
+    expr = hm.home.sessionVariables.SECOND_BRAIN_PATH;
+    expected = "${h}/.local/share/second-brain";
+  };
+  testSecondBrainClone = {
+    expr = lib.hasSuffix "second-brain-sync clone || true" (
+      lib.removeSuffix "\n" hm.home.activation.secondBrainClone.data
+    );
+    expected = true;
+  };
+  testSecondBrainTimer = {
+    expr =
+      let
+        t = hm.systemd.user.timers.second-brain-pull;
+      in
+      [
+        (str t.Timer.OnCalendar)
+        t.Timer.Persistent
+        t.Install.WantedBy
+        (lib.hasSuffix "/bin/second-brain-sync pull" (str svc.second-brain-pull.Service.ExecStart))
+        (lib.elem "SECOND_BRAIN_PATH=${h}/.local/share/second-brain" svc.second-brain-pull.Service.Environment)
+      ];
+    expected = [
+      "hourly"
+      true
+      [ "timers.target" ]
+      true
+      true
+    ];
+  };
   testBrainCommandLinked = {
     expr = hm.home.file ? ".claude-work/commands/brain.md";
     expected = true;
