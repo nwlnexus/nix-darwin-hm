@@ -165,6 +165,10 @@ test-claude-contract:
 test-claude-hook-wire:
     bash tests/claude-hook-wire.sh
 
+# Behaviour tests for the allow-rules/autoMode merge script (temp copies of settings files; needs jq, no nix).
+test-claude-settings-wire:
+    bash tests/claude-settings-wire.sh
+
 # Behaviour tests for the agent-session launcher (dry runs plus a private tmux server; needs tmux, no nix).
 test-claude-agent-session:
     bash tests/claude-agent-session.sh

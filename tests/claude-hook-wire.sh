@@ -112,7 +112,16 @@ printf '{}\n' >"$s7"
 wire "$cmd1" "$s6" "$s7" 2>/dev/null
 check "both files wired" bash -c 'jq -e ".hooks.Stop | length == 1" "$1" >/dev/null && jq -e ".hooks.Stop | length == 1" "$2" >/dev/null' _ "$s6" "$s7"
 
-# 9. usage errors exit 2
+# 9. a hand-installed copy of a hook in another directory (with its own timeout) is replaced, not doubled
+s8="$tmp/h/settings.json"
+mkdir -p "$tmp/h"
+cat >"$s8" <<'JSON'
+{"hooks": {"PermissionDenied": [{"matcher": "*", "hooks": [{"type": "command", "command": "/home/u/.local/libexec/agent-hooks/permission-denied-log.sh", "timeout": 10}]}]}}
+JSON
+bash -euo pipefail "$script" PermissionDenied '*' 'permission-denied-log\.sh' /home/u/.claude-work/hooks/permission-denied-log.sh "$s8" 2>/dev/null
+check "hand copy replaced by ours" jqe '.hooks.PermissionDenied == [{matcher: "*", hooks: [{type: "command", command: "/home/u/.claude-work/hooks/permission-denied-log.sh"}]}]' "$s8"
+
+# 10. usage errors exit 2
 bash "$script" Stop '*' x >/dev/null 2>&1
 check "too few arguments: exit 2" [ "$?" = 2 ]
 

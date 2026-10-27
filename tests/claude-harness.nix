@@ -1,12 +1,31 @@
-# Agent harness from agent-skills (home/cli/claude/harness.nix): agents/ and the session-contract block in
-# CLAUDE.md, for the account dirs on the agent host (never ~/.claude there) and ~/.claude on a Mac.
+# Agent harness from agent-skills (home/cli/claude/harness.nix): agents/, the session-contract block in
+# CLAUDE.md, the hooks and the settings wiring (allow rules, autoMode), for the account dirs on the agent host
+# (never ~/.claude there) and ~/.claude on a Mac. The autoMode variants use a made-up fixture
+# (tests/fixtures/claude-auto-mode.json) through extendModules; nothing is built or activated.
 { flake, lib }:
 let
-  host = flake.homeConfigurations."nwilliams-lucas@ai-agent-host".config;
+  deployed = flake.homeConfigurations."nwilliams-lucas@ai-agent-host";
+  host = deployed.config;
   mac = flake.darwinConfigurations.NWL-MMINI.config.home-manager.users.nwilliams-lucas;
   h = "/home/nwilliams-lucas";
   m = "/Users/nwilliams-lucas";
   contract = c: c.home.activation.claudeSessionContract.data or "";
+  hooksData = c: c.home.activation.claudeHooks.data or "";
+  settingsData = c: c.home.activation.claudeSettings.data or "";
+  with' =
+    settings:
+    (deployed.extendModules {
+      modules = [ { d.claudeHarness.settings = lib.mapAttrs (_: lib.mkOverride 40) settings; } ];
+    }).config;
+  fixture = ./fixtures/claude-auto-mode.json;
+  onHost = with' { autoModeFile = fixture; };
+  onOther = with' {
+    autoModeFile = fixture;
+    autoModeHost = "no-such-host";
+  };
+  settingsOff = with' { enable = false; };
+  # The pinned olympus-sdk may or may not carry the autoMode source yet (olympus-sdk#584).
+  sdkHasAutoMode = builtins.pathExists "${flake.inputs.olympus-sdk}/config/claude/auto-mode.json";
 in
 {
   testHarnessAgentsFound = {
@@ -93,7 +112,7 @@ in
   testHarnessHostHookWire = {
     expr =
       let
-        data = host.home.activation.claudeProgressHook.data;
+        data = hooksData host;
       in
       map (f: lib.hasInfix f data) [
         "hook-wire Stop '*' 'progress-stale\\.sh' ${h}/.claude-personal/hooks/progress-stale.sh ${h}/.claude-personal/settings.json"
@@ -109,13 +128,173 @@ in
   testHarnessMacHook = {
     expr = [
       (mac.home.file ? ".claude/hooks/progress-stale.sh")
-      (lib.hasInfix "hook-wire Stop '*' 'progress-stale\\.sh' ${m}/.claude/hooks/progress-stale.sh ${m}/.claude/settings.json" mac.home.activation.claudeProgressHook.data)
+      (lib.hasInfix "hook-wire Stop '*' 'progress-stale\\.sh' ${m}/.claude/hooks/progress-stale.sh ${m}/.claude/settings.json" (
+        hooksData mac
+      ))
     ];
     expected = [
       true
       true
     ];
   };
+
+  # The permission-denied-log hook (olympus-sdk#576 layer 3): linked like progress-stale and wired as a
+  # PermissionDenied entry. Its identity regex also matches a hand-installed copy elsewhere, so that entry is
+  # replaced, not doubled.
+  testHarnessHooksFound = {
+    expr = host.d.claudeHarness.hooks;
+    expected = [
+      {
+        name = "progress-stale.sh";
+        event = "Stop";
+      }
+      {
+        name = "permission-denied-log.sh";
+        event = "PermissionDenied";
+      }
+    ];
+  };
+  testHarnessHostDenialHook = {
+    expr =
+      map (f: host.home.file ? ${f}) [
+        ".claude-personal/hooks/permission-denied-log.sh"
+        ".claude-work/hooks/permission-denied-log.sh"
+        ".claude/hooks/permission-denied-log.sh"
+      ]
+      ++ map (f: lib.hasInfix f (hooksData host)) [
+        "hook-wire PermissionDenied '*' 'permission-denied-log\\.sh' ${h}/.claude-personal/hooks/permission-denied-log.sh ${h}/.claude-personal/settings.json"
+        "hook-wire PermissionDenied '*' 'permission-denied-log\\.sh' ${h}/.claude-work/hooks/permission-denied-log.sh ${h}/.claude-work/settings.json"
+      ];
+    expected = [
+      true
+      true
+      false
+      true
+      true
+    ];
+  };
+  testHarnessDenialRegexMatchesHandCopy = {
+    expr =
+      builtins.match ".*${lib.strings.escapeRegex "permission-denied-log.sh"}.*" "${h}/.local/libexec/agent-hooks/permission-denied-log.sh"
+      != null;
+    expected = true;
+  };
+  testHarnessMacDenialHook = {
+    expr = [
+      (mac.home.file ? ".claude/hooks/permission-denied-log.sh")
+      (lib.hasInfix "hook-wire PermissionDenied '*' 'permission-denied-log\\.sh' ${m}/.claude/hooks/permission-denied-log.sh ${m}/.claude/settings.json" (
+        hooksData mac
+      ))
+    ];
+    expected = [
+      true
+      true
+    ];
+  };
+  # Both settings.json activations run after agentHostDirs, so a new account dir already exists with mode 0700.
+  testHarnessWiringAfterAccountDirs = {
+    expr = map (a: lib.elem "agentHostDirs" host.home.activation.${a}.after) [
+      "claudeHooks"
+      "claudeSettings"
+    ];
+    expected = [
+      true
+      true
+    ];
+  };
+
+  # Allow rules and autoMode (layers 1 and 2): settings-wire over each account dir's settings.json.
+  testHarnessSettingsAllowDefault = {
+    expr = host.d.claudeHarness.settings.allow;
+    expected = [
+      "Bash(gh pr create *)"
+      "Bash(gh pr ready *)"
+      "Bash(gh pr merge *)"
+      "Bash(gh pr update-branch *)"
+      "Bash(gh pr edit *)"
+      "Bash(gh pr comment *)"
+      "Bash(gh pr checks *)"
+      "Bash(gh issue *)"
+      "Bash(gh run *)"
+      "Bash(git push -u origin *)"
+    ];
+  };
+  testHarnessSettingsHostWire = {
+    expr = map (f: lib.hasInfix f (settingsData host)) [
+      "/bin/settings-wire /nix/store/"
+      "-claude-allow.json "
+      " ${h}/.claude-personal/settings.json ${h}/.claude-work/settings.json"
+      "/.claude/settings.json"
+    ];
+    expected = [
+      true
+      true
+      true
+      false
+    ];
+  };
+  testHarnessSettingsHost = {
+    expr = host.d.claudeHarness.settings.autoModeHost;
+    expected = "ai-agent-host";
+  };
+  # Without the source file in the pinned olympus-sdk, autoMode is left alone (`-`).
+  testHarnessSettingsAutoModeGuard = {
+    expr = [
+      (host.d.claudeHarness.settings.autoMode == null)
+      (lib.hasInfix "-claude-allow.json - " (settingsData host))
+    ];
+    expected = [
+      (!sdkHasAutoMode)
+      (!sdkHasAutoMode)
+    ];
+  };
+  testHarnessSettingsAutoModeHost = {
+    expr = [
+      onHost.d.claudeHarness.settings.autoMode
+      (lib.hasInfix "-claude-auto-mode.json ${h}/.claude-personal/settings.json" (settingsData onHost))
+    ];
+    expected = [
+      {
+        allow = [
+          "$defaults"
+          "Example allow rule"
+        ];
+        environment = [
+          "**Example**: made-up environment entry"
+          "**Host containment**: example containment for the agent host"
+        ];
+      }
+      true
+    ];
+  };
+  testHarnessSettingsAutoModeDefaultHost = {
+    expr = onOther.d.claudeHarness.settings.autoMode.environment;
+    expected = [
+      "**Example**: made-up environment entry"
+      "**Host containment**: example default containment"
+    ];
+  };
+  testHarnessSettingsOff = {
+    expr = [
+      (settingsOff.home.activation ? claudeSettings)
+      (settingsOff.home.activation ? claudeHooks)
+    ];
+    expected = [
+      false
+      true
+    ];
+  };
+  testHarnessMacSettings = {
+    expr = [
+      mac.d.claudeHarness.settings.autoModeHost
+      (lib.hasInfix " ${m}/.claude/settings.json" (settingsData mac))
+    ];
+    expected = [
+      null
+      true
+    ];
+  };
+
   # agent-session: ~/.local/bin on the host and the Mac, per-account config dir only on the host.
   testAgentSessionInstalled = {
     expr = [
