@@ -3,11 +3,11 @@
     "agent-skills": {
       "flake": false,
       "locked": {
-        "lastModified": 1793061839,
-        "narHash": "sha256-UiFpuI7wlNmLwGqVQN5uxvtXHCsHynXdbpUI/uxxoPU=",
+        "lastModified": 1793066374,
+        "narHash": "sha256-ihGDiNgykWzOagdG3npc4ZIh0omeC5sxFjxjWD4yf6I=",
         "owner": "nwlnexus",
         "repo": "agent-skills",
-        "rev": "be41837e35ad422d3daad295b7ea38dc9875c0c7",
+        "rev": "fec335e93f5b30246a66c104cd9486260a05f06b",
         "type": "github"
       },
       "original": {
@@ -373,11 +373,11 @@
     "olympus-sdk": {
       "flake": false,
       "locked": {
-        "lastModified": 1793029777,
-        "narHash": "sha256-fBb5fjofJB3M4qMFQZx6dHPKNKrHRYgCCGqGyTWub1A=",
+        "lastModified": 1793066703,
+        "narHash": "sha256-MzLrZ38BKSwg3pAenKaD18nr0SJ+4Qnxoz9hGdsKr4U=",
         "ref": "main",
-        "rev": "2669595e9ba37964c5215b8d546abb14e2a0be1f",
-        "revCount": 1324,
+        "rev": "36889134b6e3d9478a312b81bf5b87e1f7fa532d",
+        "revCount": 1336,
         "type": "git",
         "url": "ssh://git@github.com/nwlnexus/olympus-sdk"
       },

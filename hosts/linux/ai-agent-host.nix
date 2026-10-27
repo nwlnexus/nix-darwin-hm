@@ -44,6 +44,10 @@
         };
       };
 
+      # Picks this host's entry of hostContainment in the autoMode source (home/cli/claude/harness.nix,
+      # olympus-sdk#576 layer 2).
+      d.claudeHarness.settings.autoModeHost = "ai-agent-host";
+
       # Memory gateway client (Claude Code MCP server + capture hooks, home/cli/memory; olympus-sdk #559).
       # Keys: 1Password Dev/memory-gateway-keys, fields ai-agent-host-personal and ai-agent-host-work
       # (client ids of the same name, minted with memory-admin). Tailnet only, no public fallback.

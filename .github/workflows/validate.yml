@@ -63,4 +63,5 @@ jobs:
           just test-memory-wire;
           just test-claude-contract;
           just test-claude-hook-wire;
+          just test-claude-settings-wire;
           just test-claude-agent-session'

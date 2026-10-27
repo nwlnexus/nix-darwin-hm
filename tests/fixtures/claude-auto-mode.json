@@ -1,0 +1,8 @@
+{
+  "allow": ["$defaults", "Example allow rule"],
+  "environment": ["**Example**: made-up environment entry"],
+  "hostContainment": {
+    "ai-agent-host": "example containment for the agent host",
+    "default": "example default containment"
+  }
+}
