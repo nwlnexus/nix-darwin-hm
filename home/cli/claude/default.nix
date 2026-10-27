@@ -38,7 +38,8 @@ in
   // skillFiles ".claude";
 
   home.sessionVariables = {
-    SECOND_BRAIN_PATH = "${config.home.homeDirectory}/Documents/Obsidian Vault/brain";
+    # Obsidian vault on the Macs; the agent host overrides it (home/agent-host/second-brain.nix).
+    SECOND_BRAIN_PATH = lib.mkDefault "${config.home.homeDirectory}/Documents/Obsidian Vault/brain";
   };
 
   # mnemosyne is retired. Its `install-hooks` wrote entries straight into

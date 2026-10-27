@@ -17,7 +17,10 @@ let
   accts = lib.attrNames cfg.accounts;
 in
 {
-  imports = [ ./services.nix ];
+  imports = [
+    ./services.nix
+    ./second-brain.nix
+  ];
 
   options.d.agentHost = {
     enable = lib.mkEnableOption "per-account Claude Code / Codex and Remote Control services";
