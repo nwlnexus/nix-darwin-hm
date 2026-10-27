@@ -160,3 +160,11 @@ test-memory-wire:
 # Behaviour tests for the session-contract activation script (temp files only; no nix needed).
 test-claude-contract:
     bash tests/claude-contract.sh
+
+# Behaviour tests for the Stop-hook merge script (temp copies of settings files; needs jq, no nix).
+test-claude-hook-wire:
+    bash tests/claude-hook-wire.sh
+
+# Behaviour tests for the agent-session launcher (dry runs plus a private tmux server; needs tmux, no nix).
+test-claude-agent-session:
+    bash tests/claude-agent-session.sh
