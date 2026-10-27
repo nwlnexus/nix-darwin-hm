@@ -316,18 +316,21 @@ in
   # olympus-sdk input (here a made-up fixture). Without the file (CI stub, older pin) nothing is wired.
   testHarnessTelemetryGuard = {
     expr = [
-      host.d.claudeHarness.telemetry.env
+      (lib.attrNames host.d.claudeHarness.telemetry.env)
       (host.home.activation ? claudeTelemetry)
     ];
     expected =
       if sdkHasTelemetry then
         [
-          { }
+          [
+            ".claude-personal"
+            ".claude-work"
+          ]
           true
         ]
       else
         [
-          { }
+          [ ]
           false
         ];
   };
