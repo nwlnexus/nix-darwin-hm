@@ -24,8 +24,25 @@ let
     autoModeHost = "no-such-host";
   };
   settingsOff = with' { enable = false; };
+  telemetryFixture = ./fixtures/claude-telemetry.json;
+  withTelemetry =
+    c: telemetry: dirs:
+    (c.extendModules {
+      modules = [
+        {
+          d.claudeHarness = {
+            telemetry = lib.mapAttrs (_: lib.mkOverride 40) telemetry;
+          }
+          // lib.optionalAttrs (dirs != null) { dirs = lib.mkOverride 40 dirs; };
+        }
+      ];
+    }).config;
+  telHost = withTelemetry deployed { file = telemetryFixture; } null;
+  telHostOff = withTelemetry deployed { file = null; } null;
+  telData = c: c.home.activation.claudeTelemetry.data or "";
   # The pinned olympus-sdk may or may not carry the autoMode source (added in olympus-sdk#585).
   sdkHasAutoMode = builtins.pathExists "${flake.inputs.olympus-sdk}/config/claude/auto-mode.json";
+  sdkHasTelemetry = builtins.pathExists "${flake.inputs.olympus-sdk}/config/claude/telemetry.json";
 in
 {
   testHarnessAgentsFound = {
@@ -291,6 +308,111 @@ in
     ];
     expected = [
       null
+      true
+    ];
+  };
+
+  # Telemetry (olympus-sdk#565, H12): the OTLP env in each dir's settings.json `env`, from the private
+  # olympus-sdk input (here a made-up fixture). Without the file (CI stub, older pin) nothing is wired.
+  testHarnessTelemetryGuard = {
+    expr = [
+      (lib.attrNames host.d.claudeHarness.telemetry.env)
+      (host.home.activation ? claudeTelemetry)
+    ];
+    expected =
+      if sdkHasTelemetry then
+        [
+          [
+            ".claude-personal"
+            ".claude-work"
+          ]
+          true
+        ]
+      else
+        [
+          [ ]
+          false
+        ];
+  };
+  testHarnessTelemetryOff = {
+    expr = [
+      telHostOff.d.claudeHarness.telemetry.env
+      (telHostOff.home.activation ? claudeTelemetry)
+    ];
+    expected = [
+      { }
+      false
+    ];
+  };
+  testHarnessTelemetryEnvPerAccount = {
+    expr = telHost.d.claudeHarness.telemetry.env;
+    expected =
+      let
+        base = {
+          CLAUDE_CODE_ENABLE_TELEMETRY = "1";
+          OTEL_METRICS_EXPORTER = "otlp";
+          OTEL_LOGS_EXPORTER = "otlp";
+          OTEL_EXPORTER_OTLP_PROTOCOL = "grpc";
+          OTEL_EXPORTER_OTLP_ENDPOINT = "http://collector.example:4317";
+          OTEL_METRICS_INCLUDE_REPOSITORY = "true";
+          OTEL_METRICS_INCLUDE_SESSION_ID = "false";
+          OTEL_METRICS_INCLUDE_ACCOUNT_UUID = "false";
+        };
+      in
+      {
+        ".claude-personal" = base // {
+          OTEL_RESOURCE_ATTRIBUTES = "account=personal,deployment.environment=example,host.name=ai-agent-host";
+        };
+        ".claude-work" = base // {
+          OTEL_RESOURCE_ATTRIBUTES = "account=work,deployment.environment=example,host.name=ai-agent-host";
+        };
+      };
+  };
+  testHarnessTelemetryHostWire = {
+    expr = map (f: lib.hasInfix f (telData telHost)) [
+      "/bin/telemetry-wire /nix/store/"
+      "-claude-telemetry-env.json ${h}/.claude-personal/settings.json"
+      "-claude-telemetry-env.json ${h}/.claude-work/settings.json"
+      "/.claude/settings.json"
+    ];
+    expected = [
+      true
+      true
+      true
+      false
+    ];
+  };
+  testHarnessTelemetryAfterAccountDirs = {
+    expr = lib.elem "agentHostDirs" telHost.home.activation.claudeTelemetry.after;
+    expected = true;
+  };
+  # The Mac layout (one ~/.claude, no host name): the host config with dirs and host overridden. The account is
+  # the option (personal by default); the Mac config itself carries no telemetry until the pinned input has it.
+  testHarnessTelemetryMacLayout = {
+    expr =
+      let
+        macLike =
+          account:
+          (withTelemetry deployed {
+            file = telemetryFixture;
+            host = null;
+            inherit account;
+          } [ ".claude" ]);
+        personal = macLike "personal";
+        work = macLike "work";
+      in
+      [
+        (lib.attrNames personal.d.claudeHarness.telemetry.env)
+        personal.d.claudeHarness.telemetry.env.".claude".OTEL_RESOURCE_ATTRIBUTES
+        work.d.claudeHarness.telemetry.env.".claude".OTEL_RESOURCE_ATTRIBUTES
+        (lib.hasInfix " ${h}/.claude/settings.json" (telData personal))
+        (mac.d.claudeHarness.telemetry.env == { } || sdkHasTelemetry)
+      ];
+    expected = [
+      [ ".claude" ]
+      "account=personal,deployment.environment=example"
+      "account=work,deployment.environment=example"
+      true
       true
     ];
   };

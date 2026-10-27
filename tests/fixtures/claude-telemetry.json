@@ -1,0 +1,5 @@
+{
+  "endpoint": "http://collector.example:4317",
+  "protocol": "grpc",
+  "resourceAttributes": { "deployment.environment": "example" }
+}
