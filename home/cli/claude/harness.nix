@@ -6,7 +6,10 @@
 # nix-owned permission allow rules and sets autoMode in the same file (settings.* options). Skills are linked by
 # ./default.nix and home/agent-host.
 # Design: nwlnexus/olympus-sdk docs/superpowers/specs/2026-10-26-agent-harness-knowledge-and-hosts-design.md
-# (H1, H3, H4, H5, H19), issues olympus-sdk#560, #561 and #576.
+# (H1, H3, H4, H5, H12, H19), issues olympus-sdk#560, #561, #565 and #576. ./telemetry-wire.sh sets the Claude Code
+# OTLP telemetry env (H12) in each dir's settings.json `env`, from config/claude/telemetry.json of the private
+# olympus-sdk input; Claude Code reads that block at startup for interactive, headless and Remote Control sessions
+# alike (all of them run with CLAUDE_CONFIG_DIR set to the account dir), so one place covers them all.
 #
 # Which Claude dirs: the per-account dirs on agent hosts (~/.claude-<acct>; ~/.claude stays unwired there,
 # owner decision H17), ~/.claude everywhere else (the Macs).
@@ -65,6 +68,45 @@ let
   autoModeJson = pkgs.writeText "claude-auto-mode.json" (builtins.toJSON autoMode);
   wireSettings = cfg.settings.enable && (cfg.settings.allow != [ ] || autoMode != null);
 
+  # Telemetry source: config/claude/telemetry.json of the private olympus-sdk input ({ endpoint, protocol,
+  # resourceAttributes }). Until the pinned olympus-sdk has that file (olympus-sdk#565) and in CI, where the input
+  # is a stub, the default is null and no telemetry is wired.
+  telemetryDefault = "${inputs.olympus-sdk}/config/claude/telemetry.json";
+  tcfg = cfg.telemetry;
+  tsrc = if tcfg.file == null then null else lib.importJSON tcfg.file;
+  # The account of a dir: <acct> for the agent host's ~/.claude-<acct>, else the single account of that machine.
+  accountOf =
+    dir: if lib.hasPrefix ".claude-" dir then lib.removePrefix ".claude-" dir else tcfg.account;
+  # The env Claude Code gets: metrics and events over OTLP to the collector. Cardinality is kept down: no session
+  # id (the collector sums the delta counters of concurrent processes into one series per label set), no account
+  # uuid; the repository is on (dashboard split by repo). Resource attribute values must not contain spaces.
+  telemetryEnv =
+    dir:
+    let
+      attrs =
+        (tsrc.resourceAttributes or { })
+        // lib.optionalAttrs (tcfg.host != null) { "host.name" = tcfg.host; }
+        // {
+          account = accountOf dir;
+        };
+    in
+    assert lib.assertMsg (lib.all (v: !(lib.hasInfix " " v)) (
+      lib.attrValues attrs
+    )) "d.claudeHarness.telemetry: resource attribute values must not contain spaces";
+    {
+      CLAUDE_CODE_ENABLE_TELEMETRY = "1";
+      OTEL_METRICS_EXPORTER = "otlp";
+      OTEL_LOGS_EXPORTER = "otlp";
+      OTEL_EXPORTER_OTLP_PROTOCOL = tsrc.protocol or "grpc";
+      OTEL_EXPORTER_OTLP_ENDPOINT = tsrc.endpoint;
+      OTEL_METRICS_INCLUDE_REPOSITORY = "true";
+      OTEL_METRICS_INCLUDE_SESSION_ID = "false";
+      OTEL_METRICS_INCLUDE_ACCOUNT_UUID = "false";
+      OTEL_RESOURCE_ATTRIBUTES = lib.concatStringsSep "," (lib.mapAttrsToList (k: v: "${k}=${v}") attrs);
+    };
+  telemetryEnvJson =
+    dir: pkgs.writeText "claude-telemetry-env.json" (builtins.toJSON (telemetryEnv dir));
+
   hookWire = pkgs.writeShellApplication {
     name = "hook-wire";
     runtimeInputs = [
@@ -81,6 +123,15 @@ let
       pkgs.coreutils
     ];
     text = builtins.readFile ./settings-wire.sh;
+  };
+
+  telemetryWire = pkgs.writeShellApplication {
+    name = "telemetry-wire";
+    runtimeInputs = [
+      pkgs.jq
+      pkgs.coreutils
+    ];
+    text = builtins.readFile ./telemetry-wire.sh;
   };
 
   contractWire = pkgs.writeShellApplication {
@@ -121,6 +172,39 @@ in
       readOnly = true;
       default = hooks;
       description = "Hooks found in the agent-skills input and wired into settings.json (for tests).";
+    };
+
+    telemetry = {
+      file = lib.mkOption {
+        type = lib.types.nullOr lib.types.path;
+        default = if builtins.pathExists telemetryDefault then telemetryDefault else null;
+        defaultText = lib.literalMD "`config/claude/telemetry.json` of the `olympus-sdk` input when it exists, else `null`";
+        description = ''
+          JSON source of the telemetry env (`endpoint`, `protocol`, `resourceAttributes`; olympus-sdk#565, H12).
+          `null` wires nothing: Claude Code does not export telemetry.
+        '';
+      };
+      account = lib.mkOption {
+        type = lib.types.str;
+        default = "personal";
+        description = ''
+          The `account` resource attribute for a dir that is not an agent-host account dir (the Macs' ~/.claude).
+          Account dirs `~/.claude-<acct>` use `<acct>`.
+        '';
+      };
+      host = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = cfg.settings.autoModeHost;
+        defaultText = lib.literalMD "`settings.autoModeHost`";
+        description = "The `host.name` resource attribute; null leaves it out.";
+      };
+      env = lib.mkOption {
+        type = lib.types.attrsOf (lib.types.attrsOf lib.types.str);
+        readOnly = true;
+        internal = true;
+        default = if tsrc == null then { } else lib.genAttrs cfg.dirs telemetryEnv;
+        description = "The telemetry env written to each dir's settings.json, by dir (for tests).";
+      };
     };
 
     settings = {
@@ -213,6 +297,16 @@ in
           lib.concatMapStringsSep " " (dir: lib.escapeShellArg "${home}/${dir}/settings.json") cfg.dirs
         } || true
       ''
+    );
+
+    # Telemetry env (olympus-sdk#565) in each dir's settings.json `env`; the account differs per dir, so one call
+    # per dir. Same jq-merge rules as the hooks and settings.
+    home.activation.claudeTelemetry = lib.mkIf (tsrc != null) (
+      lib.hm.dag.entryAfter [ "writeBoundary" "agentHostDirs" ] (
+        lib.concatMapStringsSep "\n" (dir: ''
+          run ${telemetryWire}/bin/telemetry-wire ${telemetryEnvJson dir} ${lib.escapeShellArg "${home}/${dir}/settings.json"} || true
+        '') cfg.dirs
+      )
     );
 
     # After agentHostDirs (when present), so a new account dir already exists with its 0700 mode.
