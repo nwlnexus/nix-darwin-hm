@@ -54,7 +54,7 @@ let
   hookPath = dir: name: "${home}/${dir}/hooks/${name}";
 
   # autoMode source: config/claude/auto-mode.json of the private olympus-sdk input. Until the pinned olympus-sdk
-  # has that file (it lands with olympus-sdk#584), the default is null and autoMode is left untouched.
+  # has that file (it landed with olympus-sdk#585), the default is null and autoMode is left untouched.
   autoModeDefault = "${inputs.olympus-sdk}/config/claude/auto-mode.json";
   autoMode =
     if cfg.settings.autoModeFile == null then

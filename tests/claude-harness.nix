@@ -24,7 +24,7 @@ let
     autoModeHost = "no-such-host";
   };
   settingsOff = with' { enable = false; };
-  # The pinned olympus-sdk may or may not carry the autoMode source yet (olympus-sdk#584).
+  # The pinned olympus-sdk may or may not carry the autoMode source (added in olympus-sdk#585).
   sdkHasAutoMode = builtins.pathExists "${flake.inputs.olympus-sdk}/config/claude/auto-mode.json";
 in
 {
