@@ -67,8 +67,6 @@ in
     expected = [
       "github-personal"
       "gitlab-work"
-      "moneta-cf-access-client-id"
-      "moneta-cf-access-client-secret"
       "op-connect-env"
       "personal-env"
     ];

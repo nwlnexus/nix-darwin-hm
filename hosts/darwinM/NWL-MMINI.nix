@@ -30,14 +30,12 @@ in
           #   ~/.config/personal/1penv (0600), the raw OP_SERVICE_ACCOUNT_TOKEN.
           # work-env renders with the dtlr service-account token file
           # (~/.config/work/1penv, 0600); its template no longer reads the Employee
-          # vault. moneta-token reads vault CI, which the personal service account
-          # cannot see, and only served the retired mnemosyne writer.
+          # vault.
           d.apps.onepassword = {
             tokenFiles = {
               personal = "${config.home.homeDirectory}/.config/personal/1penv";
               work = "${config.home.homeDirectory}/.config/work/1penv";
             };
-            excludeSecrets = [ "moneta-token" ];
           };
 
           # Memory gateway client (olympus-sdk #444/#559): ~/.claude gets the capture
