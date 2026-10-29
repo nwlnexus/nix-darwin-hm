@@ -4,9 +4,9 @@
 # Claude Code owns and mutates <config dir>/settings.json and the account's .claude.json, so home-manager must
 # not replace them. This script edits only the entries the nix module manages and leaves every other key alone:
 #
-#   settings.json  .hooks.{SessionStart,Stop,PreCompact,SessionEnd}  hook groups whose command runs
-#                  memory-capture / memory-session-start (design 11: that match is the identity of "ours",
-#                  so a previous store path, or a hand-installed copy, is replaced instead of doubled)
+#   settings.json  .hooks.{SessionStart,Stop,PreCompact,SessionEnd,PreToolUse}  hook groups whose command runs
+#                  memory-capture / memory-session-start / memory-mcp-guard (design 11: that match is the identity
+#                  of "ours", so a previous store path, or a hand-installed copy, is replaced instead of doubled)
 #   .claude.json   .mcpServers.memory  only when its headersHelper runs memory-mcp-headers (a `memory` server
 #                  anyone else defined is left alone and reported)
 #
@@ -24,7 +24,7 @@
 # here: the spec holds paths and commands only).
 set -euo pipefail
 
-HOOK_RE='memory-(capture|session-start)'
+HOOK_RE='memory-(capture|session-start|mcp-guard)'
 MCP_TAG='memory-mcp-headers'
 
 warn() { printf 'memory-wire: warning: %s\n' "$*" >&2; }

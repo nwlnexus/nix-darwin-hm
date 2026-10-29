@@ -134,7 +134,7 @@ jq 'del(.hooks.UserPromptSubmit)' "$s" >"$tmp/x" && mv "$tmp/x" "$s"
 
 # --- 4. disable removes only managed entries ----------------------------------------------------------------------
 bash "$wire" remove --manifest "$manifest" 2>"$tmp/err"
-eqjson "remove: no memory hook left" "$s" '[.. | strings | select(test("memory-(capture|session-start)"))] | length == 0'
+eqjson "remove: no memory hook left" "$s" '[.. | strings | select(test("memory-(capture|session-start|mcp-guard)"))] | length == 0'
 eqjson "remove: events we created are gone, others stay" "$s" '(.hooks | keys | sort) == ["Notification","PostToolUse","SessionStart","Stop"]'
 eqjson "remove: someone else's hooks survive (incl. one appended after ours)" "$s" '.hooks.SessionStart == [{"matcher":"startup","hooks":[{"type":"command","command":"/usr/local/bin/other-start","timeout":5}]}] and .hooks.Stop == [{"hooks":[{"type":"command","command":"after-ours"}]}]'
 eqjson "remove: mcp entry gone, others and project-scoped memory untouched" "$m" '(.mcpServers | has("memory") | not) and .mcpServers.gitnexus.args == ["mcp"] and .mcpServers.other.url == "https://example.com/mcp" and .projects["/x"].mcpServers.memory.command == "keep-me" and .numStartups == 42'
@@ -192,6 +192,23 @@ bash "$wire" remove --manifest "$tmp/state/w4.json" 2>"$tmp/err"
 check "broken: remove does not delete a foreign memory server either" jq -e '.mcpServers.memory.url == "https://elsewhere/mcp"' "$bad_dir/.claude.json" >/dev/null
 bash "$wire" bogus 2>/dev/null
 check "bad usage exits 2" test $? -eq 2
+
+# --- 8. route table (olympus-sdk #675): the PreToolUse guard is ours too ----------------------------------------------
+home4="$tmp/home4/.claude"
+mkdir -p "$home4"
+echo '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"their-guard"}]}]}}' >"$home4/settings.json"
+mkspec "$tmp/spec7.json" "$store" default "$home4" "$tmp/home4/.claude.json"
+jq --arg st "$store" '.targets[0].hooks.PreToolUse = {"matcher":"mcp__memory__.*","hooks":[{"type":"command","timeout":10,
+  "command":("MEMORY_ROUTES_FILE=/nix/store/x-memory-routes.json " + $st + "/bin/memory-mcp-guard")}]}' "$tmp/spec7.json" >"$tmp/spec7g.json"
+bash "$wire" apply --spec "$tmp/spec7g.json" --manifest "$tmp/state/w5.json" 2>"$tmp/err"
+eqjson "routes: guard added after the foreign PreToolUse hook" "$home4/settings.json" '.hooks.PreToolUse | length == 2 and .[0].hooks[0].command == "their-guard" and .[1].matcher == "mcp__memory__.*" and (.[1].hooks[0].command | endswith("/bin/memory-mcp-guard"))'
+bash "$wire" apply --spec "$tmp/spec7g.json" --manifest "$tmp/state/w5.json" 2>"$tmp/err"
+eqjson "routes: re-apply does not double the guard" "$home4/settings.json" '[.hooks.PreToolUse[].hooks[] | select(.command | test("memory-mcp-guard"))] | length == 1'
+bash "$wire" apply --spec "$tmp/spec7.json" --manifest "$tmp/state/w5.json" 2>"$tmp/err"
+eqjson "routes: a spec without a table (routes = null) removes the guard, keeps theirs" "$home4/settings.json" '.hooks.PreToolUse == [{"matcher":"Bash","hooks":[{"type":"command","command":"their-guard"}]}]'
+bash "$wire" apply --spec "$tmp/spec7g.json" --manifest "$tmp/state/w5.json" 2>"$tmp/err"
+bash "$wire" remove --manifest "$tmp/state/w5.json" 2>"$tmp/err"
+eqjson "routes: remove takes the guard out with the other hooks" "$home4/settings.json" '([.. | strings | select(test("memory-(capture|session-start|mcp-guard)"))] | length == 0) and (.hooks.PreToolUse | length) == 1'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
