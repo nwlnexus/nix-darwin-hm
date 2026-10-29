@@ -234,6 +234,13 @@ in
       "Bash(gh issue *)"
       "Bash(gh run *)"
       "Bash(git push -u origin *)"
+      "mcp__memory__list_recent"
+      "mcp__memory__search"
+      "mcp__memory__recall"
+      "Bash(git fetch *)"
+      "Bash(git ls-remote *)"
+      "Bash(gh pr list *)"
+      "Bash(gh pr view *)"
     ];
   };
   testHarnessSettingsHostWire = {
