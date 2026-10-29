@@ -229,6 +229,15 @@ in
           "Bash(gh issue *)"
           "Bash(gh run *)"
           "Bash(git push -u origin *)"
+          # HW8 (olympus-sdk#566): the long-task skill's registry check and step-0 PR/branch checks must run in
+          # headless (-p) sessions too, where default mode refuses unmatched MCP tools and Bash.
+          "mcp__memory__list_recent"
+          "mcp__memory__search"
+          "mcp__memory__recall"
+          "Bash(git fetch *)"
+          "Bash(git ls-remote *)"
+          "Bash(gh pr list *)"
+          "Bash(gh pr view *)"
         ];
         description = ''
           Permission rules merged into `.permissions.allow` (union: missing rules are appended, nothing is
