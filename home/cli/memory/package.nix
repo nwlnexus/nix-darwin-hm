@@ -37,7 +37,7 @@ stdenvNoCC.mkDerivation {
   installCheckPhase = ''
     runHook preInstallCheck
     # Everything the README says must be installed is there and the scripts parse.
-    for f in bin/memory-capture bin/memory-session-start bin/memory-mcp-headers; do
+    for f in bin/memory-capture bin/memory-session-start bin/memory-mcp-headers bin/memory-mcp-guard; do
       test -x $out/$f
       sh -n $out/$f
     done
@@ -51,7 +51,13 @@ stdenvNoCC.mkDerivation {
     # The headers helper prints exactly the documented object (design 11) from a throwaway key file.
     k=$(mktemp); printf 'mgw_test\n' > $k
     test "$(MEMORY_KEY_FILE=$k $out/bin/memory-mcp-headers)" = '{"Authorization":"Bearer mgw_test"}'
-    rm -f $k
+    # With a route table (#675) the key is printed only for a session directory under a gateway root.
+    r=$(mktemp); printf '{"v":1,"routes":[{"root":"/gw","backend":"gateway"},{"root":"/gw/no","backend":"none"}]}' > $r
+    test "$(MEMORY_ROUTES_FILE=$r MEMORY_SESSION_DIR=/gw/x MEMORY_KEY_FILE=$k $out/bin/memory-mcp-headers)" = '{"Authorization":"Bearer mgw_test"}'
+    ! MEMORY_ROUTES_FILE=$r MEMORY_SESSION_DIR=/gw/no/x MEMORY_KEY_FILE=$k $out/bin/memory-mcp-headers
+    echo '{"cwd":"/gw/x"}' | MEMORY_ROUTES_FILE=$r $out/bin/memory-mcp-guard
+    ! echo '{"cwd":"/gw/no/x"}' | MEMORY_ROUTES_FILE=$r $out/bin/memory-mcp-guard 2>/dev/null
+    rm -f $k $r
     runHook postInstallCheck
   '';
 
