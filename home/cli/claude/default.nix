@@ -67,6 +67,15 @@ in
         .value |= map(select((.command // "") | test("mnemosyne") | not))
       ) | with_entries(select(.value | length > 0))) else . end'
 
+    # Retired memory MCP servers (moneta, openmemory/mem0) left in Claude's config by hand-run
+    # `claude mcp add`: drop them from the user scope and from every per-project scope.
+    retiredMcp='def drop: if type == "object" then with_entries(select((.key | test("^(moneta|openmemory|mem0)$"; "i")) | not)) else . end;
+      (if .mcpServers then .mcpServers |= drop else . end)
+      | (if .projects then .projects |= map_values(if .mcpServers then .mcpServers |= drop else . end) else . end)'
+    for f in "${config.home.homeDirectory}/.claude.json" "${config.home.homeDirectory}"/.claude-*/.claude.json; do
+      strip "$f" "$retiredMcp"
+    done
+
     rm -rf "${config.home.homeDirectory}/.claude/mnemosyne"
     MISE_DATA="${config.home.homeDirectory}/.local/share/mise"
     if [ -d "$MISE_DATA/installs/npm-nwlnexus-mnemosyne" ]; then
