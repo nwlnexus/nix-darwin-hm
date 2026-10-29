@@ -44,8 +44,8 @@
       d.claudeHarness.settings.autoModeHost = "ai-agent-host";
 
       # Memory gateway client (Claude Code MCP server + capture hooks, home/cli/memory; olympus-sdk #559).
-      # Keys: 1Password Dev/memory-gateway-keys, fields ai-agent-host-personal and ai-agent-host-work
-      # (client ids of the same name, minted with memory-admin). Tailnet only, no public fallback.
+      # Key: 1Password Dev/memory-gateway-keys, field ai-agent-host-personal (client id of the same name,
+      # minted with memory-admin). Tailnet only, no public fallback.
       d.memory = {
         enable = true;
         mode = "tailnet";
@@ -53,10 +53,16 @@
         # The module's default account set (~/.claude plus one per d.agentHost.accounts) is replaced as soon
         # as any accounts.* is defined, so list the accounts explicitly. ~/.claude is not used by any agent
         # session here (owner decision), so it stays unwired.
+        #
+        # The work account never captures to or recalls from this personal gateway (owner, 2026-10-29,
+        # olympus-sdk #675): disabled, so the next switch removes its hooks and MCP entry from
+        # ~/.claude-work (memory-wire drops targets that leave the spec) and no longer fetches its key. A
+        # work-side memory system becomes a route backend of its own once it exists. The personal account
+        # uses the module's default routes: ~/projects/personal -> gateway, ~/projects/work -> none.
         accounts = {
           default.enable = false;
           personal = { };
-          work = { };
+          work.enable = false;
         };
       };
     };
