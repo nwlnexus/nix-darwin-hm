@@ -11,13 +11,8 @@
       d.apps.onepassword = {
         gui = false;
         # work-env reads the dtlr Employee vault, which service accounts can't access;
-        # ~/projects/work/.env is copied by hand on this host instead. moneta-token
-        # reads vault CI, which this host's personal service account cannot see, and
-        # it only served the retired mnemosyne writer (olympus-sdk#559).
-        excludeSecrets = [
-          "work-env"
-          "moneta-token"
-        ];
+        # ~/projects/work/.env is copied by hand on this host instead.
+        excludeSecrets = [ "work-env" ];
         tokenFiles = {
           personal = "${config.home.homeDirectory}/.config/personal/1penv";
           work = "${config.home.homeDirectory}/.config/work/1penv";

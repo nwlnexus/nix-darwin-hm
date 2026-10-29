@@ -27,14 +27,12 @@ in
           # op-secrets authenticates with the personal service-account token file
           # (~/.config/personal/1penv, 0600) instead of the desktop app's CLI
           # integration, as on NWL-MMINI; work-env uses the dtlr token file
-          # (~/.config/work/1penv). moneta-token reads vault CI, which the personal
-          # service account cannot see; excluded.
+          # (~/.config/work/1penv).
           d.apps.onepassword = {
             tokenFiles = {
               personal = "${config.home.homeDirectory}/.config/personal/1penv";
               work = "${config.home.homeDirectory}/.config/work/1penv";
             };
-            excludeSecrets = [ "moneta-token" ];
           };
 
           # Memory gateway client (olympus-sdk #444/#559): key field `NWL-MBM2-default`
