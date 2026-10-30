@@ -177,6 +177,10 @@ test-second-brain-sync:
 test-claude-telemetry-wire:
     bash tests/claude-telemetry-wire.sh
 
+# A work-only host evaluates with the private olympus-sdk input unreachable (needs nix and jq; olympus-sdk #691).
+test-work-only-private-input:
+    bash tests/work-only-private-input.sh
+
 # Behaviour tests for the agent-session launcher (dry runs plus a private tmux server; needs tmux, no nix).
 test-claude-agent-session:
     bash tests/claude-agent-session.sh
