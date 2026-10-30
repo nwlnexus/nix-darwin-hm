@@ -1,144 +1,129 @@
 #!/usr/bin/env bash
-# Colors for better output
+# Bootstrap a fresh Mac: Homebrew, upstream Nix, then the first nix-darwin switch.
+# Later switches use `just switch` (scripts/darwin-rebuild.sh).
+# Linux agent hosts use scripts/bootstrap-agent-host.sh instead.
+set -euo pipefail
+
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[0;33m'
 RED='\033[0;31m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-echo -e "${BLUE}=== Nix and Nix-Darwin Configuration Setup ===${NC}"
-echo "This script will install Nix, set up nix-darwin, and configure your personal variables."
-echo
+info() { echo -e "${BLUE}$*${NC}"; }
+step() { echo -e "${YELLOW}$*${NC}"; }
+ok() { echo -e "${GREEN}✓ $*${NC}"; }
+die() {
+  echo -e "${RED}Error: $*${NC}" >&2
+  exit 1
+}
 
-# Detect operating system
-OS="$(uname -s)"
-case "${OS}" in
-    Linux*)     MACHINE=Linux;;
-    Darwin*)    MACHINE=Mac;;
-    *)          MACHINE="UNKNOWN:${OS}"
-esac
+# NIX_ROOT is overridable for tests only.
+NIX_ROOT="${NIX_ROOT:-/nix}"
+NIX_BIN="${NIX_ROOT}/var/nix/profiles/default/bin/nix"
+NIX_DAEMON_SH="${NIX_ROOT}/var/nix/profiles/default/etc/profile.d/nix-daemon.sh"
+LAUNCHD_DIR="${LAUNCHD_DIR:-/Library/LaunchDaemons}"
 
-echo -e "${BLUE}Detected OS: ${MACHINE}${NC}"
-
-# Check if Homebrew is already installed
-if command -v brew >/dev/null 2>&1; then
-  echo -e "${GREEN}✓ Homebrew is already installed${NC}"
-else
-  echo -e "${YELLOW}Installing Homebrew...${NC}"
-  
-  case "${MACHINE}" in
-    Mac)
-      # Install Homebrew for macOS
-      /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-      ;;
-    Linux)
-      # Install Homebrew for Linux
-      /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-      
-      # Add Homebrew to PATH for Linux (it's typically installed in /home/linuxbrew/.linuxbrew)
-      if [ -d "/home/linuxbrew/.linuxbrew" ]; then
-        echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> ~/.bashrc
-        echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> ~/.zshrc
-        eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-      fi
-      ;;
-    *)
-      echo -e "${RED}Unsupported operating system: ${MACHINE}${NC}"
-      echo "Homebrew installation may not work correctly."
-      /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-      ;;
-  esac
-  
-  # Source Homebrew environment to make brew command available in current shell
-  echo -e "${YELLOW}Sourcing Homebrew environment...${NC}"
-  case "${MACHINE}" in
-    Mac)
-      # Try common macOS Homebrew locations
-      if [ -f "/opt/homebrew/bin/brew" ]; then
-        # Apple Silicon Mac
-        eval "$(/opt/homebrew/bin/brew shellenv)"
-      elif [ -f "/usr/local/bin/brew" ]; then
-        # Intel Mac
-        eval "$(/usr/local/bin/brew shellenv)"
-      elif command -v brew >/dev/null 2>&1; then
-        # If brew is somehow already in PATH, use it
-        eval "$(brew shellenv)"
-      fi
-      ;;
-    Linux)
-      # For Linux, we already sourced it above, but let's ensure it's sourced again
-      if [ -d "/home/linuxbrew/.linuxbrew" ]; then
-        eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-      elif command -v brew >/dev/null 2>&1; then
-        eval "$(brew shellenv)"
-      fi
-      ;;
-  esac
-  
-  # Verify installation
-  if command -v brew >/dev/null 2>&1; then
-    echo -e "${GREEN}✓ Homebrew installed successfully${NC}"
-  else
-    echo -e "${RED}Warning: Homebrew installation may have failed. Please check manually.${NC}"
-  fi
-fi
-
-# Check if Nix is already installed
-if command -v nix >/dev/null 2>&1; then
-  echo -e "${GREEN}✓ Nix is already installed${NC}"
-else
-  echo -e "${YELLOW}Installing Nix...${NC}"
-  # Install Nix
-  curl -fsSL https://install.determinate.systems/nix | sh -s -- install
-  # Source nix profile to make nix commands available in current shell
-  if [ -e '/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh' ]; then
-    . '/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh'
-  fi
-  echo -e "${GREEN}✓ Nix installed successfully${NC}"
-fi
-
-# Enable flakes
-echo -e "${YELLOW}Enabling Nix flakes...${NC}"
-mkdir -p ~/.config/nix
-echo 'experimental-features = nix-command flakes' >~/.config/nix/nix.conf
-echo -e "${GREEN}✓ Nix flakes enabled${NC}"
-
-# Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 
-# Get hostname with default
-current_hostname=$(hostname)
-hostname=${hostname:-$current_hostname}
+info "=== Nix and nix-darwin Setup ==="
 
-# Get username with default
-current_user=$(whoami)
-username=${username:-$current_user}
+case "$(uname -s)" in
+  Darwin) ;;
+  Linux)
+    die "install.sh is for macOS. On a Linux agent host run scripts/bootstrap-agent-host.sh."
+    ;;
+  *) die "Unsupported operating system: $(uname -s)" ;;
+esac
 
-# Get home directory with smart default
-default_home="/Users/${username}"
-home_dir=${home_dir:-$default_home}
+# --- Homebrew ---------------------------------------------------------------
+load_brew() {
+  if [ -x /opt/homebrew/bin/brew ]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+  elif [ -x /usr/local/bin/brew ]; then
+    eval "$(/usr/local/bin/brew shellenv)"
+  fi
+}
 
-# Check if nix-darwin is installed
-if [ -e "/run/current-system/sw/bin/darwin-rebuild" ]; then
-  echo -e "${GREEN}✓ nix-darwin is already installed${NC}"
+if command -v brew >/dev/null 2>&1; then
+  ok "Homebrew is already installed"
 else
-  echo -e "${YELLOW}Installing nix-darwin...${NC}"
-  # Create the ~/.config/nix-darwin directory if it doesn't exist
-  mkdir -p ~/.config/nix-darwin
-  # Install nix-darwin
-  nix-build https://github.com/LnL7/nix-darwin/archive/master.tar.gz -A installer
-  ./result/bin/darwin-installer
-  echo -e "${GREEN}✓ nix-darwin installed successfully${NC}"
+  step "Installing Homebrew..."
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  load_brew
+  command -v brew >/dev/null 2>&1 || die "Homebrew installation failed. Check the output above."
+  ok "Homebrew installed"
 fi
 
-# Run nix-darwin switch with the flake
-echo -e "${YELLOW}Applying nix-darwin configuration...${NC}"
-if nix run nix-darwin -- switch --flake ~/nix-darwin-hm; then
-  echo -e "${GREEN}✓ nix-darwin configuration applied successfully${NC}"
-else
-  echo -e "${RED}Failed to apply nix-darwin configuration. Please check for errors.${NC}"
+# --- Nix (upstream, not Determinate) ----------------------------------------
+# nix-darwin manages Nix itself and refuses to activate on Determinate Nix.
+is_determinate() {
+  if [ -f "${NIX_ROOT}/receipt.json" ] && grep -qi determinate "${NIX_ROOT}/receipt.json"; then
+    return 0
+  fi
+  compgen -G "${LAUNCHD_DIR}/systems.determinate.*" >/dev/null
+}
+
+if is_determinate; then
+  cat >&2 <<MSG
+Determinate Nix is installed. nix-darwin cannot activate on it.
+Uninstall it, then rerun this script (it installs upstream Nix):
+
+  sudo ${NIX_ROOT}/nix-installer uninstall
+  ./install.sh
+
+This script does not uninstall anything for you.
+MSG
   exit 1
 fi
 
+if [ -x "${NIX_BIN}" ]; then
+  ok "Nix is already installed"
+else
+  step "Installing upstream Nix..."
+  curl -fsSL https://install.determinate.systems/nix | sh -s -- install --prefer-upstream-nix
+  [ -x "${NIX_BIN}" ] || die "Nix installation failed: ${NIX_BIN} not found."
+  ok "Nix installed"
+fi
+
+[ -e "${NIX_DAEMON_SH}" ] || die "Nix daemon profile not found: ${NIX_DAEMON_SH}"
+# shellcheck disable=SC1090
+. "${NIX_DAEMON_SH}"
+
+# Enable flakes
+step "Enabling Nix flakes..."
+mkdir -p ~/.config/nix
+echo 'experimental-features = nix-command flakes' >~/.config/nix/nix.conf
+ok "Nix flakes enabled"
+
+# --- Host name ----------------------------------------------------------------
+# The flake picks the config by LocalHostName, so it must match a hosts/darwinM file.
+host="$(scutil --get LocalHostName 2>/dev/null || hostname -s)"
+if [ ! -f "${SCRIPT_DIR}/hosts/darwinM/${host}.nix" ]; then
+  available="$(cd "${SCRIPT_DIR}/hosts/darwinM" && printf '%s ' *.nix | sed 's|\.nix||g')"
+  cat >&2 <<MSG
+No host config for '${host}': hosts/darwinM/${host}.nix does not exist.
+Available hosts: ${available}
+Set the machine name to one of them (the name must match the file exactly), then rerun:
+
+  sudo scutil --set ComputerName <host>
+  sudo scutil --set HostName <host>
+  sudo scutil --set LocalHostName <host>
+MSG
+  exit 1
+fi
+ok "Host config found for ${host}"
+
+# --- First switch -------------------------------------------------------------
+# Use the nix-darwin release this flake tracks.
+darwin_ref="$(sed -n 's|.*darwin\.url = "github:nix-darwin/nix-darwin/\([^"]*\)".*|\1|p' "${SCRIPT_DIR}/flake.nix" | head -n1)"
+[ -n "${darwin_ref}" ] || die "Could not read the nix-darwin release from flake.nix."
+
+step "Applying nix-darwin configuration for ${host} (nix-darwin ${darwin_ref}); sudo will ask for your password..."
+cd "${SCRIPT_DIR}"
+sudo "${NIX_BIN}" run "nix-darwin/${darwin_ref}#darwin-rebuild" -- switch --flake ".#${host}" ||
+  die "Failed to apply the nix-darwin configuration. Check the errors above."
+ok "nix-darwin configuration applied"
+
 echo
-echo -e "${GREEN}Setup complete!${NC}"
+ok "Setup complete! Use 'just switch' for later changes."

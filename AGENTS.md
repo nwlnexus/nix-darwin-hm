@@ -164,8 +164,8 @@ To add a new host configuration:
 Host files are lowercase or uppercase as the machine is named; the flake picks the config by hostname, so the name must match the file name exactly. Example: moving to a new Mac with Migration Assistant (`hosts/darwinM/nwl-mstudio.nix`, copied from `NWL-MMINI.nix`):
 
 1. **Hostname first.** Before the first rebuild: `sudo scutil --set ComputerName <host>; sudo scutil --set LocalHostName <host>; sudo scutil --set HostName <host>`. Migration Assistant keeps or prompts for names.
-2. **Install Nix fresh** (`install.sh`). `/nix` is a separate APFS volume and is not migrated, so the migrated home has dotfile symlinks into a store that does not exist yet.
-3. **`just build` as your user** (the private `olympus-sdk` input is read over ssh), then `just switch`.
+2. **Install Nix fresh and do the first switch** (`./install.sh`: installs Homebrew and *upstream* Nix with `--prefer-upstream-nix`, since nix-darwin refuses to activate on Determinate Nix, then runs the first `sudo nix run nix-darwin/<release>#darwin-rebuild -- switch --flake .#<host>`; if Determinate Nix is already present it stops and tells you to run `sudo /nix/nix-installer uninstall`). `/nix` is a separate APFS volume and is not migrated, so the migrated home has dotfile symlinks into a store that does not exist yet.
+3. **`just build` as your user** (the private `olympus-sdk` input is read over ssh), then `just switch` for later changes. If the first switch in `install.sh` cannot read private inputs yet, finish ssh setup and rerun `just switch`.
 4. **Tailscale:** the migrated state clones the old node identity. Run `tailscale logout`, log in again so it registers as a new node, and rename the node. Never run both machines with the same identity.
 5. **Memory client** (owner step, `d.memory.host` must equal the flake host name; the 1Password field is `<host>-<account>`). In the cluster:
    `sudo k3s kubectl -n memory exec deploy/memory-gateway -- node dist/admin/cli.js client create --id claude-code@<host>:default --kind gateway_key --scopes read,write,forget`

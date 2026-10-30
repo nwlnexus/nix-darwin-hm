@@ -45,8 +45,10 @@ Run these as the primary user, in order. Steps 4 and 5 must come before the firs
    sudo scutil --set LocalHostName dtlr-ai-agent-host
    ```
 
-3. **Nix and Homebrew.** Clone this public repo over HTTPS (no key needed yet), outside the work tree, then run the
-   installer:
+3. **Nix, Homebrew and first switch.** Clone this public repo over HTTPS (no key needed yet), outside the work tree,
+   then run the installer. It installs Homebrew and upstream Nix (not Determinate, which nix-darwin refuses),
+   checks the hostname matches `hosts/darwinM/<name>.nix`, and runs the first `sudo ... darwin-rebuild switch`. If
+   it reports Determinate Nix, run `sudo /nix/nix-installer uninstall` and rerun it:
 
    ```sh
    mkdir -p ~/projects/personal
@@ -69,7 +71,7 @@ Run these as the primary user, in order. Steps 4 and 5 must come before the firs
    `github.com-work` alias) and the commit-signing key, so add it to the work GitHub account as an authentication
    key and as a signing key.
 
-6. **First switch.** The host does not need the private `olympus-sdk` input, so no `just build` first is needed
+6. **Later switches.** `install.sh` ran the first switch in step 3. To apply later changes (or after adding the token and key from steps 4 and 5), switch again. The host does not need the private `olympus-sdk` input, so no `just build` first is needed
    (that step only exists for hosts that fetch private inputs over ssh):
 
    ```sh
