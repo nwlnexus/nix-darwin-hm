@@ -1,6 +1,9 @@
-# Linux agent hosts: one Claude Code / Codex config dir per account, with the
-# account picked by the project tree you're in (direnv) or explicitly via
-# claude-<acct> / codex-<acct>. Remote Control services: ./services.nix.
+# Agent hosts (Linux standalone home-manager and nix-darwin): one Claude Code /
+# Codex config dir per account, with the account picked by the project tree
+# you're in (zsh prompt hook) or explicitly via claude-<acct> / codex-<acct>.
+# Remote Control services (systemd user units on Linux, launchd agents on
+# macOS): ./services.nix. Off unless d.agentHost.enable; the Macs import this
+# through system/darwin/agent-host.nix.
 {
   config,
   lib,
@@ -34,13 +37,40 @@ in
     accounts = lib.mkOption {
       type = lib.types.attrsOf (
         lib.types.submodule {
-          options.root = lib.mkOption {
-            type = lib.types.str;
-            description = "Project tree this account works in (Remote Control working directory).";
+          options = {
+            root = lib.mkOption {
+              type = lib.types.str;
+              description = "Project tree this account works in (Remote Control working directory).";
+            };
+            remoteControl = {
+              claude = lib.mkOption {
+                type = lib.types.bool;
+                default = true;
+                description = "Run the always-on Claude Code Remote Control service (claude-rc-<acct>) for this account.";
+              };
+              codex = lib.mkOption {
+                type = lib.types.bool;
+                default = true;
+                description = "Run the always-on Codex Remote Control service (codex-rc-<acct>) for this account.";
+              };
+            };
           };
         }
       );
       default = { };
+    };
+
+    gitnexus.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Write the gitnexus MCP entry and mirror the gitnexus-* skills into every account dir.";
+    };
+
+    logDir = lib.mkOption {
+      type = lib.types.str;
+      default = "${home}/Library/Logs/agent-host";
+      readOnly = true;
+      description = "macOS only: where the launchd agents (Remote Control, second-brain pull) write <unit>.log.";
     };
   };
 
@@ -105,6 +135,14 @@ in
       '') accts
     );
 
+    # launchd does not create the parent of StandardOutPath; make it before
+    # setupLaunchAgents (re)loads the agents.
+    home.activation.agentHostLogDir = lib.mkIf pkgs.stdenv.isDarwin (
+      lib.hm.dag.entryBetween [ "setupLaunchAgents" ] [ "writeBoundary" ] ''
+        run install -d -m 0755 ${lib.escapeShellArg cfg.logDir}
+      ''
+    );
+
     # Per-account gitnexus Claude integration (home/cli/claude does ~/.claude).
     #
     # `gitnexus setup -c claude` ignores CLAUDE_CONFIG_DIR: it always writes the
@@ -117,29 +155,31 @@ in
     # start (slow, and a TLS/network hiccup blows the 30s MCP connect timeout),
     # while the shim starts in <1s offline and resolves its own node.
     # Idempotent, fail-soft.
-    home.activation.agentHostGitnexus = lib.hm.dag.entryAfter [ "gitnexusSetup" ] (
-      lib.concatMapStrings (acct: ''
-        SHIM=${lib.escapeShellArg "${home}/.local/share/mise/shims/gitnexus"}
-        ACCT_DIR=${lib.escapeShellArg (claudeDir acct)}
-        if [ -x "$SHIM" ]; then
-          DST_JSON="$ACCT_DIR/.claude.json"
-          [ -f "$DST_JSON" ] || { echo '{}' > "$DST_JSON"; chmod 600 "$DST_JSON"; }
-          TMP="$(mktemp)"
-          if ${pkgs.jq}/bin/jq --arg c "$SHIM" '.mcpServers.gitnexus = {command: $c, args: ["mcp"]}' "$DST_JSON" > "$TMP" 2>/dev/null; then
-            if cmp -s "$TMP" "$DST_JSON"; then rm -f "$TMP"; else chmod 600 "$TMP"; mv "$TMP" "$DST_JSON"; fi
-          else
-            rm -f "$TMP"
+    home.activation.agentHostGitnexus = lib.mkIf cfg.gitnexus.enable (
+      lib.hm.dag.entryAfter [ "gitnexusSetup" ] (
+        lib.concatMapStrings (acct: ''
+          SHIM=${lib.escapeShellArg "${home}/.local/share/mise/shims/gitnexus"}
+          ACCT_DIR=${lib.escapeShellArg (claudeDir acct)}
+          if [ -x "$SHIM" ]; then
+            DST_JSON="$ACCT_DIR/.claude.json"
+            [ -f "$DST_JSON" ] || { echo '{}' > "$DST_JSON"; chmod 600 "$DST_JSON"; }
+            TMP="$(mktemp)"
+            if ${pkgs.jq}/bin/jq --arg c "$SHIM" '.mcpServers.gitnexus = {command: $c, args: ["mcp"]}' "$DST_JSON" > "$TMP" 2>/dev/null; then
+              if cmp -s "$TMP" "$DST_JSON"; then rm -f "$TMP"; else chmod 600 "$TMP"; mv "$TMP" "$DST_JSON"; fi
+            else
+              rm -f "$TMP"
+            fi
           fi
-        fi
-        for SKILL in ${home}/.claude/skills/gitnexus-*; do
-          [ -d "$SKILL" ] || continue
-          # Our agent-skills are nix-managed symlinks in both places; cp onto
-          # a store symlink would fail. Only mirror real (gitnexus-written) dirs.
-          [ -L "$SKILL" ] && continue
-          run install -d -m 0755 "$ACCT_DIR/skills"
-          run cp -rT "$SKILL" "$ACCT_DIR/skills/$(basename "$SKILL")"
-        done
-      '') accts
+          for SKILL in ${home}/.claude/skills/gitnexus-*; do
+            [ -d "$SKILL" ] || continue
+            # Our agent-skills are nix-managed symlinks in both places; cp onto
+            # a store symlink would fail. Only mirror real (gitnexus-written) dirs.
+            [ -L "$SKILL" ] && continue
+            run install -d -m 0755 "$ACCT_DIR/skills"
+            run cp -rT "$SKILL" "$ACCT_DIR/skills/$(basename "$SKILL")"
+          done
+        '') accts
+      )
     );
   };
 }

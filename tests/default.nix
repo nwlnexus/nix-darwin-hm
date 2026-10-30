@@ -12,6 +12,7 @@ let
     ./system-manager.nix
     ./scripts.nix
     ./agent-host.nix
+    ./agent-host-darwin.nix
     ./linuxbrew.nix
     ./memory.nix
     ./claude-harness.nix
