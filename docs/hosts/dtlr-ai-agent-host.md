@@ -49,8 +49,9 @@ Run these as the primary user, in order. Steps 4 and 5 must come before the firs
    installer:
 
    ```sh
-   git clone https://github.com/nwlnexus/nix-darwin-hm.git ~/nix-darwin-hm
-   cd ~/nix-darwin-hm && ./install.sh
+   mkdir -p ~/projects/personal
+   git clone https://github.com/nwlnexus/nix-darwin-hm.git ~/projects/personal/nix-darwin-hm
+   cd ~/projects/personal/nix-darwin-hm && ./install.sh
    ```
 
 4. **Work 1Password token.** Write the work service-account token, the raw token value only, to
@@ -72,7 +73,7 @@ Run these as the primary user, in order. Steps 4 and 5 must come before the firs
    (that step only exists for hosts that fetch private inputs over ssh):
 
    ```sh
-   cd ~/nix-darwin-hm
+   cd ~/projects/personal/nix-darwin-hm
    sudo nix run nix-darwin/nix-darwin-26.05#darwin-rebuild -- switch --flake .#dtlr-ai-agent-host
    ```
 
