@@ -124,10 +124,23 @@ let
   creds = p: "${tools.${p.tool}.dir p.acct}/${tools.${p.tool}.creds}";
   logFile = name: "${cfg.logDir}/${name}.log";
 
-  # macOS: launchd has no ExecCondition, so the agent's program checks the
-  # login itself and exits 0 until the account is logged in; KeepAlive's
-  # PathState on the credentials file then starts it once the file appears and
-  # keeps it running while the file exists.
+  # macOS login check. Claude Code on macOS keeps its OAuth token in the
+  # Keychain, so the credentials file may never appear; `/login` also records
+  # `oauthAccount` in the account's .claude.json, so either counts. Codex asks
+  # its own CLI (file or keyring store alike).
+  darwinLoggedIn =
+    p:
+    let
+      dir = tools.${p.tool}.dir p.acct;
+    in
+    if p.tool == "claude" then
+      "[ -f ${lib.escapeShellArg (creds p)} ] || grep -q '\"oauthAccount\"' ${lib.escapeShellArg "${dir}/.claude.json"} 2>/dev/null"
+    else
+      "${p.launcher}/bin/${p.tool}-${p.acct} login status >/dev/null 2>&1";
+
+  # macOS: launchd has no ExecCondition, so the agent's program waits (one
+  # check a minute, logged once) until the account is logged in, then starts
+  # the server; KeepAlive restarts it whenever it exits.
   # POSIX sh (macOS /bin/sh), inline in the plist so `launchctl print` shows it.
   darwinRcScript =
     p:
@@ -136,9 +149,11 @@ let
       bin = "${p.launcher}/bin/${p.tool}-${p.acct}";
     in
     ''
-      if [ ! -f ${lib.escapeShellArg (creds p)} ]; then
-        echo "$(date '+%F %T') ${p.acct} is not logged in to ${p.tool}; skipping until ${creds p} exists"
-        exit 0
+      logged_in() { ${darwinLoggedIn p}; }
+      if ! logged_in; then
+        echo "$(date '+%F %T') ${p.acct} is not logged in to ${p.tool}; waiting (log in with ${p.tool}-${p.acct})"
+        until logged_in; do sleep 60; done
+        echo "$(date '+%F %T') ${p.acct} logged in; starting"
       fi
     ''
     + (
@@ -272,7 +287,7 @@ lib.mkIf cfg.enable {
             WorkingDirectory = p.account.root;
             EnvironmentVariables.PATH = agentPath;
             RunAtLoad = true;
-            KeepAlive.PathState.${creds p} = true;
+            KeepAlive = true;
             ThrottleInterval = 10;
             StandardInPath = "/dev/null";
             StandardOutPath = logFile (unitName p);

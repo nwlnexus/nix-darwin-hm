@@ -96,7 +96,7 @@ in
       [
         a.Label
         a.RunAtLoad
-        a.KeepAlive.PathState
+        a.KeepAlive
         a.WorkingDirectory
         a.StandardOutPath
         a.StandardErrorPath
@@ -105,22 +105,23 @@ in
     expected = [
       "org.nix-community.home.claude-rc-work"
       true
-      { "${h}/.claude-work/.credentials.json" = true; }
+      true
       "${h}/projects/work"
       "${logs}/claude-rc-work.log"
       "${logs}/claude-rc-work.log"
       10
     ];
   };
-  # Skip (exit 0) until the account is logged in, then run the launcher in server mode.
+  # Wait until the account is logged in (credentials file, or the Keychain login's oauthAccount in .claude.json),
+  # then run the launcher in server mode.
   testDarwinClaudeProgram = {
     expr =
       let
         s = readProgram work.launchd.agents.claude-rc-work;
       in
       [
-        (lib.hasInfix "if [ ! -f ${h}/.claude-work/.credentials.json ]; then" s)
-        (lib.hasInfix "exit 0" s)
+        (lib.hasInfix "logged_in() { [ -f ${h}/.claude-work/.credentials.json ] || grep -q '\"oauthAccount\"' ${h}/.claude-work/.claude.json 2>/dev/null; }" s)
+        (lib.hasInfix "until logged_in; do sleep 60; done" s)
         (lib.hasInfix "/bin/claude-work remote-control\n" s)
       ];
     expected = [
@@ -136,13 +137,13 @@ in
         s = readProgram work.launchd.agents.codex-rc-work;
       in
       [
-        work.launchd.agents.codex-rc-work.config.KeepAlive.PathState
+        (lib.hasInfix "/bin/codex-work login status >/dev/null 2>&1; }" s)
         (lib.hasInfix "/bin/codex-work remote-control start || exit 1" s)
         (lib.hasInfix "trap '" s)
         (lib.hasInfix "/bin/codex-work remote-control stop; exit 0' TERM INT HUP" s)
       ];
     expected = [
-      { "${h}/.codex-work/auth.json" = true; }
+      true
       true
       true
       true
