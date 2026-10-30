@@ -244,6 +244,38 @@ in
     ];
   };
 
+  # No atlas brew / olympus tap / obsidian cask on a work-only host; the control Mac keeps them.
+  testWorkOnlyNoAtlasObsidian = {
+    expr =
+      let
+        hb = sys.homebrew;
+        ch = flake.darwinConfigurations.NWL-MMINI.config.homebrew;
+        has = c: [
+          (lib.elem "nwlnexus/olympus/atlas" (map (b: b.name) c.brews))
+          (lib.elem "obsidian" (map (k: k.name) c.casks))
+          (lib.hasInfix "nwlnexus/olympus" (
+            c.extraConfig + lib.concatStringsSep "\n" (map (t: t.name) c.taps)
+          ))
+        ];
+      in
+      {
+        workOnly = has hb;
+        control = has ch;
+      };
+    expected = {
+      workOnly = [
+        false
+        false
+        false
+      ];
+      control = [
+        true
+        true
+        true
+      ];
+    };
+  };
+
   # Runs like ai-agent-host: Remote Control launchd agents for the one work account, server-like power settings.
   testWorkOnlyRemoteControl = {
     expr = [

@@ -54,7 +54,10 @@
       brews = [
         "cloudflared"
         "openssl@3"
-        "nwlnexus/olympus/atlas"
+      ]
+      # atlas (and its tap, below) are not installed on work-only hosts (d.workOnly).
+      ++ lib.optional (!config.d.workOnly.enable) "nwlnexus/olympus/atlas"
+      ++ [
         # tmux is now managed by home-manager (home/cli/tmux.nix)
         "gh"
         # mise now provided by home-manager (programs.mise) — see home/default.nix
@@ -78,7 +81,7 @@
       #
       # Note: `cloudflared` now lives in homebrew-core, so the old
       # `cloudflare/cloudflare` tap is no longer needed and has been dropped.
-      extraConfig = ''
+      extraConfig = lib.optionalString (!config.d.workOnly.enable) ''
         tap "nwlnexus/olympus", trusted: true
       '';
     };
