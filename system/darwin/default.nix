@@ -16,6 +16,7 @@ in
     ./brew.nix
     ./fonts.nix
     ./mvmctl.nix
+    ./agent-host.nix
     ./packages.nix
     # ./safari.nix
     ./trackpad.nix

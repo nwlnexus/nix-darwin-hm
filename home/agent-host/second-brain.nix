@@ -1,9 +1,11 @@
-# The second-brain wiki (private repo) checked out on the agent host, kept fresh by an hourly user timer, so
-# `/brain` (home/cli/claude/commands/brain.md) answers from it. olympus-sdk #562 (decision H7a).
+# The second-brain wiki (private repo) checked out on the agent host, kept fresh by an hourly user timer
+# (systemd on Linux, a launchd StartInterval agent on macOS), so `/brain` (home/cli/claude/commands/brain.md)
+# answers from it. olympus-sdk #562 (decision H7a). A host that must not carry the personal wiki (a work-only
+# agent host) sets d.agentHost.secondBrain.enable = false.
 #
 # Auth: the clone and the pull use the host's own GitHub SSH key (~/.ssh, the same one every other private
-# clone on the host uses); nothing is stored here. The macOS hosts are untouched: they keep the Obsidian
-# vault path from home/cli/claude.
+# clone on the host uses); nothing is stored here. Macs without d.agentHost are untouched: they keep the
+# Obsidian vault path from home/cli/claude.
 {
   config,
   lib,
@@ -12,6 +14,7 @@
 }:
 let
   cfg = config.d.agentHost.secondBrain;
+  inherit (pkgs.stdenv) isDarwin;
   sync = pkgs.writeShellApplication {
     name = "second-brain-sync";
     runtimeInputs = [
@@ -31,7 +34,7 @@ in
     enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
-      description = "Check out the second-brain wiki on this host and pull it hourly.";
+      description = "Check out the second-brain wiki on this host and pull it hourly. Set false on a work-only host.";
     };
     repo = lib.mkOption {
       type = lib.types.str;
@@ -56,7 +59,24 @@ in
         ${sync}/bin/second-brain-sync clone || true
     '';
 
-    systemd.user.services.second-brain-pull = {
+    # macOS: hourly, and once at load (the Linux timer's Persistent catch-up).
+    launchd.agents.second-brain-pull = lib.mkIf isDarwin {
+      enable = true;
+      config = {
+        ProgramArguments = [
+          "${sync}/bin/second-brain-sync"
+          "pull"
+        ];
+        EnvironmentVariables = env;
+        StartInterval = 3600;
+        RunAtLoad = true;
+        StandardInPath = "/dev/null";
+        StandardOutPath = "${config.d.agentHost.logDir}/second-brain-pull.log";
+        StandardErrorPath = "${config.d.agentHost.logDir}/second-brain-pull.log";
+      };
+    };
+
+    systemd.user.services.second-brain-pull = lib.mkIf (!isDarwin) {
       Unit.Description = "Fast-forward the second-brain wiki checkout";
       Service = {
         Type = "oneshot";
@@ -64,7 +84,7 @@ in
         ExecStart = "${sync}/bin/second-brain-sync pull";
       };
     };
-    systemd.user.timers.second-brain-pull = {
+    systemd.user.timers.second-brain-pull = lib.mkIf (!isDarwin) {
       Unit.Description = "Hourly second-brain wiki pull";
       Timer = {
         OnCalendar = "hourly";
