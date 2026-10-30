@@ -60,9 +60,11 @@ Run these as the primary user, in order. Steps 4 and 5 must come before the firs
    `~/.config/work/1penv` (mode 0600). op-secrets reads it on every switch. The service account needs read access
    to the vault that `home/secrets/work-env.tpl` reads.
 
+   With the token on the clipboard:
+
    ```sh
    install -d -m 700 ~/.config/work
-   ( umask 077 && pbpaste > ~/.config/work/1penv )   # with the token on the clipboard
+   ( umask 077 && pbpaste > ~/.config/work/1penv )
    chmod 600 ~/.config/work/1penv
    ```
 
@@ -82,43 +84,63 @@ Run these as the primary user, in order. Steps 4 and 5 must come before the firs
    After that, `just switch`. If activation stops on the `nixbld` group id, set `ids.gids.nixbld` in the host
    file to the gid it reports.
 
-7. **Tailscale.** Run the formula as a root LaunchDaemon (`/Library/LaunchDaemons/homebrew.mxcl.tailscale.plist`),
-   started at boot:
+7. **Tailscale.** Run the formula as a root LaunchDaemon (brew names it `/Library/LaunchDaemons/sh.brew.tailscale.plist`,
+   older brew `homebrew.mxcl.tailscale.plist`), started at boot, matching data-hub. Only one `tailscaled` may run:
+   if an earlier `tailscaled install-system-daemon` set one up (`com.tailscale.tailscaled`, binary in
+   `/usr/local/bin`), the brew service crash-loops with `safesocket.Listen: ... address already in use`
+   (`/opt/homebrew/var/log/tailscaled.log`). Remove it first; both use `/Library/Tailscale` as state, so the node
+   keeps its identity, tag and key-expiry setting. If it ran as a per-user brew service, stop that too:
 
    ```sh
-   brew services stop tailscale 2>/dev/null || true   # only if it ran as a per-user service before
+   sudo /usr/local/bin/tailscaled uninstall-system-daemon
+   brew services stop tailscale
    sudo brew services start tailscale
+   sudo brew services list
    sudo tailscale status
    ```
 
-   If the node was joined from a per-user daemon, the root daemon starts with its own state: run
-   `sudo tailscale up` once and approve it. Then apply the work agent-host tag to the node in the admin console.
-   Tagged nodes have key expiry disabled. A switch can upgrade the formula and restart the daemon, so don't run
-   `darwin-rebuild` over a Tailscale ssh session you can't lose.
+   (`uninstall-system-daemon` fails harmlessly when there is no such daemon.) If the root daemon has no state yet,
+   run `sudo tailscale up` once and approve it. Then apply the work agent-host tag in the admin console, and
+   disable key expiry there too: tagging a node that already joined keeps its existing expiry. A switch can
+   upgrade the formula and restart the daemon, so don't run `darwin-rebuild` over a Tailscale ssh session you
+   can't lose.
 
 8. **Work repos.** Clone into `~/projects/work`. Use `git@github.com:<org>/<repo>.git` URLs: git rewrites them to
    the `github.com-work` alias.
 
-9. **Claude Code, work login.** Run `claude-work` inside `~/projects/work`, accept the trust prompt, then
+9. **Native Claude Code and Codex.** The `claude-work`/`codex-work` launchers and the Remote Control agents run the
+   native installs in `~/.local/bin` (as on the Linux agent host); nix does not install them:
+
+   ```sh
+   curl -fsSL https://claude.ai/install.sh | bash
+   curl -fsSL https://chatgpt.com/codex/install.sh | sh
+   ls -l ~/.local/bin/claude ~/.local/bin/codex
+   ```
+
+   Both update themselves; `agents restart` picks up a new version.
+
+10. **Claude Code, work login.** Run `claude-work` inside `~/projects/work`, accept the trust prompt, then
    `/login` with the work account. The `claude-rc-work` launchd agent waits for that login and then starts Remote
    Control; the session shows on claude.ai under the work login.
 
-10. **Codex (if used).** `codex-work login --device-auth`.
+11. **Codex (if used).** `codex-work login --device-auth`.
 
-11. **Checks.**
+12. **Checks.**
+
+    Expect `claude-rc-work` (and `codex-rc-work`) running; `sleep 0`, `disksleep 0`, `autorestart 1`, `womp 1`;
+    and tailscale `started` as `root`:
 
     ```sh
-    agents status          # claude-rc-work (and codex-rc-work) running
+    agents status
     pmset -g | grep -E '^ *(sleep|disksleep|autorestart|womp) '
-    # expected: sleep 0, disksleep 0, autorestart 1, womp 1
     for s in getcomputersleep getrestartpowerfailure getwakeonnetworkaccess; do sudo systemsetup -$s; done
-    sudo brew services list | grep tailscale   # started, user root
+    sudo brew services list | grep tailscale
     ```
 
     nix-darwin applies the power settings with `systemsetup` on every switch. If `pmset -g` disagrees, set them by
     hand with `sudo pmset -a sleep 0 disksleep 0 autorestart 1 womp 1` and report the mismatch.
 
-12. **No personal files.** None of these may exist:
+13. **No personal files.** None of these may exist:
 
     ```sh
     ls -la ~/.config/personal ~/.ssh/id_ed25519 ~/projects/personal/.env ~/projects/personal/.op-connect \
