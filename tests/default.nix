@@ -13,6 +13,7 @@ let
     ./scripts.nix
     ./agent-host.nix
     ./agent-host-darwin.nix
+    ./work-only.nix
     ./linuxbrew.nix
     ./memory.nix
     ./claude-harness.nix

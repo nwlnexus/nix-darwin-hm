@@ -92,7 +92,8 @@ in
     home.file = lib.mkMerge (
       map (
         acct:
-        {
+        # /brain only where the second-brain checkout exists (off on a work-only host).
+        lib.optionalAttrs cfg.secondBrain.enable {
           ".claude-${acct}/commands/brain.md".source = ../cli/claude/commands/brain.md;
         }
         // lib.listToAttrs (

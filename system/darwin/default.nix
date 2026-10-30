@@ -17,6 +17,7 @@ in
     ./fonts.nix
     ./mvmctl.nix
     ./agent-host.nix
+    ./work-only.nix
     ./packages.nix
     # ./safari.nix
     ./trackpad.nix

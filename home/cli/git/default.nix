@@ -80,6 +80,11 @@ let
 
   op = config.d.apps.onepassword;
   opGui = op.enable && (op.gui or true);
+
+  # Work-only host (home/work-only.nix): the work identity is the global one, signed with the on-disk work key,
+  # and there is no personal include.
+  workOnly = config.d.workOnly.enable;
+  work = workGitProfile config;
 in
 
 {
@@ -141,20 +146,30 @@ in
         unstage = "reset HEAD --";
       };
 
-      settings.user.name = "Nigel Williams-Lucas";
-      settings.user.email = "4689066+nwlucas@users.noreply.github.com";
+      settings.user =
+        if workOnly then
+          { inherit (work.user) name email; }
+        else
+          {
+            name = "Nigel Williams-Lucas";
+            email = "4689066+nwlucas@users.noreply.github.com";
+          };
       ignores = [ ".DS_Store" ];
 
       # Signing is done via the 1Password app where it runs; headless hosts
       # sign with the on-disk personal key that op-secrets materializes.
       signing = lib.mkMerge [
-        (lib.mkIf opGui {
+        (lib.mkIf (opGui && !workOnly) {
           signByDefault = true;
           key = op.ssh.key;
         })
-        (lib.mkIf (!opGui) {
+        (lib.mkIf (!opGui && !workOnly) {
           signByDefault = true;
           key = "~/.ssh/id_ed25519";
+        })
+        (lib.mkIf workOnly {
+          signByDefault = true;
+          key = work.user.signingkey;
         })
       ];
 
@@ -171,7 +186,7 @@ in
       # Git auto-prepends `**/` and auto-appends `**` to a pattern that does
       # not start with `~/`, `./`, `/`, or `**`, so the bare form below
       # matches the directory under any prefix — symlinked or real.
-      includes =
+      includes = lib.mkIf (!workOnly) (
         (map
           (condition: {
             inherit condition;
@@ -193,14 +208,22 @@ in
           [
             "gitdir:projects/personal/"
           ]
-        );
+        )
+      );
+
+      # Work-only: the rest of the work profile (GitHub remotes through the work ssh alias, the work account for
+      # HTTPS) applies everywhere instead of through an include.
+      settings.url = lib.mkIf workOnly work.url;
+      settings.credential = lib.mkIf workOnly work.credential;
 
       settings.init.defaultBranch = "main";
 
       settings.gpg = {
         format = "ssh";
         ssh.program =
-          if opGui && pkgs.stdenv.isDarwin then
+          if workOnly then
+            "${sshKeygenNoAgent}"
+          else if opGui && pkgs.stdenv.isDarwin then
             "/Applications/1Password.app/Contents/MacOS/op-ssh-sign"
           else
             "${pkgs.openssh}/bin/ssh-keygen";

@@ -1,4 +1,5 @@
 {
+  config,
   pkgs,
   lib,
   user,
@@ -16,6 +17,7 @@ in
     ./autostart.nix
     ./eza.nix
     ./apps
+    ./work-only.nix
   ];
 
   home = {
@@ -144,6 +146,8 @@ in
         target = "${homePrefix}/${user}/.curlrc";
       };
       "direnv-hook-personal" = {
+        # Work-only hosts have no personal tree (home/work-only.nix).
+        enable = !config.d.workOnly.enable;
         text = ''
           #!/usr/bin/env bash
           # Tree-level direnv config for ~/projects/personal.

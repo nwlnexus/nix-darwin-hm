@@ -11,6 +11,8 @@ let
       "/opt/homebrew/bin/cloudflared"
     else
       "${pkgs.cloudflared}/bin/cloudflared";
+  # Work-only host (home/work-only.nix): no personal GitHub key, homelab or personal-tailnet blocks.
+  personal = !config.d.workOnly.enable;
 in
 {
   programs.ssh = {
@@ -41,14 +43,14 @@ in
         IdentitiesOnly = true;
       };
 
-      sshNWLNEXUS = {
+      sshNWLNEXUS = lib.mkIf personal {
         header = "Host *.ssh.nwlnexus.net";
         HostName = "%h";
         User = user;
         ProxyCommand = "${cloudflared} access ssh --hostname %n";
       };
 
-      ghPersonal = {
+      ghPersonal = lib.mkIf personal {
         header = "Host github.com";
         HostName = "%h";
         User = "git";
@@ -99,7 +101,7 @@ in
         ProxyCommand = "${cloudflared} access ssh --hostname %n";
       };
 
-      tailScaleHosts = {
+      tailScaleHosts = lib.mkIf personal {
         header = "Host *.raptor-mimosa.ts.net";
         ForwardAgent = true;
         Compression = true;

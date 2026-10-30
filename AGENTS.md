@@ -223,6 +223,12 @@ Host files are lowercase or uppercase as the machine is named; the flake picks t
 - Linuxbrew (`d.linuxbrew`, `home/linuxbrew.nix`) carries only formulae nixpkgs lacks or lags badly on. home-manager writes `~/.Brewfile` (non-official taps as `trusted: true`) and each switch runs `brew bundle install --no-upgrade`: install-only, never upgrades or removes, and a failure only warns. Brew's `bin` is appended last to PATH (shells and Remote Control services) so it never shadows Nix/mise.
 - `d.apps.onepassword.gui = false` turns off the 1Password desktop integration (agent socket, op-ssh-sign, autostart); git then signs with `~/.ssh/id_ed25519`.
 
+### Work-only hosts
+
+`d.workOnly.enable = true` in a nix-darwin host (`system/darwin/work-only.nix`, which turns on `home/work-only.nix` for the primary user) evaluates none of the personal config: op-secrets only from the work 1Password account (`d.apps.onepassword.allowedAccounts`), no personal token, memory client or second-brain (asserted), no `/brain` or `SECOND_BRAIN_PATH`, no autoMode or telemetry source (`autoModeFile`/`telemetry.file` default to `null`), the work git identity globally with no personal include, no personal ssh host blocks and no `~/projects/personal/.envrc`. The private `olympus-sdk` input is neither fetched nor linked into `/etc/nix/inputs`: `flake.nix` hands the mkFlake hosts a lazy wrapper of that input (same `outPath` and attributes), because flake-utils-plus probes every input's attributes and that forced the fetch on every host. Off by default, so the other hosts are unchanged (`just check-darwin`). Tests: `tests/work-only.nix` (`just test`) and `just test-work-only-private-input` (the host evaluates with the input's lock entry pointed at an unreachable repo; NWL-MMINI as the control must fail). Host and bootstrap runbook: [`docs/hosts/dtlr-ai-agent-host.md`](docs/hosts/dtlr-ai-agent-host.md).
+
+`d.profiles.base.tailscale` picks how a Mac gets Tailscale: `"app"` (default, the `tailscale-app` cask) or `"formula"` (the Homebrew formula only, for a root LaunchDaemon via `sudo brew services start tailscale`; declaring it also keeps `brew bundle --cleanup` from removing it).
+
 ### Memory gateway client (Claude Code)
 
 `home/cli/memory` wires every Claude account to the on-prem memory gateway (olympus-sdk epic #444, design `docs/superpowers/specs/2026-10-21-memory-gateway-contract-design.md` sections 5.6, 7 and 11 in `nwlnexus/olympus-sdk`). It is **off by default** (`d.memory.enable = false`): merging it changes nothing on any host.
@@ -260,7 +266,7 @@ For in-depth architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 **Current hosts:**
 
-- **darwinM:** DTLR-NWLMMINI, MACST-01, MACST-02, NWL-MBM2, NWL-MMINI, nwl-mstudio
+- **darwinM:** DTLR-NWLMMINI, dtlr-ai-agent-host, MACST-01, MACST-02, NWL-MBM2, NWL-MMINI, nwl-mstudio
 - **nixos-arm:** nixos-parallels, rpi-01
 - **linux (standalone home-manager + system-manager):** ai-agent-host
 

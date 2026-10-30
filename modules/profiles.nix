@@ -20,7 +20,20 @@ in
   options.d.profiles = {
     # For: core configurations and programs e.g. system pkgs, fonts,
     # browsers, editors, terminal ..etc.
-    base.enable = mkBool true;
+    base = {
+      enable = mkBool true;
+
+      # How a Mac gets Tailscale: "app" = the tailscale-app cask (GUI, per-user), "formula" = the Homebrew
+      # `tailscale` formula only, run as a root LaunchDaemon (`sudo brew services start tailscale`) for
+      # unattended hosts. Declaring the formula also keeps `brew bundle --cleanup` from removing it.
+      tailscale = lib.mkOption {
+        type = lib.types.enum [
+          "app"
+          "formula"
+        ];
+        default = "app";
+      };
+    };
 
     # For: Minimal GUI applications
     gui-small.enable = mkBool false;

@@ -66,4 +66,5 @@ jobs:
           just test-claude-settings-wire;
           just test-claude-telemetry-wire;
           just test-claude-agent-session;
-          just test-second-brain-sync'
+          just test-second-brain-sync;
+          just test-work-only-private-input'
