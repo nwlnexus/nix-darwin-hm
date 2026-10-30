@@ -184,3 +184,7 @@ test-work-only-private-input:
 # Behaviour tests for the agent-session launcher (dry runs plus a private tmux server; needs tmux, no nix).
 test-claude-agent-session:
     bash tests/claude-agent-session.sh
+
+# Dry walk of install.sh (macOS bootstrap) with stubbed curl/sudo/scutil; no nix needed.
+test-install-sh:
+    bash tests/install-sh.sh
