@@ -1,4 +1,9 @@
 {
+  config,
+  lib,
+  ...
+}:
+{
   homebrew = {
     enable = true;
     onActivation = {
@@ -17,15 +22,16 @@
     };
 
     # Casks installed on all macOS hosts.
-    casks = [
-      "obsidian"
-      # Secrets scanner. Prefer the upstream tap cask over homebrew-core's
-      # formula of the same name: both ship `betterleaks`, and having the cask
-      # installed while the Brewfile asks for the formula makes `brew bundle`
-      # load the cask (upgrade/cleanup) and then fail the formula link.
-      # Used as a pre-commit gate — see home/cli/git/default.nix.
-      "betterleaks/tap/betterleaks"
-    ];
+    casks =
+      # Not on work-only hosts (d.workOnly).
+      lib.optional (!config.d.workOnly.enable) "obsidian" ++ [
+        # Secrets scanner. Prefer the upstream tap cask over homebrew-core's
+        # formula of the same name: both ship `betterleaks`, and having the cask
+        # installed while the Brewfile asks for the formula makes `brew bundle`
+        # load the cask (upgrade/cleanup) and then fail the formula link.
+        # Used as a pre-commit gate — see home/cli/git/default.nix.
+        "betterleaks/tap/betterleaks"
+      ];
 
     # Third-party taps. Homebrew 6.0 gates untrusted taps; nix-darwin's `taps`
     # option can't emit `trusted: true`, so declare them as verbatim Brewfile
