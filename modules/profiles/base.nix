@@ -62,13 +62,14 @@
         # olympus-sdk VM test harness (vms/harness/vm.sh): qemu-system-* + qemu-img
         # + edk2 UEFI firmware. Declared here so `cleanup = "uninstall"` keeps it.
         "qemu"
-      ];
+      ]
+      ++ lib.optional (config.d.profiles.base.tailscale == "formula") "tailscale";
       casks = [
         # Beta channel of the 1Password CLI (`op`). Conflicts with the stable
         # `1password-cli` cask; see the preActivation migration below.
         "1password-cli@beta"
-        "tailscale-app"
-      ];
+      ]
+      ++ lib.optional (config.d.profiles.base.tailscale == "app") "tailscale-app";
 
       # Homebrew 6.0 (June 2026) requires non-official taps to be explicitly
       # trusted. nix-darwin's `taps` option can't emit `trusted: true`, so we

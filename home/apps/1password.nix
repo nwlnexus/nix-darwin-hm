@@ -76,6 +76,13 @@ in
       default = [ ];
     };
 
+    # Accounts op-secrets may read from on this host; null = every account. A work-only host
+    # (home/work-only.nix) narrows it to the work account, so a personal secret added later is left out too.
+    allowedAccounts = mkOption {
+      type = types.nullOr (types.listOf types.str);
+      default = null;
+    };
+
     tokenFiles = {
       personal = mkOption {
         type = types.nullOr types.str;
@@ -141,41 +148,43 @@ in
       op-secrets = {
         enable = true;
         secrets = mapAttrs (_: withToken) (
-          removeAttrs {
-            gitlab-work = {
-              type = "sshKey";
-              account = "my.1password.com";
-              source = "op://Dev/44adgxe36ozbj2jyhwg3dfdyui";
-              dest = "${config.home.homeDirectory}/.ssh/gitlab-work-gl";
-              writePublicKey = true;
-            };
-            github-personal = {
-              type = "sshKey";
-              account = "my.1password.com";
-              source = "op://Dev/ta7qkekssx6z5v2f27bksaotzi";
-              dest = "${config.home.homeDirectory}/.ssh/id_ed25519";
-              writePublicKey = true;
-              # No per-secret overrides — inherits module-level account + token.
-            };
-            personal-env = {
-              account = "my.1password.com";
-              template = ../secrets/personal-env.tpl;
-              dest = "${config.home.homeDirectory}/projects/personal/.env";
-              mode = "0600";
-            };
-            work-env = {
-              account = "dtlrinc.1password.com";
-              template = ../secrets/work-env.tpl;
-              dest = "${config.home.homeDirectory}/projects/work/.env";
-              mode = "0600";
-            };
-            op-connect-env = {
-              account = "my.1password.com";
-              template = ../secrets/op-connect.tpl;
-              dest = "${config.home.homeDirectory}/projects/personal/.op-connect";
-              mode = "0600";
-            };
-          } cfg.excludeSecrets
+          filterAttrs (_: s: cfg.allowedAccounts == null || elem (s.account or null) cfg.allowedAccounts) (
+            removeAttrs {
+              gitlab-work = {
+                type = "sshKey";
+                account = "my.1password.com";
+                source = "op://Dev/44adgxe36ozbj2jyhwg3dfdyui";
+                dest = "${config.home.homeDirectory}/.ssh/gitlab-work-gl";
+                writePublicKey = true;
+              };
+              github-personal = {
+                type = "sshKey";
+                account = "my.1password.com";
+                source = "op://Dev/ta7qkekssx6z5v2f27bksaotzi";
+                dest = "${config.home.homeDirectory}/.ssh/id_ed25519";
+                writePublicKey = true;
+                # No per-secret overrides — inherits module-level account + token.
+              };
+              personal-env = {
+                account = "my.1password.com";
+                template = ../secrets/personal-env.tpl;
+                dest = "${config.home.homeDirectory}/projects/personal/.env";
+                mode = "0600";
+              };
+              work-env = {
+                account = "dtlrinc.1password.com";
+                template = ../secrets/work-env.tpl;
+                dest = "${config.home.homeDirectory}/projects/work/.env";
+                mode = "0600";
+              };
+              op-connect-env = {
+                account = "my.1password.com";
+                template = ../secrets/op-connect.tpl;
+                dest = "${config.home.homeDirectory}/projects/personal/.op-connect";
+                mode = "0600";
+              };
+            } cfg.excludeSecrets
+          )
         );
       };
     }

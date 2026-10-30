@@ -71,6 +71,7 @@
     let
       inherit (inputs.utils.lib) mkFlake;
       inherit (inputs.nixpkgs.lib.filesystem) listFilesRecursive;
+      inherit (inputs.nixpkgs) lib;
       inherit (inputs.nixpkgs.lib) listToAttrs hasSuffix removeSuffix;
       PROJECT_ROOT = builtins.toString ./.;
 
@@ -81,6 +82,28 @@
         nameValuePair
         recursiveUpdate
         ;
+
+      # The inputs the mkFlake hosts (darwin, NixOS) see. flake-utils-plus probes every input's attributes
+      # (`? legacyPackages`, `? outputs`), and on a flake = false input that forces the fetch, so every host
+      # evaluation needed the PRIVATE olympus-sdk input. Here it is a lazy wrapper with the same attributes, the
+      # same outPath (so "${inputs.olympus-sdk}" is the same store path) and nothing fetched until a host reads
+      # it: a host that never does (a work-only Mac, olympus-sdk #691) evaluates without access to that repo.
+      lazySource =
+        src:
+        lib.genAttrs [
+          "lastModified"
+          "lastModifiedDate"
+          "narHash"
+          "outPath"
+          "rev"
+          "revCount"
+          "shortRev"
+          "sourceInfo"
+          "submodules"
+        ] (name: src.${name});
+      hostInputs = inputs // {
+        olympus-sdk = lazySource inputs.olympus-sdk;
+      };
 
       sharedArgs = {
         user = "nwilliams-lucas";
@@ -228,7 +251,8 @@
     in
     let
       base = mkFlake {
-        inherit self inputs;
+        inherit self;
+        inputs = hostInputs;
 
         channelsConfig = {
           allowUnfree = true;

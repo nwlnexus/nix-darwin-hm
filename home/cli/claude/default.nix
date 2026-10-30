@@ -32,13 +32,18 @@ in
   ];
 
   home.file = {
-    # /brain slash command (consult + ingest the second-brain wiki).
-    ".claude/commands/brain.md".source = ./commands/brain.md;
+    # /brain slash command (consult + ingest the second-brain wiki). Not on a work-only host
+    # (home/work-only.nix): the wiki is personal.
+    ".claude/commands/brain.md" = {
+      enable = !config.d.workOnly.enable;
+      source = ./commands/brain.md;
+    };
   }
   // skillFiles ".claude";
 
-  home.sessionVariables = {
-    # Obsidian vault on the Macs; the agent host overrides it (home/agent-host/second-brain.nix).
+  # Obsidian vault on the Macs; the agent host overrides it (home/agent-host/second-brain.nix). A work-only host
+  # gets no SECOND_BRAIN_PATH at all, so nothing falls back to the personal vault.
+  home.sessionVariables = lib.mkIf (!config.d.workOnly.enable) {
     SECOND_BRAIN_PATH = lib.mkDefault "${config.home.homeDirectory}/Documents/Obsidian Vault/brain";
   };
 
