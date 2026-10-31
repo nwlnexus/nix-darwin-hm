@@ -150,6 +150,8 @@ let
       bin = "${p.launcher}/bin/${p.tool}-${p.acct}";
     in
     ''
+      # Boot: the /nix volume may not be mounted yet when launchd starts the daemon.
+      /bin/wait4path /nix/store
       logged_in() { ${darwinLoggedIn p}; }
       if ! logged_in; then
         echo "$(date '+%F %T') ${p.acct} is not logged in to ${p.tool}; waiting (log in with ${p.tool}-${p.acct})"
