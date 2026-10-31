@@ -75,7 +75,8 @@ in
       true
     ];
   };
-  # #675: the work account's settings.json and .claude.json were wired before, so they must not be in the spec
+  # #675/#693: there is no work account on this host (personal-only); its settings.json and .claude.json were
+  # wired before, so they must not be in the spec
   # (memory-wire apply then removes the entries from the files its manifest recorded), and nothing in the
   # personal account's wiring may point at the work key or config dir.
   testAgentHostWorkAccountUnwired = {
@@ -85,7 +86,7 @@ in
         spec = builtins.toJSON m.wiring;
       in
       [
-        m.accounts.work.enable
+        (m.accounts ? work)
         (lib.hasInfix ".claude-work" spec)
         (lib.hasInfix "gateway-key-work" spec)
         (lib.any (s: lib.hasInfix "work" s.dest) m.secrets)

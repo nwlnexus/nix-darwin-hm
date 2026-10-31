@@ -13,17 +13,17 @@ in
     expr = lib.sort lib.lessThan (lib.attrNames (lib.filterAttrs (n: _: lib.hasInfix "-rc-" n) svc));
     expected = [
       "claude-rc-personal"
-      "claude-rc-work"
       "codex-rc-personal"
-      "codex-rc-work"
     ];
   };
   testClaudeWorkingDirectory = {
-    expr = (str svc.claude-rc-work.Service.WorkingDirectory);
-    expected = "${h}/projects/work";
+    expr = (str svc.claude-rc-personal.Service.WorkingDirectory);
+    expected = "${h}/projects/personal";
   };
   testClaudeServerMode = {
-    expr = lib.hasSuffix "/bin/claude-work remote-control" (str svc.claude-rc-work.Service.ExecStart);
+    expr = lib.hasSuffix "/bin/claude-personal remote-control" (
+      str svc.claude-rc-personal.Service.ExecStart
+    );
     expected = true;
   };
   # Codex 0.159's foreground `remote-control` fails its socket-parent check;
@@ -49,8 +49,8 @@ in
     ];
   };
   testClaudeCondition = {
-    expr = lib.hasSuffix "/bin/test -f ${h}/.claude-work/.credentials.json" (
-      str svc.claude-rc-work.Service.ExecCondition
+    expr = lib.hasSuffix "/bin/test -f ${h}/.claude-personal/.credentials.json" (
+      str svc.claude-rc-personal.Service.ExecCondition
     );
     expected = true;
   };
@@ -91,14 +91,14 @@ in
     ];
     expected = [
       true
-      true
+      false
       true
       true
     ];
   };
   # The tree-level .envrc no longer carries the account (nearest-.envrc-only).
   testDirenvHooksCarryNoAccount = {
-    expr = lib.hasInfix "CLAUDE_CONFIG_DIR" hm.home.file."direnv-hook-work".text;
+    expr = lib.hasInfix "CLAUDE_CONFIG_DIR" hm.home.file."direnv-hook-personal".text;
     expected = false;
   };
   # Second-brain wiki (olympus-sdk #562): a checkout path outside both project trees, set for every session,
@@ -134,7 +134,7 @@ in
     ];
   };
   testBrainCommandLinked = {
-    expr = hm.home.file ? ".claude-work/commands/brain.md";
+    expr = hm.home.file ? ".claude-personal/commands/brain.md";
     expected = true;
   };
   testCommands = {
@@ -147,9 +147,9 @@ in
     ];
     expected = [
       true
+      false
       true
-      true
-      true
+      false
       true
     ];
   };
@@ -165,9 +165,149 @@ in
         ];
     expected = [
       true
+      false
+      true
+      false
+    ];
+  };
+
+  # Personal-only (olympus-sdk#693, home/personal-only.nix): ai-agent-host carries no work account, tree, secret,
+  # git include or ssh block. The memory route table still denies ~/projects/work (tests/memory.nix).
+  testPersonalOnlyOn = {
+    expr = [
+      hm.d.personalOnly.enable
+      hm.d.workOnly.enable
+      hm.d.apps.onepassword.allowedAccounts
+      hm.d.apps.onepassword.tokenFiles.work
+    ];
+    expected = [
+      true
+      false
+      [ "my.1password.com" ]
+      null
+    ];
+  };
+  testPersonalOnlyNoWorkEnvrc = {
+    expr = [
+      hm.home.file."direnv-hook-work".enable
+      hm.home.file."direnv-hook-personal".enable
+      (lib.elem "${h}/projects/work/.envrc" (
+        lib.mapAttrsToList (_: f: f.target) (lib.filterAttrs (_: f: f.enable) hm.home.file)
+      ))
+    ];
+    expected = [
+      false
+      true
+      false
+    ];
+  };
+  testPersonalOnlyNoWorkSecrets = {
+    expr =
+      let
+        secrets = hm.op-secrets.secrets;
+        text = builtins.toJSON (lib.mapAttrs (_: s: removeAttrs s [ "template" ]) secrets);
+      in
+      [
+        (secrets ? work-env)
+        (lib.hasInfix "dtlrinc" text)
+        (lib.hasInfix "projects/work" text)
+      ];
+    expected = [
+      false
+      false
+      false
+    ];
+  };
+  testPersonalOnlyNoWorkAgents = {
+    expr = [
+      (lib.filter (lib.hasInfix "work") (lib.attrNames svc))
+      (lib.attrNames hm.d.agentHost.accounts)
+      (lib.hasInfix "projects/work" hm.programs.zsh.initContent)
+    ];
+    expected = [
+      [ ]
+      [ "personal" ]
+      false
+    ];
+  };
+  testPersonalOnlyNoWorkGitSsh = {
+    expr =
+      let
+        git = hm.xdg.configFile."git/config".text;
+        ssh = hm.home.file.".ssh/config".text;
+      in
+      [
+        (map (i: i.condition) hm.programs.git.includes)
+        (lib.hasInfix "gitconfig-work" git)
+        (lib.hasInfix "github.com-work" (git + ssh))
+        (lib.hasInfix "gitlab-work.com" ssh)
+        (lib.hasInfix "dtlronline" ssh)
+        (lib.hasInfix "Host github.com\n" ssh)
+      ];
+    expected = [
+      [ "gitdir:projects/personal/" ]
+      false
+      false
+      false
+      false
+      true
+    ];
+  };
+
+  # Other hosts are unchanged: personalOnly is off, the work tree and account are still there.
+  testPersonalOnlyOffElsewhere = {
+    expr =
+      let
+        mac = flake.darwinConfigurations.NWL-MMINI.config.home-manager.users.nwilliams-lucas;
+        wk = flake.darwinConfigurations.dtlr-ai-agent-host.config.home-manager.users.nwilliams-lucas;
+      in
+      [
+        mac.d.personalOnly.enable
+        wk.d.personalOnly.enable
+        mac.home.file."direnv-hook-work".enable
+        (mac.op-secrets.secrets ? work-env)
+        (map (i: i.condition) mac.programs.git.includes)
+        (lib.hasInfix "Host github.com-work" mac.home.file.".ssh/config".text)
+      ];
+    expected = [
+      false
+      false
       true
       true
+      [
+        "gitdir:projects/work/"
+        "hasconfig:remote.*.url:git@github.com-work/**"
+        "hasconfig:remote.*.url:git@gitlab-work.com/**"
+        "gitdir:projects/personal/"
+      ]
       true
+    ];
+  };
+  # The assertions (they abort evaluation of the activation package): none fails as deployed; mutually exclusive
+  # with workOnly; no account rooted under the work tree; no work token file.
+  testPersonalOnlyAssertions = {
+    expr =
+      let
+        evaluates =
+          mods:
+          (builtins.tryEval (
+            builtins.unsafeDiscardStringContext
+              (flake.homeConfigurations."nwilliams-lucas@ai-agent-host".extendModules {
+                modules = mods;
+              }).config.home.activationPackage.drvPath
+          )).success;
+      in
+      map evaluates [
+        [ ]
+        [ { d.workOnly.enable = true; } ]
+        [ { d.agentHost.accounts.work.root = "${h}/projects/work"; } ]
+        [ { d.apps.onepassword.tokenFiles.work = "${h}/.config/work/1penv"; } ]
+      ];
+    expected = [
+      true
+      false
+      false
+      false
     ];
   };
 }

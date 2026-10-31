@@ -18,6 +18,7 @@ in
     ./eza.nix
     ./apps
     ./work-only.nix
+    ./personal-only.nix
   ];
 
   home = {
@@ -170,6 +171,8 @@ in
         target = "${homePrefix}/${user}/projects/personal/.envrc";
       };
       "direnv-hook-work" = {
+        # Personal-only hosts have no work tree (home/personal-only.nix).
+        enable = !config.d.personalOnly.enable;
         text = ''
           #!/usr/bin/env bash
           source_up_if_exists
@@ -280,10 +283,9 @@ in
         # Implicitly trust mise.toml under the trees I own, skipping the
         # `mise trust` prompt there. Any other path (e.g. ~/projects/freelance,
         # or a one-off clone elsewhere) still requires an explicit `mise trust`.
-        trusted_config_paths = [
-          "${homePrefix}/${user}/projects/work"
-          "${homePrefix}/${user}/projects/personal"
-        ];
+        trusted_config_paths =
+          lib.optional (!config.d.personalOnly.enable) "${homePrefix}/${user}/projects/work"
+          ++ [ "${homePrefix}/${user}/projects/personal" ];
       };
     };
   };

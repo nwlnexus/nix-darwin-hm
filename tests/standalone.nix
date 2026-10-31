@@ -40,12 +40,11 @@ in
       true
     ];
   };
-  # The two HM-managed tree .envrc files are trusted; nothing broader.
+  # Only the personal tree .envrc is trusted on this personal-only host; nothing broader.
   testDirenvWhitelist = {
     expr = hm.programs.direnv.config.whitelist.exact;
     expected = [
       "/home/nwilliams-lucas/projects/personal/.envrc"
-      "/home/nwilliams-lucas/projects/work/.envrc"
     ];
   };
   # ~/.zshenv used to source ~/.cargo/env; HM now owns .zshenv.

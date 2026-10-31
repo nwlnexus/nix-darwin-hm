@@ -13,6 +13,8 @@ let
       "${pkgs.cloudflared}/bin/cloudflared";
   # Work-only host (home/work-only.nix): no personal GitHub key, homelab or personal-tailnet blocks.
   personal = !config.d.workOnly.enable;
+  # Personal-only host (home/personal-only.nix): no work GitHub/GitLab alias, dtlr switch or bastion blocks.
+  work = !config.d.personalOnly.enable;
 in
 {
   programs.ssh = {
@@ -59,7 +61,7 @@ in
         IdentitiesOnly = true;
       };
 
-      ghDTLR = {
+      ghDTLR = lib.mkIf work {
         header = "Host github.com-work";
         HostName = "github.com";
         User = "git";
@@ -68,7 +70,7 @@ in
         IdentitiesOnly = true;
       };
 
-      glabWork = {
+      glabWork = lib.mkIf work {
         header = "Host gitlab-work.com";
         HostName = "%h";
         User = "git";
@@ -77,7 +79,7 @@ in
         IdentitiesOnly = true;
       };
 
-      dtlrSwitches = {
+      dtlrSwitches = lib.mkIf work {
         header = "Host 10.254.0.*";
         User = "manager";
         ForwardAgent = true;
@@ -86,20 +88,22 @@ in
         KexAlgorithms = "+diffie-hellman-group14-sha1";
       };
 
-      sshDTLRONLINE = {
+      sshDTLRONLINE = lib.mkIf work {
         header = "Host *.ssh.dtlronline.com";
         HostName = "%h";
         User = user;
         ProxyCommand = "${cloudflared} access ssh --hostname %n";
       };
 
-      sshDTLRSTORES = lib.hm.dag.entryBefore [ "sshDTLRONLINE" ] {
-        header = "Host *.ssh.store.dtlronline.com";
-        HostName = "%h";
-        User = "dtlr_it";
-        ForwardAgent = true;
-        ProxyCommand = "${cloudflared} access ssh --hostname %n";
-      };
+      sshDTLRSTORES = lib.mkIf work (
+        lib.hm.dag.entryBefore [ "sshDTLRONLINE" ] {
+          header = "Host *.ssh.store.dtlronline.com";
+          HostName = "%h";
+          User = "dtlr_it";
+          ForwardAgent = true;
+          ProxyCommand = "${cloudflared} access ssh --hostname %n";
+        }
+      );
 
       tailScaleHosts = lib.mkIf personal {
         header = "Host *.raptor-mimosa.ts.net";

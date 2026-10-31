@@ -46,7 +46,7 @@ in
   };
   testBrewLastOnAgentPath = {
     expr = lib.hasSuffix ":${prefix}/bin:${prefix}/sbin" (
-      str hm.systemd.user.services.claude-rc-work.Service.Environment
+      str hm.systemd.user.services.claude-rc-personal.Service.Environment
     );
     expected = true;
   };
