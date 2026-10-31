@@ -245,8 +245,10 @@ Host files are lowercase or uppercase as the machine is named; the flake picks t
 - **Nothing personal:** no memory-gateway client (asserted), no agent-host layer (its Remote Control services are LaunchAgents, so a GUI session; asserted off, which also rules out the second-brain), no autoMode or telemetry source, no auto-login (asserted unset), and the private `olympus-sdk` input is neither fetched nor linked, so a fresh Mac with no ssh key builds.
 - **Every service the role adds is a LaunchDaemon.** The dev profile's own `cargo-sweep` LaunchAgent is unchanged and only runs while the user is logged in.
 - **Not managed by nix:** Screen Sharing, and FileVault (the minis keep it off so they reboot unattended after a power cut).
+- **`d.server.ciRunner`** (`system/darwin/server-ci-runner.nix`, `scripts/server/ci-runner-loop.sh`): a native ephemeral just-in-time GitHub Actions runner, one job at a time, as the hidden unprivileged `_ghrunner`. A root LaunchDaemon mints an installation token from the GitHub App files in `/var/root/ci-runner/` (root-only, paths are options), asks for a JIT config and passes it to the runner in its environment, then wipes the runner user's home and work dir. Pinned official `actions/runner` release via `fetchzip`. Asserted to need `d.server.enable`.
+- **`d.server.linuxVm`** (`system/darwin/server-linux-vm.nix`, `scripts/server/vm-run.sh`, `scripts/server/vm-provision.sh`): a Tart Linux arm64 VM (k3s agent) as a headless LaunchDaemon on a bridged NIC, run as the primary user. Tart comes from the `cirruslabs/cli` tap. `server-vm-provision` (not run by a switch) creates and hardens the VM on Tart's NAT network before the daemon ever starts it. Asserted to need `d.server.enable`.
 
-Tests: `tests/server.nix` (`just test`) and `bash tests/work-only-private-input.sh mmini-01`. First boot of a factory-fresh Mac: [`docs/hosts/mmini-01.md`](docs/hosts/mmini-01.md).
+Owner steps for both: [`docs/hosts/mmini-01.md`](docs/hosts/mmini-01.md). Tests: `tests/server.nix` (`just test`) and `bash tests/work-only-private-input.sh mmini-01`. First boot of a factory-fresh Mac: [`docs/hosts/mmini-01.md`](docs/hosts/mmini-01.md).
 
 ### Memory gateway client (Claude Code)
 

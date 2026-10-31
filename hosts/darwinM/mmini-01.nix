@@ -3,14 +3,20 @@
 # profiles, Tailscale as a system daemon, never sleep, Remote Login, passwordless sudo for the primary user.
 # Nothing personal: no memory client, no second-brain, no personal tokens.
 #
-# The CI runner, the Tart VM and atlas come in later PRs (olympus-sdk #694); they extend this file.
+# The native CI runner (system/darwin/server-ci-runner.nix) and the Tart k3s VM (server-linux-vm.nix) are on with
+# their defaults; docs/hosts/mmini-01.md lists the owner's one-time steps for both. atlas comes in a later PR
+# (olympus-sdk #694).
 #
 # The flake picks this host by LocalHostName, so the name must be exactly `mmini-01`. First boot, from a
 # factory-fresh Mac: docs/hosts/mmini-01.md.
 { user, ... }:
 {
   config = {
-    d.server.enable = true;
+    d.server = {
+      enable = true;
+      ciRunner.enable = true;
+      linuxVm.enable = true;
+    };
 
     # A fresh upstream Nix install (install.sh) uses gid 350 for nixbld; if darwin-rebuild reports another gid,
     # use the one it names.
