@@ -108,7 +108,7 @@ Run these as the primary user, in order. Steps 4 and 5 must come before the firs
 8. **Work repos.** Clone into `~/projects/work`. Use `git@github.com:<org>/<repo>.git` URLs: git rewrites them to
    the `github.com-work` alias.
 
-9. **Native Claude Code and Codex.** The `claude-work`/`codex-work` launchers and the Remote Control agents run the
+9. **Native Claude Code and Codex.** The `claude-work`/`codex-work` launchers and the Remote Control daemons run the
    native installs in `~/.local/bin` (as on the Linux agent host); nix does not install them:
 
    ```sh
@@ -120,13 +120,13 @@ Run these as the primary user, in order. Steps 4 and 5 must come before the firs
    Both update themselves; `agents restart` picks up a new version.
 
 10. **Claude Code, work login.** Run `claude-work` inside `~/projects/work`, accept the trust prompt, then
-   `/login` with the work account. The `claude-rc-work` launchd agent waits for that login and then starts Remote
+   `/login` with the work account. The `claude-rc-work` LaunchDaemon (runs as you, starts at boot) waits for that login and then starts Remote
    Control; the session shows on claude.ai under the work login.
 
     Then accept Remote Control once, interactively: the first `remote-control` run asks
     `Enable Remote Control? (y/n)`, which the background agent cannot answer (it exits and restarts in a loop,
     visible in `~/Library/Logs/agent-host/claude-rc-work.log`). Answer `y`, wait for `Connected`, press Ctrl+C,
-    then hand it back to the agent:
+    then hand it back to the daemon:
 
     ```sh
     cd ~/projects/work
@@ -164,13 +164,50 @@ Run these as the primary user, in order. Steps 4 and 5 must come before the firs
 
 ## FileVault and unattended reboots (owner decision)
 
-The Remote Control agents are per-user launchd agents, so they run only inside a logged-in session. With
-`autorestart 1` the Mac powers back on after an outage, but:
+FileVault is off on this host. Remote Control runs as system LaunchDaemons (`io.olympus.agent-host.claude-rc-work`
+and `codex-rc-work`, running as the primary user), so after a power cut or reboot the Mac powers back on
+(`autorestart 1`) and the services start with nobody logged in. Automatic login is not set. The cost is an
+unencrypted disk at rest.
 
-- **FileVault on** (the default for a new Mac): the disk stays locked at the pre-boot screen until someone logs
-  in, so nothing runs (not even the Tailscale daemon) until a person unlocks it. macOS does not allow automatic
-  login while FileVault is on. Planned reboots can use `sudo fdesetup authrestart`, which unlocks once.
-- **FileVault off and automatic login on**: the host comes back by itself after an outage, logs in and starts
-  Remote Control. The cost is an unencrypted disk at rest and an open session on a machine with work credentials.
+### Keychain caveat and boot test
 
-This repo does not set either. Choose one and record it.
+Claude Code on macOS stores its OAuth token in the login Keychain, which is locked until a GUI login. The daemon's
+`logged_in` check passes on `oauthAccount` in `~/.claude-work/.claude.json`, but `claude remote-control` may still
+be unable to read the token with no GUI session.
+
+Test after the switch:
+
+1. Log out of the GUI (or just reboot; nobody logs in), then reboot:
+
+   ```sh
+   sudo shutdown -r now
+   ```
+
+2. Wait a few minutes, then ssh in (over Tailscale) without ever logging in at the console:
+
+   ```sh
+   agents status
+   tail -n 50 ~/Library/Logs/agent-host/claude-rc-work.log
+   ```
+
+   Pass: `claude-rc-work` is `running` and the log shows Remote Control connected/serving, and the environment is
+   online on claude.ai. Fail: a keychain, `errSecInteractionNotAllowed`, "not logged in" or auth error, or a
+   restart loop.
+
+3. If it fails, log in over ssh with no GUI session, where Claude Code falls back to
+   `~/.claude-work/.credentials.json` (0600), as on the Linux agent host:
+
+   ```sh
+   cd ~/projects/work
+   claude-work
+   ```
+
+   Run `/login` inside it, finish the browser step on another device, exit, then:
+
+   ```sh
+   ls -l ~/.claude-work/.credentials.json
+   agents restart claude-rc-work
+   tail -n 20 ~/Library/Logs/agent-host/claude-rc-work.log
+   ```
+
+   Repeat the reboot test. This repo adds no token file, `setup-token` flow or auto-login.

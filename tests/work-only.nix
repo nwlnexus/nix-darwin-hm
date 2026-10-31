@@ -53,7 +53,7 @@ let
       ) (secrets c)
     );
 
-  rc = c: lib.attrNames (lib.filterAttrs (n: a: a.enable && lib.hasInfix "-rc-" n) c.launchd.agents);
+  rc = c: lib.attrNames c.d.agentHost.darwinDaemons;
   files = c: lib.mapAttrsToList (_: f: f.target) (lib.filterAttrs (_: f: f.enable) c.home.file);
   gitConfig = c: c.xdg.configFile."git/config".text;
 in
@@ -276,12 +276,12 @@ in
     };
   };
 
-  # Runs like ai-agent-host: Remote Control launchd agents for the one work account, server-like power settings.
+  # Runs like ai-agent-host: Remote Control LaunchDaemon specs for the one work account, server-like power settings.
   testWorkOnlyRemoteControl = {
     expr = [
       (rc hm)
       hm.d.agentHost.defaultAccount
-      hm.launchd.agents.claude-rc-work.config.WorkingDirectory
+      hm.d.agentHost.darwinDaemons.claude-rc-work.WorkingDirectory
     ];
     expected = [
       [
