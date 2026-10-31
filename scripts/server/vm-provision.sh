@@ -98,8 +98,12 @@ ssh_admin true || die "cannot ssh to the VM as admin on the NAT network (is this
 key=$(cat "$VM_ANSIBLE_KEY_FILE")
 fingerprint=$(ssh-keygen -l -f "$VM_ANSIBLE_KEY_FILE" | awk '{ print $2 }')
 say "hardening the VM"
-ssh_admin "sudo env KEY=$(printf '%q' "$key") FP=$(printf '%q' "$fingerprint") bash -s" <<'REMOTE'
+ssh_admin "sudo env KEY=$(printf '%q' "$key") FP=$(printf '%q' "$fingerprint") NAME=$(printf '%q' "$VM_NAME") bash -s" <<'REMOTE'
 set -eu
+
+# The image boots as `ubuntu`; the node (and its k3s name) must be the VM's own name.
+hostnamectl set-hostname "$NAME"
+sed -i "s/\bubuntu\b/$NAME/g" /etc/hosts
 
 id ansible >/dev/null 2>&1 || useradd --create-home --shell /bin/bash ansible
 install -d -m 0700 -o ansible -g ansible /home/ansible/.ssh
