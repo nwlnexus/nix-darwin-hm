@@ -91,7 +91,7 @@ the runner's App key and atlas and Tailscale state, all of which can be revoked.
    be disabled there too (tagging a node that already joined keeps its existing expiry):
 
    ```sh
-   sudo tailscale up --ssh=false
+   sudo /opt/homebrew/bin/tailscale up --ssh --advertise-tags=tag:mac-server
    tailscale status
    ```
 
