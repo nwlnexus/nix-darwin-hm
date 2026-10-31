@@ -55,7 +55,7 @@ Host-specific configurations organized by platform. Each `.nix` file represents 
 
 **Current hosts:**
 
-- **darwinM:** DTLR-NWLMMINI, dtlr-ai-agent-host, MACST-01, MACST-02, NWL-MBM2, NWL-MMINI, nwl-mstudio
+- **darwinM:** data-hub, DTLR-NWLMMINI, dtlr-ai-agent-host, NWL-MBM2, NWL-MMINI, nwl-mstudio
 - **nixos-arm:** nixos-parallels, rpi-01
 - **linux:** ai-agent-host
 
