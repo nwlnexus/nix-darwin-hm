@@ -11,12 +11,11 @@
         # Beta channel of the 1Password desktop app. Conflicts with the stable
         # `1password` cask; see the preActivation migration below.
         "1password@beta"
-        "angry-ip-scanner"
         "cyberduck"
         "discord"
         "google-chrome"
         "jetbrains-toolbox"
-        "microsoft-remote-desktop"
+        "windows-app"
         "raycast"
         "scroll-reverser"
         "parallels"
