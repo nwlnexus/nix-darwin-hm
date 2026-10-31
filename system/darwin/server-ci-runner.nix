@@ -129,8 +129,9 @@ in
         ProgramArguments = [ "${loop}" ];
         EnvironmentVariables = {
           PATH =
+            # No GNU coreutils: the loop is written for the macOS (BSD) stat, cp -c and install; GNU `stat -f`
+            # means filesystem status and made every credential check fail.
             lib.makeBinPath [
-              pkgs.coreutils
               pkgs.curl
               pkgs.jq
               pkgs.openssl
