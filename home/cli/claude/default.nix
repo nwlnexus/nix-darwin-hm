@@ -109,5 +109,16 @@ in
     if [ -x "$GITNEXUS_BIN" ]; then
       "$GITNEXUS_BIN" setup -c claude || true
     fi
+    # The MCP entry itself is written even before the shim exists (a fresh host installs the mise global
+    # after the first switch), and always points at the shim, never npx. Same entry as home/agent-host
+    # writes per account, so ~/.claude and every ~/.claude-<acct> get gitnexus.
+    DST_JSON="${config.home.homeDirectory}/.claude.json"
+    [ -f "$DST_JSON" ] || { echo '{}' > "$DST_JSON"; chmod 600 "$DST_JSON"; }
+    TMP="$(mktemp)"
+    if ${pkgs.jq}/bin/jq --arg c "$GITNEXUS_BIN" '.mcpServers.gitnexus = {type: "stdio", command: $c, args: ["mcp"]}' "$DST_JSON" > "$TMP" 2>/dev/null; then
+      if cmp -s "$TMP" "$DST_JSON"; then rm -f "$TMP"; else chmod 600 "$TMP"; mv "$TMP" "$DST_JSON"; fi
+    else
+      rm -f "$TMP"
+    fi
   '';
 }
