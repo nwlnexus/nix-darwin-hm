@@ -41,10 +41,10 @@ the runner's App key and atlas and Tailscale state, all of which can be revoked.
    third removes the marker:
 
    ```sh
-   touch /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress-file
+   touch /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
    label="$(softwareupdate --list 2>&1 | sed -n 's/^\* Label: \(Command Line Tools.*\)$/\1/p' | tail -n 1)"
    sudo softwareupdate --install "$label" --verbose
-   rm -f /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress-file
+   rm -f /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
    xcode-select -p
    ```
 
