@@ -150,6 +150,7 @@ in
         enable = !config.d.workOnly.enable;
         text = ''
           #!/usr/bin/env bash
+          source_up_if_exists
           # Tree-level direnv config for ~/projects/personal.
           # Sources ~/projects/personal/.env and exports its vars (incl. GITHUB_PERSONAL_ACCESS_TOKEN
           # for the `github` MCP server, scoped to the PERSONAL gh account).
@@ -171,6 +172,7 @@ in
       "direnv-hook-work" = {
         text = ''
           #!/usr/bin/env bash
+          source_up_if_exists
           # Tree-level direnv config for ~/projects/work.
           # Sources ~/projects/work/.env and exports its vars (incl. GITHUB_PERSONAL_ACCESS_TOKEN
           # for the `github` MCP server, scoped to the work gh account).
