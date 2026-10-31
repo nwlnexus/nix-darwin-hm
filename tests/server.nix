@@ -424,7 +424,7 @@ in
         generatesJit = lib.hasInfix "/actions/runners/generate-jitconfig" codeText;
         rs256 = lib.hasInfix "openssl dgst -sha256 -sign" codeText;
         nice = lib.hasInfix "nice -n" codeText;
-        wipes = lib.hasInfix "rm -rf \"${"$"}{CI_WORK_DIR:?}/home\"" codeText;
+        wipes = lib.hasInfix "find \"$CI_WORK_DIR/home\" -mindepth 1 -maxdepth 1 -exec rm -rf {} +" codeText;
       };
       expected = {
         envVar = true;
