@@ -119,8 +119,16 @@ ok "Host config found for ${host}"
 darwin_ref="$(sed -n 's|.*darwin\.url = "github:nix-darwin/nix-darwin/\([^"]*\)".*|\1|p' "${SCRIPT_DIR}/flake.nix" | head -n1)"
 [ -n "${darwin_ref}" ] || die "Could not read the nix-darwin release from flake.nix."
 
-step "Applying nix-darwin configuration for ${host} (nix-darwin ${darwin_ref}); sudo will ask for your password..."
 cd "${SCRIPT_DIR}"
+# Build as the user first. A private flake input (olympus-sdk, read over ssh) can only be fetched with the
+# user's ssh key; root has none, so a root-only first switch fails on it. Once built, the switch below finds
+# everything in the store. Harmless on hosts without private inputs (the switch is then a cache hit).
+step "Building the configuration for ${host} as ${USER} (fetches private inputs with your ssh key)..."
+"${NIX_BIN}" build ".#darwinConfigurations.${host}.system" --no-link ||
+  die "Failed to build the configuration for ${host}. Check the errors above (ssh access to private inputs?)."
+ok "Configuration built"
+
+step "Applying nix-darwin configuration for ${host} (nix-darwin ${darwin_ref}); sudo will ask for your password..."
 sudo "${NIX_BIN}" run "nix-darwin/${darwin_ref}#darwin-rebuild" -- switch --flake ".#${host}" ||
   die "Failed to apply the nix-darwin configuration. Check the errors above."
 ok "nix-darwin configuration applied"
