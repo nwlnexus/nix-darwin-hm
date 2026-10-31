@@ -238,7 +238,8 @@ in
     MISE=${config.programs.mise.package}/bin/mise
     run "$MISE" install --yes --quiet node || true
     NODE_BIN="$("$MISE" where node 2>/dev/null)/bin"
-    run env PATH="$NODE_BIN:$PATH" "$MISE" install --yes --quiet || true
+    # mise's npm wrapper runs `mise reshim` after an install, so mise itself must be on PATH too.
+    run env PATH="$NODE_BIN:$(dirname "$MISE"):$PATH" "$MISE" install --yes --quiet || true
   '';
 
   programs.mise = {

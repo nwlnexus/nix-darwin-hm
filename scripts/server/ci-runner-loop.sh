@@ -86,7 +86,12 @@ wipe() {
   uid=$(id -u "$CI_USER")
   group=$(id -gn "$CI_USER")
   pkill -KILL -U "$uid" 2>/dev/null || true
-  rm -rf "${CI_WORK_DIR:?}/home" "${CI_WORK_DIR:?}/runner"
+  # macOS refuses to remove a directory that is a user's registered home, even as root and even when empty, so
+  # empty the home rather than deleting it.
+  rm -rf "${CI_WORK_DIR:?}/runner"
+  if [ -d "$CI_WORK_DIR/home" ]; then
+    find "$CI_WORK_DIR/home" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+  fi
   find /private/tmp /private/var/tmp -xdev -maxdepth 1 -user "$CI_USER" -exec rm -rf {} + 2>/dev/null || true
   install -d -m 0755 -o root -g wheel "$CI_WORK_DIR"
   install -d -m 0700 -o "$CI_USER" -g "$group" "$CI_WORK_DIR/home" "$CI_WORK_DIR/home/tmp"

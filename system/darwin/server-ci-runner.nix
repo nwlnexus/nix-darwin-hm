@@ -116,14 +116,22 @@ in
       };
     };
 
+    # nix-darwin's user activation runs `realpath` on an existing user's home, which fails when the directory is
+    # missing (the loop recreates it after every job, but it may not exist yet). Create it before the user step.
+    system.activationScripts.preActivation.text = lib.mkAfter ''
+      /usr/bin/install -d -m 0755 -o root -g wheel ${lib.escapeShellArg cfg.workDir}
+      /bin/mkdir -p ${lib.escapeShellArg "${cfg.workDir}/home"}
+    '';
+
     launchd.daemons.ci-runner = {
       serviceConfig = {
         Label = "io.olympus.ci-runner";
         ProgramArguments = [ "${loop}" ];
         EnvironmentVariables = {
           PATH =
+            # No GNU coreutils: the loop is written for the macOS (BSD) stat, cp -c and install; GNU `stat -f`
+            # means filesystem status and made every credential check fail.
             lib.makeBinPath [
-              pkgs.coreutils
               pkgs.curl
               pkgs.jq
               pkgs.openssl

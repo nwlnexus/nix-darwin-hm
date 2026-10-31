@@ -424,7 +424,7 @@ in
         generatesJit = lib.hasInfix "/actions/runners/generate-jitconfig" codeText;
         rs256 = lib.hasInfix "openssl dgst -sha256 -sign" codeText;
         nice = lib.hasInfix "nice -n" codeText;
-        wipes = lib.hasInfix "rm -rf \"${"$"}{CI_WORK_DIR:?}/home\"" codeText;
+        wipes = lib.hasInfix "find \"$CI_WORK_DIR/home\" -mindepth 1 -maxdepth 1 -exec rm -rf {} +" codeText;
       };
       expected = {
         envVar = true;
@@ -457,7 +457,7 @@ in
           ;
         name = e.VM_NAME;
         bridge = e.VM_BRIDGE;
-        tart = e.TART_BIN;
+        tart = lib.hasSuffix "/bin/tart" e.TART_BIN && lib.hasInfix "-tart-" e.TART_BIN;
         marker = e.VM_MARKER;
         runs = lib.hasInfix "exec \"$TART_BIN\" run --no-graphics \"--net-bridged=$VM_BRIDGE\" \"$VM_NAME\"" runScript;
       };
@@ -469,24 +469,24 @@ in
       StandardOutPath = "/var/log/server-vm.log";
       name = "mmini-01-vm";
       bridge = "en0";
-      tart = "/opt/homebrew/bin/tart";
+      tart = true;
       marker = "/Users/${user}/.tart/mmini-01-vm.provisioned";
       runs = true;
     };
   };
 
-  # Tart from the cirruslabs/cli tap, trusted; the provisioning command is installed, not run on a switch.
+  # Tart from nixpkgs (the cirruslabs tap no longer loads); the provisioning command is installed, not run on a switch.
   testVmTartAndProvision = {
     expr = {
       brew = lib.elem "cirruslabs/cli/tart" (brews sys);
-      tap = lib.hasInfix "tap \"cirruslabs/cli\", trusted: true" sys.homebrew.extraConfig;
+      tart = lib.any (p: lib.getName p == "tart") sys.environment.systemPackages;
       command = lib.any (p: lib.getName p == "server-vm-provision") sys.environment.systemPackages;
       notInActivation = !(lib.hasInfix "server-vm-provision" (postActivation sys));
       controlHasNoTart = !(lib.elem "cirruslabs/cli/tart" (brews ctl));
     };
     expected = {
-      brew = true;
-      tap = true;
+      brew = false;
+      tart = true;
       command = true;
       notInActivation = true;
       controlHasNoTart = true;

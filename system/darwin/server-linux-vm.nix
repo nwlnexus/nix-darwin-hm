@@ -1,7 +1,8 @@
 # The Linux arm64 VM of a server Mac (d.server.linuxVm; olympus-sdk #694, decision H20): a k3s agent VM run by Tart
 # on Virtualization.framework, headless, on a bridged NIC so it has its own address on the cluster network.
 #
-# - Tart comes from Homebrew (tap cirruslabs/cli) through this repo's brew module.
+# - Tart comes from nixpkgs (`pkgs.tart`, the signed upstream release). The cirruslabs/cli Homebrew tap does not load
+#   on current Homebrew (its formula uses `depends_on macos:` outside `on_macos`, which Homebrew now rejects).
 # - A LaunchDaemon (scripts/server/vm-run.sh) runs `tart run --no-graphics --net-bridged=<iface> <name>` at boot with
 #   nobody logged in, KeepAlive. It waits for the marker `server-vm-provision` writes.
 # - `server-vm-provision` is the one-time, idempotent setup (scripts/server/vm-provision.sh). A switch never runs it.
@@ -28,7 +29,7 @@ let
   server = config.d.server;
   user = config.system.primaryUser;
   home = "/Users/${user}";
-  tart = "/opt/homebrew/bin/tart";
+  tart = "${pkgs.tart}/bin/tart";
   marker = "${home}/.tart/${cfg.name}.provisioned";
   log = "/var/log/server-vm.log";
 
@@ -102,12 +103,10 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    homebrew.brews = [ "cirruslabs/cli/tart" ];
-    homebrew.extraConfig = ''
-      tap "cirruslabs/cli", trusted: true
-    '';
-
-    environment.systemPackages = [ provision ];
+    environment.systemPackages = [
+      provision
+      pkgs.tart
+    ];
 
     launchd.daemons.server-vm = {
       serviceConfig = {
