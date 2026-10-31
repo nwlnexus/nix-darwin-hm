@@ -57,11 +57,15 @@ fi
 
 # --- Nix (upstream, not Determinate) ----------------------------------------
 # nix-darwin manages Nix itself and refuses to activate on Determinate Nix.
+# Determinate Nix, not just the Determinate *installer*: an upstream install made with --prefer-upstream-nix
+# also has a receipt that mentions Determinate and the installer's `systems.determinate.nix-installer.nix-hook`
+# daemon (it restores Nix after macOS updates), so neither may count. What marks Determinate Nix is the receipt's
+# `"determinate_nix": true` or its own daemon (`systems.determinate.nix-daemon`, `determinate-nixd`).
 is_determinate() {
-  if [ -f "${NIX_ROOT}/receipt.json" ] && grep -qi determinate "${NIX_ROOT}/receipt.json"; then
+  if [ -f "${NIX_ROOT}/receipt.json" ] && grep -Eq '"determinate_nix"[[:space:]]*:[[:space:]]*true' "${NIX_ROOT}/receipt.json"; then
     return 0
   fi
-  compgen -G "${LAUNCHD_DIR}/systems.determinate.*" >/dev/null
+  [ -e "${LAUNCHD_DIR}/systems.determinate.nix-daemon.plist" ] || [ -x /usr/local/bin/determinate-nixd ]
 }
 
 if is_determinate; then

@@ -81,7 +81,7 @@ run
 
 # 3. Determinate receipt: refuse, no install, no switch
 scenario det-receipt
-echo '{"planner":"determinate"}' >"$sb/nix/receipt.json"
+echo '{"planner":{"planner":"macos"},"determinate_nix": true}' >"$sb/nix/receipt.json"
 run
 { [ $rc -ne 0 ] && grep -q 'nix-installer uninstall' "$sb/out" && [ ! -s "$log" ]; } && ok "determinate receipt: stops with uninstall hint" || bad "determinate receipt"
 
@@ -90,6 +90,18 @@ scenario det-launchd
 touch "$sb/launchd/systems.determinate.nix-daemon.plist"
 run
 { [ $rc -ne 0 ] && grep -q 'nix-installer uninstall' "$sb/out" && [ ! -s "$log" ]; } && ok "determinate launchd: stops" || bad "determinate launchd"
+
+# 4b. Upstream Nix installed by the Determinate installer (--prefer-upstream-nix): its receipt says
+# determinate_nix false and only the installer's nix-hook daemon exists. Not Determinate: proceed.
+scenario upstream-by-detsys
+mkdir -p "$sb/nix/var/nix/profiles/default/bin" "$sb/nix/var/nix/profiles/default/etc/profile.d"
+printf '#!/bin/sh\n' >"$sb/nix/var/nix/profiles/default/bin/nix"
+chmod +x "$sb/nix/var/nix/profiles/default/bin/nix"
+: >"$sb/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh"
+echo '{"planner":{"planner":"macos"},"determinate_nix": false}' >"$sb/nix/receipt.json"
+touch "$sb/launchd/systems.determinate.nix-installer.nix-hook.plist"
+run
+{ [ $rc -eq 0 ] && ! grep -q 'nix-installer uninstall' "$sb/out"; } && ok "upstream via the DetSys installer: proceeds" || bad "upstream via the DetSys installer"
 
 # 5. hostname mismatch: scutil hint, no switch
 scenario badhost
