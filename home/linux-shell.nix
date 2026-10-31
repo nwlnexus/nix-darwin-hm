@@ -20,12 +20,12 @@ in
     enable = true;
     enableZshIntegration = true;
     nix-direnv.enable = true;
-    # Trust exactly the two HM-managed tree hooks (home/default.nix), so they
+    # Trust exactly the HM-managed tree hooks (two; one on a personal-only host) (home/default.nix), so they
     # load without `direnv allow` and keep working when their content changes.
     config.whitelist.exact = [
       "${home}/projects/personal/.envrc"
-      "${home}/projects/work/.envrc"
-    ];
+    ]
+    ++ lib.optional (!config.d.personalOnly.enable) "${home}/projects/work/.envrc";
   };
 
   # home/default.nix disables this because nix-darwin activates mise itself.

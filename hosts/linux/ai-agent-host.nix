@@ -8,15 +8,13 @@
   home =
     { config, ... }:
     {
+      # Personal-only (olympus-sdk#693, home/personal-only.nix): no work account, tree, secret or git/ssh
+      # config here. Work agents run on dtlr-ai-agent-host.
+      d.personalOnly.enable = true;
+
       d.apps.onepassword = {
         gui = false;
-        # work-env reads the dtlr Employee vault, which service accounts can't access;
-        # ~/projects/work/.env is copied by hand on this host instead.
-        excludeSecrets = [ "work-env" ];
-        tokenFiles = {
-          personal = "${config.home.homeDirectory}/.config/personal/1penv";
-          work = "${config.home.homeDirectory}/.config/work/1penv";
-        };
+        tokenFiles.personal = "${config.home.homeDirectory}/.config/personal/1penv";
       };
 
       # Only what nixpkgs lacks or lags badly on; Nix stays the default.
@@ -35,7 +33,6 @@
         enable = true;
         accounts = {
           personal.root = "${config.home.homeDirectory}/projects/personal";
-          work.root = "${config.home.homeDirectory}/projects/work";
         };
       };
 
@@ -54,15 +51,12 @@
         # as any accounts.* is defined, so list the accounts explicitly. ~/.claude is not used by any agent
         # session here (owner decision), so it stays unwired.
         #
-        # The work account never captures to or recalls from this personal gateway (owner, 2026-10-29,
-        # olympus-sdk #675): disabled, so the next switch removes its hooks and MCP entry from
-        # ~/.claude-work (memory-wire drops targets that leave the spec) and no longer fetches its key. A
-        # work-side memory system becomes a route backend of its own once it exists. The personal account
-        # uses the module's default routes: ~/projects/personal -> gateway, ~/projects/work -> none.
+        # There is no work account on this host (olympus-sdk#693; work runs on dtlr-ai-agent-host). The
+        # personal account uses the module's default routes, which stay fail-closed:
+        # ~/projects/personal -> gateway, ~/projects/work -> none (olympus-sdk #675).
         accounts = {
           default.enable = false;
           personal = { };
-          work.enable = false;
         };
       };
     };

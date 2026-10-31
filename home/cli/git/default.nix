@@ -84,6 +84,8 @@ let
   # Work-only host (home/work-only.nix): the work identity is the global one, signed with the on-disk work key,
   # and there is no personal include.
   workOnly = config.d.workOnly.enable;
+  # Personal-only host (home/personal-only.nix): no work include.
+  personalOnly = config.d.personalOnly.enable;
   work = workGitProfile config;
 in
 
@@ -187,18 +189,19 @@ in
       # not start with `~/`, `./`, `/`, or `**`, so the bare form below
       # matches the directory under any prefix — symlinked or real.
       includes = lib.mkIf (!workOnly) (
-        (map
-          (condition: {
-            inherit condition;
-            contentSuffix = "gitconfig-work";
-            contents = workGitProfile config;
-          })
-          [
-            "gitdir:projects/work/"
-            "hasconfig:remote.*.url:git@github.com-work/**"
-            "hasconfig:remote.*.url:git@gitlab-work.com/**"
-          ]
-        )
+        (lib.optionals (!personalOnly) (
+          map
+            (condition: {
+              inherit condition;
+              contentSuffix = "gitconfig-work";
+              contents = workGitProfile config;
+            })
+            [
+              "gitdir:projects/work/"
+              "hasconfig:remote.*.url:git@github.com-work/**"
+              "hasconfig:remote.*.url:git@gitlab-work.com/**"
+            ]
+        ))
         ++ (map
           (condition: {
             inherit condition;

@@ -56,8 +56,7 @@ in
     expr = lib.all (s: s.serviceAccountTokenCommand != null) (lib.attrValues hm.op-secrets.secrets);
     expected = true;
   };
-  # work-env reads the dtlr built-in Employee vault, which 1Password service
-  # accounts can't access; agent hosts keep a hand-copied .env instead.
+  # Personal-only host (d.personalOnly, olympus-sdk#693): the work-account secret is neither evaluated nor fetched.
   testWorkEnvSkippedOnAgentHost = {
     expr = hm.op-secrets.secrets ? work-env;
     expected = false;

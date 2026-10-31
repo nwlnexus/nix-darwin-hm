@@ -51,10 +51,7 @@ in
   };
   testHarnessHostDirs = {
     expr = host.d.claudeHarness.dirs;
-    expected = [
-      ".claude-personal"
-      ".claude-work"
-    ];
+    expected = [ ".claude-personal" ];
   };
   testHarnessHostAgents = {
     expr = map (f: host.home.file ? ${f}) [
@@ -64,7 +61,7 @@ in
     ];
     expected = [
       true
-      true
+      false
       false
     ];
   };
@@ -77,7 +74,7 @@ in
     ];
     expected = [
       true
-      true
+      false
       false
       true
     ];
@@ -94,7 +91,7 @@ in
     ];
     expected = [
       true
-      true
+      false
     ];
   };
   testHarnessMac = {
@@ -122,7 +119,7 @@ in
     ];
     expected = [
       true
-      true
+      false
       false
     ];
   };
@@ -138,7 +135,7 @@ in
       ];
     expected = [
       true
-      true
+      false
       false
     ];
   };
@@ -184,10 +181,10 @@ in
       ];
     expected = [
       true
-      true
+      false
       false
       true
-      true
+      false
     ];
   };
   testHarnessDenialRegexMatchesHandCopy = {
@@ -253,7 +250,7 @@ in
     expected = [
       true
       true
-      true
+      false
       false
     ];
   };
@@ -329,10 +326,7 @@ in
     expected =
       if sdkHasTelemetry then
         [
-          [
-            ".claude-personal"
-            ".claude-work"
-          ]
+          [ ".claude-personal" ]
           true
         ]
       else
@@ -370,9 +364,6 @@ in
         ".claude-personal" = base // {
           OTEL_RESOURCE_ATTRIBUTES = "account=personal,deployment.environment=example,host.name=ai-agent-host";
         };
-        ".claude-work" = base // {
-          OTEL_RESOURCE_ATTRIBUTES = "account=work,deployment.environment=example,host.name=ai-agent-host";
-        };
       };
   };
   testHarnessTelemetryHostWire = {
@@ -385,7 +376,7 @@ in
     expected = [
       true
       true
-      true
+      false
       false
     ];
   };
