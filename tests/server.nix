@@ -342,6 +342,10 @@ in
         inherit (d) Label RunAtLoad KeepAlive;
         root = (d.UserName or null) == null;
         argv = builtins.length d.ProgramArguments;
+        # Waits for the /nix volume before exec'ing the store path (boot ordering).
+        waitsForStore = lib.hasPrefix "/bin/wait4path /nix/store && exec /nix/store/" (
+          lib.last d.ProgramArguments
+        );
         user = e.CI_USER;
         labels = e.CI_LABELS;
         runnerPinned = lib.hasInfix "actions-runner-osx-arm64-" e.CI_RUNNER_DIR;
@@ -353,7 +357,8 @@ in
       RunAtLoad = true;
       KeepAlive = true;
       root = true;
-      argv = 1;
+      argv = 3;
+      waitsForStore = true;
       user = "_ghrunner";
       labels = "self-hosted,macOS,ARM64,macos-arm64";
       runnerPinned = true;

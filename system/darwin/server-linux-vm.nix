@@ -111,7 +111,14 @@ in
     launchd.daemons.server-vm = {
       serviceConfig = {
         Label = "io.olympus.server-vm";
-        ProgramArguments = [ "${run}" ];
+        # At boot launchd starts daemons before the /nix volume is mounted; a store path as the program is then a
+        # "Missing executable" and launchd disables the job for good (mmini-01, 2026-10-31). Wait for the store first,
+        # as nix-darwin's own daemons do.
+        ProgramArguments = [
+          "/bin/sh"
+          "-c"
+          "/bin/wait4path /nix/store && exec ${run}"
+        ];
         UserName = user;
         EnvironmentVariables = {
           HOME = home;
