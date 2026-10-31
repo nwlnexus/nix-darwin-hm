@@ -33,6 +33,15 @@ in
         ];
         default = "app";
       };
+
+      # The `atlas` CLI from the nwlnexus/olympus Homebrew tap. Off on work-only hosts (d.workOnly) and on hosts
+      # where atlas already runs as a daemon from its own install (data-hub: /usr/local/bin/atlas, self-updating),
+      # where a second Homebrew copy would shadow it on PATH.
+      atlas = lib.mkOption {
+        type = lib.types.bool;
+        default = !config.d.workOnly.enable;
+        defaultText = lib.literalExpression "!config.d.workOnly.enable";
+      };
     };
 
     # For: Minimal GUI applications
