@@ -83,9 +83,8 @@ uninstall and reinstall below safe.
 
 ## Before you start
 
-- **GitHub must be reachable from the host.** Since 2026-10-28 every connection to github.com:443 is refused
-  (ansible-pull fails on it too), while cache.nixos.org and formulae.brew.sh work. Flake inputs, Homebrew taps
-  and `install.sh` all need GitHub. Fix that first; this runbook does not cover it. Check:
+- **GitHub must be reachable from the host.** It was not from 2026-10-28 until the reboot of 2026-10-31 (about
+  186,000 stale TIME_WAIT sockets had used up the ephemeral ports; olympus-sdk #697). Check:
 
   ```sh
   curl -sS -o /dev/null -w '%{http_code}\n' https://github.com
@@ -93,9 +92,8 @@ uninstall and reinstall below safe.
 
 - **Do not run this over Tailscale.** A switch can upgrade the `tailscale` formula and restart `tailscaled`,
   which drops a tailnet ssh session. Use the console, Screen Sharing over the LAN, or ssh to the LAN address.
-- **Private input.** The flake reads the private `olympus-sdk` input over ssh, and the host has no GitHub key.
-  Connect with agent forwarding (`ssh -A`) from a machine whose agent holds a key with access, and build as your
-  user before any root step.
+- **No private input.** data-hub is a server (`d.server`): the private `olympus-sdk` input is neither fetched
+  nor linked, so no GitHub key or agent forwarding is needed.
 - **Optional hold.** To keep Ansible and the atlas updater out of the window, unload them for the duration and
   load them again at the end (step 9):
 
@@ -163,7 +161,7 @@ uninstall and reinstall below safe.
    sudo lsof -iTCP -sTCP:LISTEN -n -P | grep -E ':(5432|8081|8082|8083) '
    ```
 
-   If the uninstaller asks for a reboot, reboot: automatic login is on and FileVault is off, so the host comes
+   If the uninstaller asks for a reboot, reboot: FileVault is off, so the host comes
    back by itself, and the services are LaunchDaemons that start at boot.
 
 6. **Install upstream Nix and switch.** `install.sh` installs upstream Nix (`--prefer-upstream-nix`), builds the
@@ -172,7 +170,7 @@ uninstall and reinstall below safe.
 
    ```sh
    cd ~/projects/personal/nix-darwin-hm
-   ./install.sh
+   NONINTERACTIVE=1 ./install.sh </dev/null
    ```
 
    If activation stops on the `nixbld` group id, set `ids.gids.nixbld` in the host file to the gid it names
@@ -231,14 +229,10 @@ uninstall and reinstall below safe.
   keeps serving. If the switch fails, fix the cause and rerun `just switch`. To leave Nix off the host
   entirely, run `sudo darwin-uninstaller` and `sudo /nix/nix-installer uninstall` again.
 
-## Open decisions (owner)
+## Decisions (owner, 2026-10-31)
 
-- Leftovers to remove, from the audit table: the retired data tier (`redis`, `clickhouse`, the `_redis`,
-  `_clickhouse` and `_ollama` users, `~/.ollama`, the disabled Ollama agent), Cloudflare WARP, the Colima,
-  Docker and OrbStack tooling with `socket_vmnet`, the duplicate per-user ddclient agent, the old taps and
-  `pgroll`, the GUI casks, the `/opt` directories and `~/nix-darwin-hm`. Then turn Homebrew cleanup back on.
-- Whether ddclient (public DNS records) still belongs on this host.
-- The sharing services (Screen Sharing, Remote Management, Remote Apple Events, SMB, Content Caching), the
-  application firewall (off) and automatic login: keep as they are, or set them before the host becomes a CI
-  runner.
-- The GitHub egress block that has stopped ansible-pull since 2026-10-28.
+- Leftovers: all removed by hand (olympus-sdk #697), including the retired data-tier users. Homebrew cleanup
+  stays off here anyway, because Ansible installs some of what the services run from.
+- Server rules (H20): headless, CLI only, Tailscale as a system daemon (Ansible's, here), passwordless sudo.
+  Automatic login is turned off after the migration. Screen Sharing stays as the recovery path.
+- ddclient stays until the owner decides otherwise.

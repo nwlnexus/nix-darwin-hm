@@ -1,40 +1,35 @@
-# data-hub: Mac Studio M1 Max, a headless personal-infrastructure server (formerly the MACST-02 entry).
+# data-hub: Mac Studio M1 Max, a headless server (olympus-sdk #697, H20): `d.server.enable` is the role (no GUI
+# profiles, never sleep, Remote Login, passwordless sudo for the primary user, no op-secrets, nothing personal).
 #
-# Today it serves the llama-server instances (the fallback inference tier behind the A9) and a temporary
-# Postgres, and runs the atlas daemon; its future role is CI compute as a native macOS runner (olympus-sdk #661,
-# #391). This profile was written from a read-only audit of the host (2026-10-31). It captures the host's state,
-# not how it got there: the services themselves (their LaunchDaemons, wrappers, service users, models and
-# configs) are still owned by Ansible (olympus-infra data-hub inventory) until atlas replaces it, so they are
-# not declared here. Only the Homebrew packages those services run from are declared, so that a later
-# `cleanup = "uninstall"` cannot remove them.
+# It serves the llama-server instances (the fallback inference tier behind the A9) and a temporary Postgres, and
+# runs atlas; its next role is CI compute (olympus-sdk #661, #391). The services themselves (their LaunchDaemons,
+# wrappers, models and configs) stay owned by Ansible (olympus-infra data-hub inventory) until atlas replaces it,
+# so they are not declared here. Only the Homebrew packages they run from are declared, so a switch can never
+# remove them. The same goes for tailscaled: Ansible's tailscale role runs it (a root brew service and a
+# watchdog), so the role's own daemon is off here.
 #
-# Migration from its 25.05 Determinate Nix generation, the audit, and the list of leftovers awaiting an owner
-# decision: docs/hosts/data-hub.md. Lines marked `# d.server` belong to the shared headless-server role (olympus-sdk
-# H20, nix-darwin-hm branch feat/694-server-role) and move there once that module merges. data-hub is also the tests' bare-Mac fixture (tests/agent-host-darwin.nix,
-# tests/memory.nix); the agent-host layer and the memory client stay off here.
+# Audit (2026-10-31) and the migration from its Determinate Nix / nix-darwin 25.05 generation: docs/hosts/data-hub.md.
+# data-hub is also a test fixture (tests/agent-host-darwin.nix, tests/memory.nix), which turn the server role off.
 { lib, user, ... }:
 {
   config = {
+    d.server = {
+      enable = true;
+      tailscaleDaemon = false;
+    };
+
     d.profiles = {
       base = {
         enable = true;
-        # The Homebrew formula as a root LaunchDaemon (`sudo brew services start tailscale`), as today. The default
-        # ("app") would install the GUI cask, and cleanup would then remove the formula the host runs on.
-        tailscale = "formula"; # d.server
-        # atlas runs here as a daemon from its own self-updating install in /usr/local/bin (Ansible atlas role);
-        # a Homebrew copy would shadow it on PATH.
+        # atlas runs here as a daemon from its own self-updating install in /usr/local/bin; a Homebrew copy would
+        # shadow it on PATH.
         atlas = false;
       };
-      # CLI dev tooling, as in the running generation; also what a CI runner needs.
+      # CLI dev tooling; also what a CI runner needs.
       dev.enable = true;
-      # Headless: no GUI app profiles.
-      gui-small.enable = false; # d.server
-      gui-full.enable = false; # d.server
-      business.enable = false; # d.server
-      gaming.enable = false; # d.server
     };
 
-    # The host's nixbld group (Determinate/upstream installer default on macOS); the old 30000 was never this host's.
+    # The host's nixbld group (the installer default on macOS).
     ids.gids.nixbld = 350;
     system.primaryUser = user;
 
@@ -42,20 +37,7 @@
       hostName = "data-hub";
       localHostName = "data-hub";
       computerName = "data-hub";
-      # womp 1
-      wakeOnLan.enable = true; # d.server
     };
-
-    # Server power settings as found: never sleep, restart after a power failure or a freeze. Disk and display
-    # sleep are left as they are (both 10 minutes today).
-    power = {
-      sleep.computer = "never"; # d.server
-      restartAfterPowerFailure = true; # d.server
-      restartAfterFreeze = true; # d.server
-    };
-
-    # Remote Login (sshd) is how the host is reached; keep it on.
-    services.openssh.enable = true; # d.server
 
     homebrew = {
       # Homebrew packages the live services run from (their LaunchDaemons are Ansible's):
@@ -70,32 +52,10 @@
         "ddclient"
       ];
 
-      # Do not uninstall undeclared Homebrew packages on this host yet. Its leftovers (retired data tier, GUI and
-      # desktop apps from the old profile, VM tooling) are listed in docs/hosts/data-hub.md for the owner to
-      # decide; switch back to the fleet default ("uninstall") once that list is settled.
+      # Never uninstall undeclared Homebrew packages here: Ansible installs some of what the services need, and
+      # a switch must not remove them. The old leftovers were removed by hand (olympus-sdk #697). Revisit when
+      # atlas replaces Ansible.
       onActivation.cleanup = lib.mkForce "none";
-    };
-
-    home-manager = {
-      users.${user} = {
-        # Personal infrastructure only: no work secrets, git include, ssh hosts or tree.
-        d.personalOnly.enable = true;
-
-        d.apps.onepassword = {
-          # Headless: no 1Password desktop app integration (agent socket, op-ssh-sign, autostart).
-          gui = false; # d.server
-          # None of the op-secrets are on this host today, and a CI host should not hold them: no personal ssh
-          # keys, no ~/projects/personal/.env or .op-connect. So no service-account token file is needed either.
-          excludeSecrets = [
-            "github-personal"
-            "gitlab-work"
-            "personal-env"
-            "op-connect-env"
-          ];
-        };
-
-        # d.server: no memory-gateway client; none is configured on the host (d.memory.enable stays false).
-      };
     };
   };
 }
