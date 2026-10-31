@@ -1,6 +1,7 @@
 # claude-<acct> / codex-<acct> launchers, the always-on Remote Control services
-# built on them (systemd user units on Linux, launchd agents on macOS), and the
-# `agents` helper. Binaries are the native installs in ~/.local/bin (they
+# built on them (systemd user units on Linux, boot-time launchd daemons on macOS
+# that run as the user, declared here and installed by system/darwin/agent-host.nix),
+# and the `agents` helper. Binaries are the native installs in ~/.local/bin (they
 # self-update); Nix only wraps them.
 {
   config,
@@ -149,6 +150,8 @@ let
       bin = "${p.launcher}/bin/${p.tool}-${p.acct}";
     in
     ''
+      # Boot: the /nix volume may not be mounted yet when launchd starts the daemon.
+      /bin/wait4path /nix/store
       logged_in() { ${darwinLoggedIn p}; }
       if ! logged_in; then
         echo "$(date '+%F %T') ${p.acct} is not logged in to ${p.tool}; waiting (log in with ${p.tool}-${p.acct})"
@@ -176,15 +179,22 @@ let
         ''
     );
 
-  agentLabel = u: config.launchd.agents.${u}.config.Label;
+  # macOS Remote Control are system LaunchDaemons (they start at boot with nobody logged in), so mise shims
+  # (which can install tools on demand) stay out of their PATH.
+  daemonPath = lib.concatStringsSep ":" (
+    lib.filter (d: d != "${home}/.local/share/mise/shims") (lib.splitString ":" agentPath)
+  );
+  daemonLabel = u: "io.olympus.agent-host.${u}";
+  # Label of the pre-daemon home-manager LaunchAgents these replace.
+  oldAgentLabel = u: "org.nix-community.home.${u}";
 
   agentsText =
     if isDarwin then
       ''
         units=(${lib.escapeShellArgs units})
-        labels=(${lib.escapeShellArgs (map agentLabel units)})
+        labels=(${lib.escapeShellArgs (map daemonLabel units)})
         logdir=${lib.escapeShellArg cfg.logDir}
-        domain="gui/$(id -u)"
+        domain="system"
         label_of() {
           local i
           for i in "''${!units[@]}"; do
@@ -201,7 +211,7 @@ let
             printf '%-24s %-12s %-8s %s\n' UNIT STATE PID LAST-EXIT
             for u in "''${units[@]}"; do
               l="$(label_of "$u")"
-              if out="$(launchctl print "$domain/$l" 2>/dev/null)"; then
+              if out="$(launchctl print "$domain/$l" 2>/dev/null || sudo -n launchctl print "$domain/$l" 2>/dev/null)"; then
                 state="$(awk -F' = ' '$1 ~ /^[[:space:]]*state$/ { print $2; exit }' <<<"$out")"
                 pid="$(awk -F' = ' '$1 ~ /^[[:space:]]*pid$/ { print $2; exit }' <<<"$out")"
                 last="$(awk -F' = ' '$1 ~ /^[[:space:]]*last exit code$/ { print $2; exit }' <<<"$out")"
@@ -218,7 +228,7 @@ let
             fi
             for u in "$@"; do
               l="$(label_of "$u")"
-              launchctl kickstart -k "$domain/$l"
+              sudo launchctl kickstart -k "$domain/$l"
             done
             ;;
           logs)
@@ -272,29 +282,49 @@ in
 lib.mkIf cfg.enable {
   home.packages = map (p: p.launcher) pairs ++ [ agents ];
 
-  launchd.agents = lib.mkIf isDarwin (
+  # macOS: no launchd.agents for Remote Control. The daemon specs are exposed for system/darwin/agent-host.nix,
+  # which installs them as LaunchDaemons running as this user.
+  d.agentHost.darwinDaemons = lib.optionalAttrs isDarwin (
     lib.listToAttrs (
       map (
         p:
         lib.nameValuePair (unitName p) {
-          enable = true;
-          config = {
-            ProgramArguments = [
-              "/bin/sh"
-              "-c"
-              (darwinRcScript p)
-            ];
-            WorkingDirectory = p.account.root;
-            EnvironmentVariables.PATH = agentPath;
-            RunAtLoad = true;
-            KeepAlive = true;
-            ThrottleInterval = 10;
-            StandardInPath = "/dev/null";
-            StandardOutPath = logFile (unitName p);
-            StandardErrorPath = logFile (unitName p);
+          Label = daemonLabel (unitName p);
+          ProgramArguments = [
+            "/bin/sh"
+            "-c"
+            (darwinRcScript p)
+          ];
+          WorkingDirectory = p.account.root;
+          UserName = config.home.username;
+          GroupName = "staff";
+          EnvironmentVariables = {
+            HOME = home;
+            USER = config.home.username;
+            LOGNAME = config.home.username;
+            PATH = daemonPath;
+            MISE_AUTO_INSTALL = "0";
           };
+          RunAtLoad = true;
+          KeepAlive = true;
+          ThrottleInterval = 10;
+          StandardInPath = "/dev/null";
+          StandardOutPath = logFile (unitName p);
+          StandardErrorPath = logFile (unitName p);
         }
       ) rcPairs
+    )
+  );
+
+  # Migration: the old per-user agents are removed by home-manager's setupLaunchAgents (it boots out and
+  # deletes agents that vanish from the generation), but only when the previous generation is known and the
+  # plist is unchanged. Do it here too, so two servers for one account can never run side by side.
+  home.activation.agentHostRetireOldAgents = lib.mkIf isDarwin (
+    lib.hm.dag.entryAfter [ "setupLaunchAgents" ] (
+      lib.concatMapStrings (u: ''
+        /bin/launchctl bootout "gui/$UID/${oldAgentLabel u}" >/dev/null 2>&1 || true
+        rm -f "$HOME/Library/LaunchAgents/${oldAgentLabel u}.plist" || true
+      '') units
     )
   );
 

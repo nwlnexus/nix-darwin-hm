@@ -18,6 +18,45 @@ let
     if file == null then null else "cat ${lib.escapeShellArg file}";
 
   withToken = s: s // { serviceAccountTokenCommand = tokenCommand (s.account or null); };
+  opSecrets = mapAttrs (_: withToken) (
+    filterAttrs (_: s: cfg.allowedAccounts == null || elem (s.account or null) cfg.allowedAccounts) (
+      removeAttrs {
+        gitlab-work = {
+          type = "sshKey";
+          account = "my.1password.com";
+          source = "op://Dev/44adgxe36ozbj2jyhwg3dfdyui";
+          dest = "${config.home.homeDirectory}/.ssh/gitlab-work-gl";
+          writePublicKey = true;
+        };
+        github-personal = {
+          type = "sshKey";
+          account = "my.1password.com";
+          source = "op://Dev/ta7qkekssx6z5v2f27bksaotzi";
+          dest = "${config.home.homeDirectory}/.ssh/id_ed25519";
+          writePublicKey = true;
+          # No per-secret overrides — inherits module-level account + token.
+        };
+        personal-env = {
+          account = "my.1password.com";
+          template = ../secrets/personal-env.tpl;
+          dest = "${config.home.homeDirectory}/projects/personal/.env";
+          mode = "0600";
+        };
+        work-env = {
+          account = "dtlrinc.1password.com";
+          template = ../secrets/work-env.tpl;
+          dest = "${config.home.homeDirectory}/projects/work/.env";
+          mode = "0600";
+        };
+        op-connect-env = {
+          account = "my.1password.com";
+          template = ../secrets/op-connect.tpl;
+          dest = "${config.home.homeDirectory}/projects/personal/.op-connect";
+          mode = "0600";
+        };
+      } cfg.excludeSecrets
+    )
+  );
 in
 
 {
@@ -145,47 +184,11 @@ in
       # (provided by the 1Password desktop app's CLI integration). If you need
       # work to be autonomous as well, give it its own
       # `serviceAccountTokenCommand` pointing at a work-account token file.
+      # Off when no secret is left after the filters (a server, d.server): op-secrets would otherwise still try
+      # to authenticate and fail the switch on a host with no 1Password token.
       op-secrets = {
-        enable = true;
-        secrets = mapAttrs (_: withToken) (
-          filterAttrs (_: s: cfg.allowedAccounts == null || elem (s.account or null) cfg.allowedAccounts) (
-            removeAttrs {
-              gitlab-work = {
-                type = "sshKey";
-                account = "my.1password.com";
-                source = "op://Dev/44adgxe36ozbj2jyhwg3dfdyui";
-                dest = "${config.home.homeDirectory}/.ssh/gitlab-work-gl";
-                writePublicKey = true;
-              };
-              github-personal = {
-                type = "sshKey";
-                account = "my.1password.com";
-                source = "op://Dev/ta7qkekssx6z5v2f27bksaotzi";
-                dest = "${config.home.homeDirectory}/.ssh/id_ed25519";
-                writePublicKey = true;
-                # No per-secret overrides — inherits module-level account + token.
-              };
-              personal-env = {
-                account = "my.1password.com";
-                template = ../secrets/personal-env.tpl;
-                dest = "${config.home.homeDirectory}/projects/personal/.env";
-                mode = "0600";
-              };
-              work-env = {
-                account = "dtlrinc.1password.com";
-                template = ../secrets/work-env.tpl;
-                dest = "${config.home.homeDirectory}/projects/work/.env";
-                mode = "0600";
-              };
-              op-connect-env = {
-                account = "my.1password.com";
-                template = ../secrets/op-connect.tpl;
-                dest = "${config.home.homeDirectory}/projects/personal/.op-connect";
-                mode = "0600";
-              };
-            } cfg.excludeSecrets
-          )
-        );
+        enable = opSecrets != { };
+        secrets = opSecrets;
       };
     }
   ]);

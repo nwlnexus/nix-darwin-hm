@@ -26,7 +26,7 @@ in
 
           # op-secrets authenticates with the personal service-account token file
           # (~/.config/personal/1penv, 0600) instead of the desktop app's CLI
-          # integration, as on NWL-MMINI; work-env uses the dtlr token file
+          # integration, as on nwl-mstudio; work-env uses the dtlr token file
           # (~/.config/work/1penv).
           d.apps.onepassword = {
             tokenFiles = {

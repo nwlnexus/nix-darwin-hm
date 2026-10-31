@@ -1,7 +1,7 @@
 # "Nothing personal" on a work-only host (olympus-sdk #691): dtlr-ai-agent-host as evaluated from the flake
 # (d.workOnly, system/darwin/work-only.nix + home/work-only.nix). Nothing is built. The private-input half
 # (the host evaluates and builds without the private olympus-sdk input) is tests/work-only-private-input.sh.
-# A personal Mac (NWL-MMINI) is the control: the same probes must find the personal config there, so a probe
+# A personal Mac (nwl-mstudio) is the control: the same probes must find the personal config there, so a probe
 # that can never fire fails here instead of passing silently.
 { flake, lib }:
 let
@@ -11,7 +11,7 @@ let
 
   sys = flake.darwinConfigurations.dtlr-ai-agent-host.config;
   hm = sys.home-manager.users.${user};
-  ctl = flake.darwinConfigurations.NWL-MMINI.config.home-manager.users.${user};
+  ctl = flake.darwinConfigurations.nwl-mstudio.config.home-manager.users.${user};
 
   # Everything the home config writes, store hashes stripped, as one string.
   dump =
@@ -53,7 +53,7 @@ let
       ) (secrets c)
     );
 
-  rc = c: lib.attrNames (lib.filterAttrs (n: a: a.enable && lib.hasInfix "-rc-" n) c.launchd.agents);
+  rc = c: lib.attrNames c.d.agentHost.darwinDaemons;
   files = c: lib.mapAttrsToList (_: f: f.target) (lib.filterAttrs (_: f: f.enable) c.home.file);
   gitConfig = c: c.xdg.configFile."git/config".text;
 in
@@ -249,7 +249,7 @@ in
     expr =
       let
         hb = sys.homebrew;
-        ch = flake.darwinConfigurations.NWL-MMINI.config.homebrew;
+        ch = flake.darwinConfigurations.nwl-mstudio.config.homebrew;
         has = c: [
           (lib.elem "nwlnexus/olympus/atlas" (map (b: b.name) c.brews))
           (lib.elem "obsidian" (map (k: k.name) c.casks))
@@ -276,12 +276,12 @@ in
     };
   };
 
-  # Runs like ai-agent-host: Remote Control launchd agents for the one work account, server-like power settings.
+  # Runs like ai-agent-host: Remote Control LaunchDaemon specs for the one work account, server-like power settings.
   testWorkOnlyRemoteControl = {
     expr = [
       (rc hm)
       hm.d.agentHost.defaultAccount
-      hm.launchd.agents.claude-rc-work.config.WorkingDirectory
+      hm.d.agentHost.darwinDaemons.claude-rc-work.WorkingDirectory
     ];
     expected = [
       [

@@ -1,7 +1,7 @@
 # Agent hosts (Linux standalone home-manager and nix-darwin): one Claude Code /
 # Codex config dir per account, with the account picked by the project tree
 # you're in (zsh prompt hook) or explicitly via claude-<acct> / codex-<acct>.
-# Remote Control services (systemd user units on Linux, launchd agents on
+# Remote Control services (systemd user units on Linux, boot-time launchd daemons on
 # macOS): ./services.nix. Off unless d.agentHost.enable; the Macs import this
 # through system/darwin/agent-host.nix.
 {
@@ -66,11 +66,19 @@ in
       description = "Write the gitnexus MCP entry and mirror the gitnexus-* skills into every account dir.";
     };
 
+    darwinDaemons = lib.mkOption {
+      type = lib.types.attrsOf lib.types.attrs;
+      # Set by services.nix when d.agentHost is enabled; empty otherwise.
+      readOnly = true;
+      internal = true;
+      description = "macOS only: launchd serviceConfig per Remote Control unit, installed as LaunchDaemons by system/darwin/agent-host.nix.";
+    };
+
     logDir = lib.mkOption {
       type = lib.types.str;
       default = "${home}/Library/Logs/agent-host";
       readOnly = true;
-      description = "macOS only: where the launchd agents (Remote Control, second-brain pull) write <unit>.log.";
+      description = "macOS only: where the launchd jobs (Remote Control daemons, second-brain pull agent) write <unit>.log.";
     };
   };
 

@@ -55,7 +55,7 @@ Host-specific configurations organized by platform. Each `.nix` file represents 
 
 **Current hosts:**
 
-- **darwinM:** data-hub, DTLR-NWLMMINI, dtlr-ai-agent-host, NWL-MBM2, NWL-MMINI, nwl-mstudio
+- **darwinM:** data-hub, DTLR-NWLMMINI, dtlr-ai-agent-host, mmini-01, mmini-02, NWL-MBM2, nwl-mstudio
 - **nixos-arm:** nixos-parallels, rpi-01
 - **linux:** ai-agent-host
 
@@ -158,7 +158,7 @@ The flake uses the `mkHosts` function with `flake-utils-plus.mkFlake` to automat
 - `homeConfigurations."nwilliams-lucas@<host>"` is built with `hm.lib.homeManagerConfiguration` from `home/standalone.nix` plus the host's `home` module. `home/standalone.nix` supplies what nix-darwin/NixOS normally provide: `home/shell.nix` (the `d.shell` options, shared with `modules/shell.nix`), `home/cli`, `modules/rust/rust.nix`, the nix-index and op-secrets modules, `home/linux-shell.nix` (zsh, direnv, mise activation) and `home/agent-host/`.
 - `systemConfigs.<host>` is built with `system-manager.lib.makeSystemConfig` from `system/linux/` plus the host's `os` module: nix.conf, weekly GC, user lingering and an sshd hardening drop-in.
 - `packages.<platform>.{system-manager,home-manager}` pin both CLIs to `flake.lock`; `scripts/linux-switch.sh` runs them.
-- Gating options: `d.apps.onepassword.gui` (desktop integration, default `true`), `d.apps.onepassword.tokenFiles` (per-account op-secrets tokens), and `d.agentHost.*` (per-account Claude Code/Codex config dirs and Remote Control services: systemd user units on Linux, launchd agents on macOS, where `system/darwin/agent-host.nix` imports the module, off by default). All default to the macOS behavior.
+- Gating options: `d.apps.onepassword.gui` (desktop integration, default `true`), `d.apps.onepassword.tokenFiles` (per-account op-secrets tokens), and `d.agentHost.*` (per-account Claude Code/Codex config dirs and Remote Control services: systemd user units on Linux, boot-time launchd daemons on macOS, where `system/darwin/agent-host.nix` imports the module, off by default). All default to the macOS behavior.
 - `just test` runs the evaluation suites in `tests/`; `just check-darwin` diffs a store-hash-normalized snapshot of a darwin host's config against `origin/main`, so Linux work can't silently change the Macs.
 
 ## Configuration Patterns

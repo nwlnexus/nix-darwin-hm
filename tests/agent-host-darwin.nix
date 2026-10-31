@@ -1,5 +1,5 @@
 # d.agentHost on nix-darwin (olympus-sdk #690): a Mac with the layer on gets per-account launchers, Remote
-# Control as launchd agents, the launchctl `agents` helper, and second-brain only when enabled. Evaluated by
+# Control as boot-time LaunchDaemons (specs in d.agentHost.darwinDaemons, installed at the nix-darwin level), the launchctl `agents` helper, and second-brain only when enabled. Evaluated by
 # extending a bare Mac Studio host (data-hub); nothing is built. Existing Macs: `just check-darwin`.
 { flake, lib }:
 let
@@ -11,6 +11,13 @@ let
     (mac.extendModules {
       modules = [ { home-manager.users.${user} = hm; } ];
     }).config.home-manager.users.${user};
+
+  withSysRaw =
+    hm:
+    (mac.extendModules {
+      modules = [ { home-manager.users.${user} = hm; } ];
+    }).config;
+  withSys = withSysRaw;
 
   # The #691 shape: one work account, second-brain off.
   work = withHost {
@@ -37,11 +44,20 @@ let
   };
 
   agents = c: lib.filterAttrs (_: a: a.enable) c.launchd.agents;
-  rc = c: lib.attrNames (lib.filterAttrs (n: _: lib.hasInfix "-rc-" n) (agents c));
+  rcAgents = c: lib.attrNames (lib.filterAttrs (n: _: lib.hasInfix "-rc-" n) (agents c));
+  rc = c: lib.attrNames c.d.agentHost.darwinDaemons;
+  sys = withSys {
+    d.agentHost = {
+      enable = true;
+      defaultAccount = "work";
+      accounts.work.root = "${h}/projects/work";
+      secondBrain.enable = false;
+    };
+  };
   logs = "${h}/Library/Logs/agent-host";
   pkgNames = c: map lib.getName c.home.packages;
   agentsText = c: (lib.findFirst (p: lib.getName p == "agents") null c.home.packages).text or "";
-  readProgram = a: lib.last a.config.ProgramArguments;
+  readProgram = a: lib.last a.ProgramArguments;
 in
 {
   # Off by default: the bare host has the option but no agents, launchers or activation steps.
@@ -91,7 +107,7 @@ in
   testDarwinClaudeAgent = {
     expr =
       let
-        a = work.launchd.agents.claude-rc-work.config;
+        a = work.d.agentHost.darwinDaemons.claude-rc-work;
       in
       [
         a.Label
@@ -101,15 +117,46 @@ in
         a.StandardOutPath
         a.StandardErrorPath
         a.ThrottleInterval
+        a.UserName
+        a.GroupName
+        a.StandardInPath
+        a.EnvironmentVariables.MISE_AUTO_INSTALL
+        a.EnvironmentVariables.HOME
+        a.EnvironmentVariables.USER
+        a.EnvironmentVariables.LOGNAME
       ];
     expected = [
-      "org.nix-community.home.claude-rc-work"
+      "io.olympus.agent-host.claude-rc-work"
       true
       true
       "${h}/projects/work"
       "${logs}/claude-rc-work.log"
       "${logs}/claude-rc-work.log"
       10
+      user
+      "staff"
+      "/dev/null"
+      "0"
+      h
+      user
+      user
+    ];
+  };
+  # No Remote Control launchd agents on macOS any more (they would need a GUI login); the old ones are retired.
+  testDarwinNoRemoteControlAgents = {
+    expr = [
+      (rcAgents work)
+      (rcAgents both)
+      (lib.hasInfix "launchctl bootout \"gui/$UID/org.nix-community.home.claude-rc-work\"" work.home.activation.agentHostRetireOldAgents.data)
+      (lib.hasInfix "Library/LaunchAgents/org.nix-community.home.codex-rc-work.plist" work.home.activation.agentHostRetireOldAgents.data)
+      (lib.elem "setupLaunchAgents" work.home.activation.agentHostRetireOldAgents.after)
+    ];
+    expected = [
+      [ ]
+      [ ]
+      true
+      true
+      true
     ];
   };
   # Wait until the account is logged in (credentials file, or the Keychain login's oauthAccount in .claude.json),
@@ -117,7 +164,7 @@ in
   testDarwinClaudeProgram = {
     expr =
       let
-        s = readProgram work.launchd.agents.claude-rc-work;
+        s = readProgram work.d.agentHost.darwinDaemons.claude-rc-work;
       in
       [
         (lib.hasInfix "logged_in() { [ -f ${h}/.claude-work/.credentials.json ] || grep -q '\"oauthAccount\"' ${h}/.claude-work/.claude.json 2>/dev/null; }" s)
@@ -134,7 +181,7 @@ in
   testDarwinCodexProgram = {
     expr =
       let
-        s = readProgram work.launchd.agents.codex-rc-work;
+        s = readProgram work.d.agentHost.darwinDaemons.codex-rc-work;
       in
       [
         (lib.hasInfix "/bin/codex-work login status >/dev/null 2>&1; }" s)
@@ -152,7 +199,7 @@ in
   testDarwinAgentPath = {
     expr =
       let
-        p = lib.splitString ":" work.launchd.agents.claude-rc-work.config.EnvironmentVariables.PATH;
+        p = lib.splitString ":" work.d.agentHost.darwinDaemons.claude-rc-work.EnvironmentVariables.PATH;
       in
       [
         (lib.head p)
@@ -160,12 +207,14 @@ in
         (lib.elem "/run/current-system/sw/bin" p)
         (lib.last p)
         (lib.any (lib.hasInfix ".nix-profile") p)
+        (lib.any (lib.hasInfix "mise/shims") p)
       ];
     expected = [
       "${h}/.local/bin"
       true
       true
       "/opt/homebrew/sbin"
+      false
       false
     ];
   };
@@ -192,7 +241,7 @@ in
       false
     ];
   };
-  # `agents` on launchctl: gui/<uid>/<label>, kickstart -k, tail of the log file; no systemctl/journalctl.
+  # `agents` on launchctl: system/<label>, sudo kickstart -k, tail of the log file; no systemctl/journalctl.
   testDarwinAgentsHelper = {
     expr =
       let
@@ -200,9 +249,11 @@ in
       in
       map (x: lib.hasInfix x t) [
         "units=(claude-rc-work codex-rc-work)"
-        "labels=(org.nix-community.home.claude-rc-work org.nix-community.home.codex-rc-work)"
+        "labels=(io.olympus.agent-host.claude-rc-work io.olympus.agent-host.codex-rc-work)"
+        "domain=\"system\""
         "launchctl print \"$domain/$l\""
-        "launchctl kickstart -k \"$domain/$l\""
+        "sudo launchctl kickstart -k \"$domain/$l\""
+        "gui/"
         "tail -n 100 -F \"$logdir/$2.log\""
         "systemctl"
         "journalctl"
@@ -212,6 +263,8 @@ in
       true
       true
       true
+      true
+      false
       true
       false
       false
@@ -292,6 +345,45 @@ in
     ];
     expected = [
       true
+      false
+    ];
+  };
+  # nix-darwin level: the specs become LaunchDaemons (run as the user), the log dir and pmset are set at activation.
+  testDarwinDaemonsInstalled = {
+    expr =
+      let
+        d = sys.launchd.daemons;
+      in
+      [
+        (lib.filter (n: lib.hasInfix "-rc-" n) (lib.attrNames d))
+        d.claude-rc-work.serviceConfig.UserName
+        d.codex-rc-work.serviceConfig.UserName
+        d.claude-rc-work.serviceConfig.KeepAlive
+        (lib.hasInfix "/usr/bin/pmset -a sleep 0 disksleep 0 autorestart 1 womp 1" sys.system.activationScripts.postActivation.text)
+        (lib.hasInfix "install -d -o ${user} -g staff -m 0755 ${logs}" sys.system.activationScripts.postActivation.text)
+        (lib.hasInfix "displaysleep" sys.system.activationScripts.postActivation.text)
+      ];
+    expected = [
+      [
+        "claude-rc-work"
+        "codex-rc-work"
+      ]
+      user
+      user
+      true
+      true
+      true
+      false
+    ];
+  };
+  # Agent-host off: no Remote Control daemons and no agent-host pmset step.
+  testDarwinDaemonsOffByDefault = {
+    expr = [
+      (lib.filter (n: lib.hasInfix "-rc-" n) (lib.attrNames mac.config.launchd.daemons))
+      (lib.hasInfix "autorestart" mac.config.system.activationScripts.postActivation.text)
+    ];
+    expected = [
+      [ ]
       false
     ];
   };

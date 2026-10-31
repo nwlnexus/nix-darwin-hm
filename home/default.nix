@@ -19,6 +19,7 @@ in
     ./apps
     ./work-only.nix
     ./personal-only.nix
+    ./server.nix
   ];
 
   home = {
@@ -230,6 +231,17 @@ in
   # repo's mise.toml / .tool-versions / package.json "packageManager".
   # Activation is handled by system/darwin/shells.nix, so zsh integration is off
   # here to avoid double-activation.
+  # Install the global tools once per switch (a no-op when they are present), since auto_install is
+  # off. Fail-soft: a missing network must never fail a switch.
+  home.activation.miseInstall = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    # Node first: the npm: backend runs npm, which is not on the activation PATH until node is installed.
+    MISE=${config.programs.mise.package}/bin/mise
+    run "$MISE" install --yes --quiet node || true
+    NODE_BIN="$("$MISE" where node 2>/dev/null)/bin"
+    # mise's npm wrapper runs `mise reshim` after an install, so mise itself must be on PATH too.
+    run env PATH="$NODE_BIN:$(dirname "$MISE"):$PATH" "$MISE" install --yes --quiet || true
+  '';
+
   programs.mise = {
     enable = true;
     enableZshIntegration = false;
@@ -243,12 +255,14 @@ in
         terraform = "1.16.4";
         terraform-ls = "0.39.0";
         packer = "1.16.1";
-        "npm:repomix" = "latest";
+        # Exact versions, not "latest": "latest" makes mise re-resolve against the npm registry, and
+        # with auto_install that re-resolution ran from every new shell (an install storm). Bump by hand.
+        "npm:repomix" = "1.18.1";
         # gitnexus needs native postinstall (tree-sitter grammars, onnxruntime, etc.).
         # mise passes --ignore-scripts=true for npm globals by default; with npm 11.16+
         # allow_builds becomes --allow-scripts=<pkgs> so only reviewed deps run scripts.
         "npm:gitnexus" = {
-          version = "latest";
+          version = "1.6.12";
           allow_builds = [
             "gitnexus"
             "tree-sitter"
@@ -276,10 +290,10 @@ in
           "node"
           "pnpm"
         ];
-        # Auto-install a pinned-but-missing tool on first use (already the mise
-        # default; pinned here so a future default change can't silently disable
-        # it) — entering a repo never requires a manual `mise install`.
-        auto_install = true;
+        # No auto-install on first use: with it, every new shell (and every agent subprocess) that hit a
+        # missing tool started an install, and many at once became a storm. Global tools are installed
+        # once per switch by the `miseInstall` activation below; a repo's own pins need `mise install`.
+        auto_install = false;
         # Implicitly trust mise.toml under the trees I own, skipping the
         # `mise trust` prompt there. Any other path (e.g. ~/projects/freelance,
         # or a one-off clone elsewhere) still requires an explicit `mise trust`.

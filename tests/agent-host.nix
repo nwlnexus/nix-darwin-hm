@@ -258,7 +258,7 @@ in
   testPersonalOnlyOffElsewhere = {
     expr =
       let
-        mac = flake.darwinConfigurations.NWL-MMINI.config.home-manager.users.nwilliams-lucas;
+        mac = flake.darwinConfigurations.nwl-mstudio.config.home-manager.users.nwilliams-lucas;
         wk = flake.darwinConfigurations.dtlr-ai-agent-host.config.home-manager.users.nwilliams-lucas;
       in
       [

@@ -415,12 +415,12 @@ in
     expr =
       let
         hm =
-          (flake.darwinConfigurations.NWL-MMINI.extendModules {
+          (flake.darwinConfigurations.nwl-mstudio.extendModules {
             modules = [
               {
                 home-manager.users.nwilliams-lucas.d.memory = {
                   enable = true;
-                  host = "NWL-MMINI";
+                  host = "nwl-mstudio";
                   mode = "public";
                 };
               }
@@ -439,9 +439,9 @@ in
       "/Users/nwilliams-lucas/.claude/settings.json"
       "/Users/nwilliams-lucas/.claude.json"
       [
-        "op://Dev/memory-gateway-keys/NWL-MMINI-default"
-        "op://Dev/memory-access-tokens/NWL-MMINI-id"
-        "op://Dev/memory-access-tokens/NWL-MMINI-secret"
+        "op://Dev/memory-gateway-keys/nwl-mstudio-default"
+        "op://Dev/memory-access-tokens/nwl-mstudio-id"
+        "op://Dev/memory-access-tokens/nwl-mstudio-secret"
       ]
     ];
   };
@@ -547,7 +547,7 @@ in
       in
       [
         (mac "NWL-MBM2")
-        (mac "NWL-MMINI")
+        (mac "nwl-mstudio")
         (hm "DTLR-NWLMMINI").enable
       ];
     expected =

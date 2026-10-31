@@ -3,7 +3,7 @@
 let
   snap = import ./lib/darwin-snapshot.nix {
     inherit flake;
-    host = "NWL-MMINI";
+    host = "nwl-mstudio";
   };
 in
 {

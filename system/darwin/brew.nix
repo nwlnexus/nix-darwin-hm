@@ -23,9 +23,10 @@
 
     # Casks installed on all macOS hosts.
     casks =
-      # A GUI app: only on hosts with a GUI profile, and not on work-only hosts (d.workOnly).
+      # A GUI app: only on hosts with a GUI profile, and never on work-only hosts (d.workOnly) or servers (d.server).
       lib.optional (
         !config.d.workOnly.enable
+        && !config.d.server.enable
         && (config.d.profiles.gui-small.enable || config.d.profiles.gui-full.enable)
       ) "obsidian"
       ++ [
