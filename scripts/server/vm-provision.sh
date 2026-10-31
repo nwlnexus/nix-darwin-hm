@@ -139,6 +139,13 @@ resize2fs "$root" >/dev/null 2>&1 || true
 passwd -l admin >/dev/null
 usermod --expiredate 1 --shell /usr/sbin/nologin admin
 passwd -S admin | awk '{ exit ($2 == "L" ? 0 : 1) }'
+
+# Flush to disk before the VM is stopped: without this the files written above came back zero-length after
+# the stop (ext4 delayed allocation), which left the VM with no ansible key, no sudo rule and password login on.
+sync
+test -s /home/ansible/.ssh/authorized_keys
+test -s /etc/sudoers.d/90-ansible
+test -s /etc/ssh/sshd_config.d/00-server-vm.conf
 REMOTE
 
 if ssh_admin true 2>/dev/null; then
