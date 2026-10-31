@@ -89,8 +89,12 @@ wipe() {
   # macOS refuses to remove a directory that is a user's registered home, even as root and even when empty, so
   # empty the home rather than deleting it.
   rm -rf "${CI_WORK_DIR:?}/runner"
+  # macOS also creates ~/Library for any user that runs processes, and its containermanagerd subfolders are
+  # TCC-protected: root in this daemon cannot remove them, and failing here stopped the loop for good (mmini-01).
+  # Leave ~/Library to macOS (nothing in it runs without a GUI login, which a server never has) and never let
+  # the wipe end the loop.
   if [ -d "$CI_WORK_DIR/home" ]; then
-    find "$CI_WORK_DIR/home" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+    find "$CI_WORK_DIR/home" -mindepth 1 -maxdepth 1 ! -name Library -exec rm -rf {} + || log "wipe: some files could not be removed"
   fi
   find /private/tmp /private/var/tmp -xdev -maxdepth 1 -user "$CI_USER" -exec rm -rf {} + 2>/dev/null || true
   install -d -m 0755 -o root -g wheel "$CI_WORK_DIR"
