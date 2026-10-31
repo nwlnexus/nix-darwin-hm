@@ -81,7 +81,13 @@ if [ -x "${NIX_BIN}" ]; then
   ok "Nix is already installed"
 else
   step "Installing upstream Nix..."
-  curl -fsSL https://install.determinate.systems/nix | sh -s -- install --prefer-upstream-nix
+  # Unattended runs (NONINTERACTIVE=1, as for the Homebrew installer, or no terminal) skip the installer's
+  # confirmation prompt, which would otherwise abort with no TTY to answer it.
+  nix_confirm=()
+  if [ -n "${NONINTERACTIVE:-}" ] || [ ! -t 0 ]; then
+    nix_confirm=(--no-confirm)
+  fi
+  curl -fsSL https://install.determinate.systems/nix | sh -s -- install --prefer-upstream-nix ${nix_confirm[@]+"${nix_confirm[@]}"}
   [ -x "${NIX_BIN}" ] || die "Nix installation failed: ${NIX_BIN} not found."
   ok "Nix installed"
 fi
