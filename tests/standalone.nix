@@ -88,7 +88,7 @@ in
   # Sync is on: every host must run the same atuin.
   testAtuinSameOnMacs = {
     expr =
-      flake.darwinConfigurations.NWL-MMINI.config.home-manager.users.nwilliams-lucas.programs.atuin.package.version;
+      flake.darwinConfigurations.nwl-mstudio.config.home-manager.users.nwilliams-lucas.programs.atuin.package.version;
     expected = hm.programs.atuin.package.version;
   };
 }

@@ -19,6 +19,7 @@ in
     ./apps
     ./work-only.nix
     ./personal-only.nix
+    ./server.nix
   ];
 
   home = {
