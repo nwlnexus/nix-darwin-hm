@@ -234,7 +234,11 @@ in
   # Install the global tools once per switch (a no-op when they are present), since auto_install is
   # off. Fail-soft: a missing network must never fail a switch.
   home.activation.miseInstall = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    run ${config.programs.mise.package}/bin/mise install --yes --quiet || true
+    # Node first: the npm: backend runs npm, which is not on the activation PATH until node is installed.
+    MISE=${config.programs.mise.package}/bin/mise
+    run "$MISE" install --yes --quiet node || true
+    NODE_BIN="$("$MISE" where node 2>/dev/null)/bin"
+    run env PATH="$NODE_BIN:$PATH" "$MISE" install --yes --quiet || true
   '';
 
   programs.mise = {

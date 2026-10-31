@@ -16,6 +16,10 @@ in
 
   config = lib.mkIf cfg.enable {
     d.apps.onepassword.gui = lib.mkDefault false;
+    # No op-secrets at all: a server holds no personal ssh keys or .env files, so it needs no 1Password token.
+    # What a server does need (runner App files, the VM's ansible key) is installed root-only by hand
+    # (docs/hosts/mmini-01.md).
+    d.apps.onepassword.allowedAccounts = lib.mkDefault [ ];
 
     d.claudeHarness.settings.autoModeFile = lib.mkDefault null;
     d.claudeHarness.telemetry.file = lib.mkDefault null;

@@ -24,17 +24,22 @@
     ]
     ++ lib.optionals config.d.profiles.dev.rust.enable [ ../rust/rust.nix ];
 
-    environment.systemPackages = with pkgs; [
-      github-cli
-      lazygit
-      vscode
-      azure-cli
-      dotnet-sdk_8
-      powershell
-      kdoctor
-      nixd
-      postgresql
-    ];
+    environment.systemPackages =
+      with pkgs;
+      [
+        github-cli
+        lazygit
+      ]
+      # Servers (d.server) take command-line tools only: no GUI editor.
+      ++ lib.optional (!config.d.server.enable) vscode
+      ++ [
+        azure-cli
+        dotnet-sdk_8
+        powershell
+        kdoctor
+        nixd
+        postgresql
+      ];
 
     homebrew = {
       brews = [
@@ -54,9 +59,8 @@
         "kubecm"
         "flyctl"
       ];
-      casks = [
-        "temurin@20"
-      ];
+      # Servers (d.server) take command-line tools only.
+      casks = lib.optional (!config.d.server.enable) "temurin@20";
 
       # Trust non-official taps for Homebrew 6.0 (see base.nix for rationale).
       # `fluxcd/tap` is auto-tapped by the qualified `fluxcd/tap/flux` brew, but
