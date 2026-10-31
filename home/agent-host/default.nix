@@ -161,15 +161,16 @@ in
         lib.concatMapStrings (acct: ''
           SHIM=${lib.escapeShellArg "${home}/.local/share/mise/shims/gitnexus"}
           ACCT_DIR=${lib.escapeShellArg (claudeDir acct)}
-          if [ -x "$SHIM" ]; then
-            DST_JSON="$ACCT_DIR/.claude.json"
-            [ -f "$DST_JSON" ] || { echo '{}' > "$DST_JSON"; chmod 600 "$DST_JSON"; }
-            TMP="$(mktemp)"
-            if ${pkgs.jq}/bin/jq --arg c "$SHIM" '.mcpServers.gitnexus = {command: $c, args: ["mcp"]}' "$DST_JSON" > "$TMP" 2>/dev/null; then
-              if cmp -s "$TMP" "$DST_JSON"; then rm -f "$TMP"; else chmod 600 "$TMP"; mv "$TMP" "$DST_JSON"; fi
-            else
-              rm -f "$TMP"
-            fi
+          # Written even before the shim exists: on a fresh host the mise global is installed after the
+          # first switch, and gating on `-x "$SHIM"` left the account without the server until another
+          # switch. The entry starts working as soon as the shim appears.
+          DST_JSON="$ACCT_DIR/.claude.json"
+          [ -f "$DST_JSON" ] || { echo '{}' > "$DST_JSON"; chmod 600 "$DST_JSON"; }
+          TMP="$(mktemp)"
+          if ${pkgs.jq}/bin/jq --arg c "$SHIM" '.mcpServers.gitnexus = {type: "stdio", command: $c, args: ["mcp"]}' "$DST_JSON" > "$TMP" 2>/dev/null; then
+            if cmp -s "$TMP" "$DST_JSON"; then rm -f "$TMP"; else chmod 600 "$TMP"; mv "$TMP" "$DST_JSON"; fi
+          else
+            rm -f "$TMP"
           fi
           for SKILL in ${home}/.claude/skills/gitnexus-*; do
             [ -d "$SKILL" ] || continue
