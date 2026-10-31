@@ -57,11 +57,15 @@ fi
 
 # --- Nix (upstream, not Determinate) ----------------------------------------
 # nix-darwin manages Nix itself and refuses to activate on Determinate Nix.
+# Determinate Nix, not just the Determinate *installer*: an upstream install made with --prefer-upstream-nix
+# also has a receipt that mentions Determinate and the installer's `systems.determinate.nix-installer.nix-hook`
+# daemon (it restores Nix after macOS updates), so neither may count. What marks Determinate Nix is the receipt's
+# `"determinate_nix": true` or its own daemon (`systems.determinate.nix-daemon`, `determinate-nixd`).
 is_determinate() {
-  if [ -f "${NIX_ROOT}/receipt.json" ] && grep -qi determinate "${NIX_ROOT}/receipt.json"; then
+  if [ -f "${NIX_ROOT}/receipt.json" ] && grep -Eq '"determinate_nix"[[:space:]]*:[[:space:]]*true' "${NIX_ROOT}/receipt.json"; then
     return 0
   fi
-  compgen -G "${LAUNCHD_DIR}/systems.determinate.*" >/dev/null
+  [ -e "${LAUNCHD_DIR}/systems.determinate.nix-daemon.plist" ] || [ -x /usr/local/bin/determinate-nixd ]
 }
 
 if is_determinate; then
@@ -81,7 +85,13 @@ if [ -x "${NIX_BIN}" ]; then
   ok "Nix is already installed"
 else
   step "Installing upstream Nix..."
-  curl -fsSL https://install.determinate.systems/nix | sh -s -- install --prefer-upstream-nix
+  # Unattended runs (NONINTERACTIVE=1, as for the Homebrew installer, or no terminal) skip the installer's
+  # confirmation prompt, which would otherwise abort with no TTY to answer it.
+  nix_confirm=()
+  if [ -n "${NONINTERACTIVE:-}" ] || [ ! -t 0 ]; then
+    nix_confirm=(--no-confirm)
+  fi
+  curl -fsSL https://install.determinate.systems/nix | sh -s -- install --prefer-upstream-nix ${nix_confirm[@]+"${nix_confirm[@]}"}
   [ -x "${NIX_BIN}" ] || die "Nix installation failed: ${NIX_BIN} not found."
   ok "Nix installed"
 fi
