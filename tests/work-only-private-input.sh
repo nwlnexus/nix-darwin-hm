@@ -4,13 +4,13 @@
 # Copies the tracked tree to a temp dir, points the input's lock entry at an unreachable repository with a
 # narHash no store path has, and evaluates the host's system derivation from that copy. Nix fetches flake inputs
 # lazily, so this only succeeds when nothing in the host's evaluation touches the input. As a control, a host
-# that does use it (NWL-MMINI: memory hooks, autoMode, /etc/nix/inputs) must fail the same way.
+# that does use it (nwl-mstudio: memory hooks, autoMode, /etc/nix/inputs) must fail the same way.
 #
 # Needs nix and jq. Usage: bash tests/work-only-private-input.sh [host]
 set -euo pipefail
 
 host="${1:-dtlr-ai-agent-host}"
-control="NWL-MMINI"
+control="nwl-mstudio"
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT

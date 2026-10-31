@@ -6,7 +6,7 @@
 let
   deployed = flake.homeConfigurations."nwilliams-lucas@ai-agent-host";
   host = deployed.config;
-  mac = flake.darwinConfigurations.NWL-MMINI.config.home-manager.users.nwilliams-lucas;
+  mac = flake.darwinConfigurations.nwl-mstudio.config.home-manager.users.nwilliams-lucas;
   h = "/home/nwilliams-lucas";
   m = "/Users/nwilliams-lucas";
   contract = c: c.home.activation.claudeSessionContract.data or "";

@@ -131,7 +131,7 @@ test:
 
 # Print a normalized snapshot of a darwin host's evaluated config.
 # With a ref, evaluates that git revision of this repo instead of the working tree.
-darwin-snapshot host="NWL-MMINI" ref="":
+darwin-snapshot host="nwl-mstudio" ref="":
     #!/usr/bin/env bash
     set -euo pipefail
     if [ -n "{{ ref }}" ]; then
@@ -146,7 +146,7 @@ darwin-snapshot host="NWL-MMINI" ref="":
       | jq -S .
 
 # Fail (and show the diff) if a darwin host's config differs from ref
-check-darwin host="NWL-MMINI" ref="origin/main":
+check-darwin host="nwl-mstudio" ref="origin/main":
     #!/usr/bin/env bash
     set -euo pipefail
     diff -u <(just darwin-snapshot {{ host }} {{ ref }}) <(just darwin-snapshot {{ host }}) \

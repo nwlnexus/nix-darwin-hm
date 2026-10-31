@@ -18,6 +18,7 @@ in
     ./mvmctl.nix
     ./agent-host.nix
     ./work-only.nix
+    ./server.nix
     ./packages.nix
     # ./safari.nix
     ./trackpad.nix

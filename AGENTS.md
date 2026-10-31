@@ -161,7 +161,7 @@ To add a new host configuration:
 
 ### Adding/migrating a Mac
 
-Host files are lowercase or uppercase as the machine is named; the flake picks the config by hostname, so the name must match the file name exactly. Example: moving to a new Mac with Migration Assistant (`hosts/darwinM/nwl-mstudio.nix`, copied from `NWL-MMINI.nix`):
+Host files are lowercase or uppercase as the machine is named; the flake picks the config by hostname, so the name must match the file name exactly. Example: moving to a new Mac with Migration Assistant (`hosts/darwinM/nwl-mstudio.nix`, copied from the retired `NWL-MMINI.nix`):
 
 1. **Hostname first.** Before the first rebuild: `sudo scutil --set ComputerName <host>; sudo scutil --set LocalHostName <host>; sudo scutil --set HostName <host>`. Migration Assistant keeps or prompts for names.
 2. **Install Nix fresh and do the first switch** (`./install.sh`: installs Homebrew and *upstream* Nix with `--prefer-upstream-nix`, since nix-darwin refuses to activate on Determinate Nix, then runs the first `sudo nix run nix-darwin/<release>#darwin-rebuild -- switch --flake .#<host>`; if Determinate Nix is already present it stops and tells you to run `sudo /nix/nix-installer uninstall`). `/nix` is a separate APFS volume and is not migrated, so the migrated home has dotfile symlinks into a store that does not exist yet.
@@ -225,13 +225,28 @@ Host files are lowercase or uppercase as the machine is named; the flake picks t
 
 ### Work-only hosts
 
-`d.workOnly.enable = true` in a nix-darwin host (`system/darwin/work-only.nix`, which turns on `home/work-only.nix` for the primary user) evaluates none of the personal config: op-secrets only from the work 1Password account (`d.apps.onepassword.allowedAccounts`), no personal token, memory client or second-brain (asserted), no `/brain` or `SECOND_BRAIN_PATH`, no autoMode or telemetry source (`autoModeFile`/`telemetry.file` default to `null`), the work git identity globally with no personal include, no personal ssh host blocks and no `~/projects/personal/.envrc`. The private `olympus-sdk` input is neither fetched nor linked into `/etc/nix/inputs`: `flake.nix` hands the mkFlake hosts a lazy wrapper of that input (same `outPath` and attributes), because flake-utils-plus probes every input's attributes and that forced the fetch on every host. Off by default, so the other hosts are unchanged (`just check-darwin`). Tests: `tests/work-only.nix` (`just test`) and `just test-work-only-private-input` (the host evaluates with the input's lock entry pointed at an unreachable repo; NWL-MMINI as the control must fail). Host and bootstrap runbook: [`docs/hosts/dtlr-ai-agent-host.md`](docs/hosts/dtlr-ai-agent-host.md).
+`d.workOnly.enable = true` in a nix-darwin host (`system/darwin/work-only.nix`, which turns on `home/work-only.nix` for the primary user) evaluates none of the personal config: op-secrets only from the work 1Password account (`d.apps.onepassword.allowedAccounts`), no personal token, memory client or second-brain (asserted), no `/brain` or `SECOND_BRAIN_PATH`, no autoMode or telemetry source (`autoModeFile`/`telemetry.file` default to `null`), the work git identity globally with no personal include, no personal ssh host blocks and no `~/projects/personal/.envrc`. The private `olympus-sdk` input is neither fetched nor linked into `/etc/nix/inputs`: `flake.nix` hands the mkFlake hosts a lazy wrapper of that input (same `outPath` and attributes), because flake-utils-plus probes every input's attributes and that forced the fetch on every host. Off by default, so the other hosts are unchanged (`just check-darwin`). Tests: `tests/work-only.nix` (`just test`) and `just test-work-only-private-input` (the host evaluates with the input's lock entry pointed at an unreachable repo; nwl-mstudio as the control must fail). Host and bootstrap runbook: [`docs/hosts/dtlr-ai-agent-host.md`](docs/hosts/dtlr-ai-agent-host.md).
 
 `d.profiles.base.tailscale` picks how a Mac gets Tailscale: `"app"` (default, the `tailscale-app` cask) or `"formula"` (the Homebrew formula only, for a root LaunchDaemon via `sudo brew services start tailscale`; declaring it also keeps `brew bundle --cleanup` from removing it).
 
 ### Personal-only hosts
 
 `d.personalOnly.enable = true` in a home-manager host (`home/personal-only.nix`; ai-agent-host sets it, olympus-sdk #693) is the mirror of `d.workOnly`: op-secrets only from the personal 1Password account (`d.apps.onepassword.allowedAccounts`, so `work-env` is neither evaluated nor fetched and `tokenFiles.work` is asserted unset), no `~/projects/work/.envrc`, no direnv whitelist or mise trust entry for the work tree, no work git include and no work/dtlr ssh host blocks. The memory route table is untouched, so `~/projects/work` still routes to `none` (fail closed). Asserted: mutually exclusive with `d.workOnly`, and no `d.agentHost` account rooted under `~/projects/work`. Off by default, so every other host is unchanged.
+
+### Server hosts (d.server)
+
+`d.server.enable = true` in a nix-darwin host (`system/darwin/server.nix`, which turns on `home/server.nix` for the primary user) makes a Mac a headless server (olympus-sdk #694, H20). mmini-01 uses it, and data-hub will. Off by default, so the other Macs are unchanged (`just check-darwin`). When on:
+
+- **No GUI.** `gui-small`, `gui-full`, `business` and `gaming` are asserted off; `base` and `dev` stay. The always-on `iterm2` (and its `duti`) and `obsidian` casks are dropped, and the 1Password app integration is off (`d.apps.onepassword.gui` defaults to `false`).
+- **Tailscale** is the Homebrew formula (`d.profiles.base.tailscale = "formula"`, asserted), run by a LaunchDaemon this module declares, `com.tailscale.tailscaled` (`launchd.daemons.tailscaled`, running `/opt/homebrew/bin/tailscaled`), so it starts at boot with nobody logged in. It is not the `tailscale-app` cask and not `sudo brew services start tailscale`; run only one of them, because two `tailscaled` cannot share the socket. Joining the tailnet is the owner's `sudo tailscale up --ssh=false`.
+- **Power:** `power.sleep.{computer,display,harddisk} = "never"` (computer asserted), `power.restartAfterPowerFailure` and `restartAfterFreeze`, `networking.wakeOnLan.enable`. nix-darwin applies those with `systemsetup`, which does nothing without Full Disk Access, so a `postActivation` step also runs `pmset -a sleep 0 displaysleep 0 disksleep 0 autorestart 1 womp 1`.
+- **Remote Login** (sshd) is brought up at boot by `launchctl enable system/com.openssh.sshd` and `launchctl bootstrap` when it is not loaded (not `systemsetup -setremotelogin`, which needs Full Disk Access). The first time on a fresh Mac, the owner turns it on in System Settings so they can ssh in at all.
+- **Passwordless sudo for the primary user only** (`security.sudo.extraConfig`, `/etc/sudoers.d/10-nix-darwin-extra-config`); Touch ID for sudo is off. Runner jobs run as a separate unprivileged user and never get it.
+- **Nothing personal:** no memory-gateway client (asserted), no agent-host layer (its Remote Control services are LaunchAgents, so a GUI session; asserted off, which also rules out the second-brain), no autoMode or telemetry source, no auto-login (asserted unset), and the private `olympus-sdk` input is neither fetched nor linked, so a fresh Mac with no ssh key builds.
+- **Every service the role adds is a LaunchDaemon.** The dev profile's own `cargo-sweep` LaunchAgent is unchanged and only runs while the user is logged in.
+- **Not managed by nix:** Screen Sharing, and FileVault (the minis keep it off so they reboot unattended after a power cut).
+
+Tests: `tests/server.nix` (`just test`) and `bash tests/work-only-private-input.sh mmini-01`. First boot of a factory-fresh Mac: [`docs/hosts/mmini-01.md`](docs/hosts/mmini-01.md).
 
 ### Memory gateway client (Claude Code)
 
@@ -270,7 +285,7 @@ For in-depth architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 **Current hosts:**
 
-- **darwinM:** data-hub, DTLR-NWLMMINI, dtlr-ai-agent-host, NWL-MBM2, NWL-MMINI, nwl-mstudio
+- **darwinM:** data-hub, DTLR-NWLMMINI, dtlr-ai-agent-host, mmini-01, NWL-MBM2, nwl-mstudio
 - **nixos-arm:** nixos-parallels, rpi-01
 - **linux (standalone home-manager + system-manager):** ai-agent-host
 

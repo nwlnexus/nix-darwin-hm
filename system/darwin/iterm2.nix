@@ -1,3 +1,4 @@
+{ config, lib, ... }:
 {
   # iTerm2 system-level configuration (all macOS hosts).
   #
@@ -6,10 +7,11 @@
   # live in iTerm2's preference domain rather than in a profile.
 
   homebrew = {
-    casks = [ "iterm2" ];
+    # Not on servers (d.server): no GUI apps there.
+    casks = lib.optional (!config.d.server.enable) "iterm2";
     # `duti` is used to register iTerm2 as the default terminal handler
     # (see the duti activation in home/apps/iterm2/default.nix).
-    brews = [ "duti" ];
+    brews = lib.optional (!config.d.server.enable) "duti";
   };
 
   system.defaults.CustomUserPreferences."com.googlecode.iterm2" = {
