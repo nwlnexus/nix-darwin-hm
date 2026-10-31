@@ -123,6 +123,19 @@ Run these as the primary user, in order. Steps 4 and 5 must come before the firs
    `/login` with the work account. The `claude-rc-work` launchd agent waits for that login and then starts Remote
    Control; the session shows on claude.ai under the work login.
 
+    Then accept Remote Control once, interactively: the first `remote-control` run asks
+    `Enable Remote Control? (y/n)`, which the background agent cannot answer (it exits and restarts in a loop,
+    visible in `~/Library/Logs/agent-host/claude-rc-work.log`). Answer `y`, wait for `Connected`, press Ctrl+C,
+    then hand it back to the agent:
+
+    ```sh
+    cd ~/projects/work
+    claude-work remote-control
+    agents restart claude-rc-work
+    ```
+
+    The environment then shows on claude.ai (signed into the work account) for this host.
+
 11. **Codex (if used).** `codex-work login --device-auth`.
 
 12. **Checks.**
