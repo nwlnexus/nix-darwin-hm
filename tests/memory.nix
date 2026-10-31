@@ -402,7 +402,7 @@ in
     expr =
       let
         sys =
-          (flake.darwinConfigurations.MACST-01.extendModules {
+          (flake.darwinConfigurations.data-hub.extendModules {
             modules = [ { home-manager.users.nwilliams-lucas.d.memory.enable = true; } ];
           }).config;
       in

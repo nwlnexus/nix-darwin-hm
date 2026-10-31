@@ -1,11 +1,11 @@
 # d.agentHost on nix-darwin (olympus-sdk #690): a Mac with the layer on gets per-account launchers, Remote
 # Control as launchd agents, the launchctl `agents` helper, and second-brain only when enabled. Evaluated by
-# extending a bare Mac Studio host (MACST-01); nothing is built. Existing Macs: `just check-darwin`.
+# extending a bare Mac Studio host (data-hub); nothing is built. Existing Macs: `just check-darwin`.
 { flake, lib }:
 let
   user = "nwilliams-lucas";
   h = "/Users/${user}";
-  mac = flake.darwinConfigurations.MACST-01;
+  mac = flake.darwinConfigurations.data-hub;
   withHost =
     hm:
     (mac.extendModules {
