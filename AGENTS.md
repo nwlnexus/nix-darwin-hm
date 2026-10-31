@@ -288,7 +288,7 @@ For in-depth architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 **Current hosts:**
 
-- **darwinM:** data-hub, DTLR-NWLMMINI, dtlr-ai-agent-host, mmini-01, NWL-MBM2, nwl-mstudio
+- **darwinM:** data-hub, DTLR-NWLMMINI, dtlr-ai-agent-host, mmini-01, mmini-02, NWL-MBM2, nwl-mstudio
 - **nixos-arm:** nixos-parallels, rpi-01
 - **linux (standalone home-manager + system-manager):** ai-agent-host
 

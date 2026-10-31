@@ -4,8 +4,8 @@
 # Nothing personal: no memory client, no second-brain, no personal tokens.
 #
 # The native CI runner (system/darwin/server-ci-runner.nix) and the Tart k3s VM (server-linux-vm.nix) are on with
-# their defaults; docs/hosts/mmini-01.md lists the owner's one-time steps for both. atlas comes in a later PR
-# (olympus-sdk #694).
+# their defaults; docs/hosts/mmini-01.md lists the one-time steps for both. atlas is not managed here: it is the
+# `_atlas` LaunchDaemon from `atlas setup` + `atlas service install --system` (self-updating), as on data-hub.
 #
 # The flake picks this host by LocalHostName, so the name must be exactly `mmini-01`. First boot, from a
 # factory-fresh Mac: docs/hosts/mmini-01.md.
