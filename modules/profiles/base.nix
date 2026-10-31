@@ -55,8 +55,8 @@
         "cloudflared"
         "openssl@3"
       ]
-      # atlas (and its tap, below) are not installed on work-only hosts (d.workOnly).
-      ++ lib.optional (!config.d.workOnly.enable) "nwlnexus/olympus/atlas"
+      # atlas (and its tap, below) only where d.profiles.base.atlas is on (off on work-only hosts).
+      ++ lib.optional config.d.profiles.base.atlas "nwlnexus/olympus/atlas"
       ++ [
         # tmux is now managed by home-manager (home/cli/tmux.nix)
         "gh"
@@ -81,7 +81,7 @@
       #
       # Note: `cloudflared` now lives in homebrew-core, so the old
       # `cloudflare/cloudflare` tap is no longer needed and has been dropped.
-      extraConfig = lib.optionalString (!config.d.workOnly.enable) ''
+      extraConfig = lib.optionalString config.d.profiles.base.atlas ''
         tap "nwlnexus/olympus", trusted: true
       '';
     };

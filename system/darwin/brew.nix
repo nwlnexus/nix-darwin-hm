@@ -23,8 +23,12 @@
 
     # Casks installed on all macOS hosts.
     casks =
-      # Not on work-only hosts (d.workOnly).
-      lib.optional (!config.d.workOnly.enable) "obsidian" ++ [
+      # A GUI app: only on hosts with a GUI profile, and not on work-only hosts (d.workOnly).
+      lib.optional (
+        !config.d.workOnly.enable
+        && (config.d.profiles.gui-small.enable || config.d.profiles.gui-full.enable)
+      ) "obsidian"
+      ++ [
         # Secrets scanner. Prefer the upstream tap cask over homebrew-core's
         # formula of the same name: both ship `betterleaks`, and having the cask
         # installed while the Brewfile asks for the formula makes `brew bundle`
