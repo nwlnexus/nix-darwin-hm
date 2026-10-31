@@ -30,7 +30,14 @@ let
   tailscaled = "/opt/homebrew/bin/tailscaled";
 in
 {
-  options.d.server.enable = lib.mkEnableOption "server mode: a headless Mac with no GUI profiles, Tailscale as a system daemon, no sleep, Remote Login and passwordless sudo for the primary user";
+  options.d.server = {
+    enable = lib.mkEnableOption "server mode: a headless Mac with no GUI profiles, Tailscale as a system daemon, no sleep, Remote Login and passwordless sudo for the primary user";
+    tailscaleDaemon = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Declare the com.tailscale.tailscaled LaunchDaemon. Off where something else already runs tailscaled as a system daemon (data-hub: Ansible's tailscale role, a root brew service plus a watchdog, until atlas replaces Ansible); two tailscaled cannot share the socket.";
+    };
+  };
 
   config = lib.mkIf cfg.enable {
     home-manager.users.${user}.d.server.enable = true;
@@ -54,7 +61,7 @@ in
     # write (same label, default state in /Library/Tailscale and socket /var/run/tailscaled.socket), but from the
     # formula's path. It waits for the first `brew bundle` to install the formula, so the first switch does not
     # race it. Do not also run `brew services start tailscale`: two tailscaled cannot share the socket.
-    launchd.daemons.tailscaled = {
+    launchd.daemons.tailscaled = lib.mkIf cfg.tailscaleDaemon {
       serviceConfig = {
         Label = "com.tailscale.tailscaled";
         ProgramArguments = [

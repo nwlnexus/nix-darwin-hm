@@ -403,7 +403,11 @@ in
       let
         sys =
           (flake.darwinConfigurations.data-hub.extendModules {
-            modules = [ { home-manager.users.nwilliams-lucas.d.memory.enable = true; } ];
+            modules = [
+              # data-hub is a server; as a fixture it is a plain Mac (the role asserts the memory client off).
+              { d.server.enable = lib.mkForce false; }
+              { home-manager.users.nwilliams-lucas.d.memory.enable = true; }
+            ];
           }).config;
       in
       map (a: a.message) (lib.filter (a: !a.assertion) sys.assertions);

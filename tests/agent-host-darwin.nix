@@ -5,7 +5,10 @@
 let
   user = "nwilliams-lucas";
   h = "/Users/${user}";
-  mac = flake.darwinConfigurations.data-hub;
+  # data-hub is a server (d.server) now; the fixture is that Mac without the role, i.e. a plain Mac.
+  mac = flake.darwinConfigurations.data-hub.extendModules {
+    modules = [ { d.server.enable = lib.mkForce false; } ];
+  };
   withHost =
     hm:
     (mac.extendModules {
