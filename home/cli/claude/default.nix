@@ -108,51 +108,68 @@ in
     CLAUDE_DIR="${config.home.homeDirectory}/.claude"
     JQ=${pkgs.jq}/bin/jq
 
-    # 1. skills
-    PKG_SKILLS="$(${config.programs.mise.package}/bin/mise where npm:gitnexus 2>/dev/null)/lib/node_modules/gitnexus/skills"
-    if [ -d "$CLAUDE_DIR" ] && [ -d "$PKG_SKILLS" ]; then
-      run install -d "$CLAUDE_DIR/skills"
-      for src in "$PKG_SKILLS"/gitnexus-*; do
-        [ -e "$src" ] || continue
-        name="$(basename "$src" .md)"
-        dest="$CLAUDE_DIR/skills/$name"
-        [ -L "$dest" ] && continue
-        if [ -d "$src" ]; then
-          [ -f "$src/SKILL.md" ] || continue
-          run rm -rf "$dest"
-          run cp -R "$src" "$dest"
+    # Each part is a function called with `|| warn`: under the activation's `set -e`, nothing in a function called
+    # that way can end the activation, so a gitnexus problem never fails a switch (nwl-mstudio, 2026-11-01).
+    gnx_skills() {
+      # 1. skills
+      # `|| true`: under the activation's `set -e`, a failing command substitution in an assignment ends the whole
+      # activation (seen on nwl-mstudio, 2026-11-01). If mise cannot answer, use the newest installed version.
+      PKG_ROOT="$(${config.programs.mise.package}/bin/mise where npm:gitnexus 2>/dev/null || true)"
+      if [ -z "$PKG_ROOT" ]; then
+        for d in "${config.home.homeDirectory}/.local/share/mise/installs/npm-gitnexus"/*/; do
+          [ -d "$d" ] && PKG_ROOT="''${d%/}"
+        done
+      fi
+      PKG_SKILLS="$PKG_ROOT/lib/node_modules/gitnexus/skills"
+      if [ -d "$CLAUDE_DIR" ] && [ -d "$PKG_SKILLS" ]; then
+        run install -d "$CLAUDE_DIR/skills"
+        for src in "$PKG_SKILLS"/gitnexus-*; do
+          [ -e "$src" ] || continue
+          name="$(basename "$src" .md)"
+          dest="$CLAUDE_DIR/skills/$name"
+          [ -L "$dest" ] && continue
+          if [ -d "$src" ]; then
+            [ -f "$src/SKILL.md" ] || continue
+            run rm -rf "$dest"
+            run cp -R "$src" "$dest"
+          else
+            run install -d "$dest"
+            run install -m 0644 "$src" "$dest/SKILL.md"
+          fi
+        done
+      fi
+    }
+    gnx_unhook() {
+      # 2. drop the hooks an earlier `gitnexus setup` registered
+      SETTINGS="$CLAUDE_DIR/settings.json"
+      if [ -f "$SETTINGS" ]; then
+        TMP="$(mktemp)"
+        if $JQ '
+          if (.hooks | type) == "object" then
+            .hooks |= (with_entries(.value |= map(select(
+                         ((.hooks // []) | map(.command // "") | any(test("gitnexus-hook"))) | not)))
+                       | with_entries(select((.value | length) > 0)))
+          else . end' "$SETTINGS" > "$TMP" 2>/dev/null; then
+          if cmp -s "$TMP" "$SETTINGS"; then rm -f "$TMP"; else run mv "$TMP" "$SETTINGS"; fi
         else
-          run install -d "$dest"
-          run install -m 0644 "$src" "$dest/SKILL.md"
+          rm -f "$TMP"
         fi
-      done
-    fi
-
-    # 2. drop the hooks an earlier `gitnexus setup` registered
-    SETTINGS="$CLAUDE_DIR/settings.json"
-    if [ -f "$SETTINGS" ]; then
+      fi
+      if [ -d "$CLAUDE_DIR/hooks/gitnexus" ]; then run rm -rf "$CLAUDE_DIR/hooks/gitnexus"; fi
+    }
+    gnx_mcp() {
+      # 3. MCP entry
+      DST_JSON="${config.home.homeDirectory}/.claude.json"
+      [ -f "$DST_JSON" ] || { echo '{}' > "$DST_JSON"; chmod 600 "$DST_JSON"; }
       TMP="$(mktemp)"
-      if $JQ '
-        if (.hooks | type) == "object" then
-          .hooks |= (with_entries(.value |= map(select(
-                       ((.hooks // []) | map(.command // "") | any(test("gitnexus-hook"))) | not)))
-                     | with_entries(select((.value | length) > 0)))
-        else . end' "$SETTINGS" > "$TMP" 2>/dev/null; then
-        if cmp -s "$TMP" "$SETTINGS"; then rm -f "$TMP"; else run mv "$TMP" "$SETTINGS"; fi
+      if $JQ --arg c "$GITNEXUS_BIN" '.mcpServers.gitnexus = {type: "stdio", command: $c, args: ["mcp"]}' "$DST_JSON" > "$TMP" 2>/dev/null; then
+        if cmp -s "$TMP" "$DST_JSON"; then rm -f "$TMP"; else chmod 600 "$TMP"; mv "$TMP" "$DST_JSON"; fi
       else
         rm -f "$TMP"
       fi
-    fi
-    [ -d "$CLAUDE_DIR/hooks/gitnexus" ] && run rm -rf "$CLAUDE_DIR/hooks/gitnexus"
-
-    # 3. MCP entry
-    DST_JSON="${config.home.homeDirectory}/.claude.json"
-    [ -f "$DST_JSON" ] || { echo '{}' > "$DST_JSON"; chmod 600 "$DST_JSON"; }
-    TMP="$(mktemp)"
-    if $JQ --arg c "$GITNEXUS_BIN" '.mcpServers.gitnexus = {type: "stdio", command: $c, args: ["mcp"]}' "$DST_JSON" > "$TMP" 2>/dev/null; then
-      if cmp -s "$TMP" "$DST_JSON"; then rm -f "$TMP"; else chmod 600 "$TMP"; mv "$TMP" "$DST_JSON"; fi
-    else
-      rm -f "$TMP"
-    fi
+    }
+    gnx_skills || echo "gitnexusSetup: skills step failed (continuing)" >&2
+    gnx_unhook || echo "gitnexusSetup: hook removal failed (continuing)" >&2
+    gnx_mcp || echo "gitnexusSetup: MCP entry failed (continuing)" >&2
   '';
 }
