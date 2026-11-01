@@ -90,32 +90,66 @@ in
     fi
   '';
 
-  # gitnexus ships its own installer; it is idempotent and non-interactive.
-  # NOTE it only ever targets ~/.claude (ignores CLAUDE_CONFIG_DIR); agent-host
-  # mirrors its output into the per-account dirs (home/agent-host).
-  # gitnexus is a mise global (npm:gitnexus, see home/default.nix), not a
-  # nixpkgs package, so it has no nix store path and isn't on the activation
-  # script's PATH — resolve it by absolute path instead.
-  #
-  # The SHIM, not `installs/npm-gitnexus/latest/bin/gitnexus`: that install path
-  # is a `#!/usr/bin/env node` script, and `node` is itself a mise global that is
-  # NOT on the activation script's PATH either — so the old path failed with
-  # `env: node: No such file or directory` and, being `|| true`, failed silently
-  # on every rebuild. The shim is the mise binary itself and resolves its own
-  # node.
-  # Fail-soft: a fresh host may not have the mise global installed yet.
+  # GitNexus for ~/.claude, owned here rather than by `gitnexus setup -c claude`. That installer also registered
+  # its own Claude Code hooks (PreToolUse on Grep|Glob|Bash, PostToolUse on Bash: a Node script with a 10 s
+  # timeout on every such tool call) and wrote an `npx` MCP entry when the binary was not on PATH. The owner
+  # chose to drop the hooks (2026-11-01), so this step does only what is wanted:
+  #   1. copies the gitnexus skills from the installed package (`mise where npm:gitnexus`) into ~/.claude/skills,
+  #      as `gitnexus setup` laid them out (<name>/SKILL.md; folder skills copied whole). Nix-managed skill links
+  #      (agent-skills, e.g. gitnexus-no-churn) are never touched. home/agent-host mirrors these into each
+  #      ~/.claude-<acct>;
+  #   2. removes the hooks an earlier `gitnexus setup` registered (entries whose command mentions
+  #      `gitnexus-hook`) and their scripts in ~/.claude/hooks/gitnexus;
+  #   3. writes the MCP entry, even before the shim exists (a fresh host installs the mise global after the first
+  #      switch), always the shim, never npx. Same entry as home/agent-host writes per account.
+  # gitnexus is a mise global (npm:gitnexus, home/default.nix); the shim resolves its own node. Fail-soft throughout.
   home.activation.gitnexusSetup = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     GITNEXUS_BIN="${config.home.homeDirectory}/.local/share/mise/shims/gitnexus"
-    if [ -x "$GITNEXUS_BIN" ]; then
-      "$GITNEXUS_BIN" setup -c claude || true
+    CLAUDE_DIR="${config.home.homeDirectory}/.claude"
+    JQ=${pkgs.jq}/bin/jq
+
+    # 1. skills
+    PKG_SKILLS="$(${config.programs.mise.package}/bin/mise where npm:gitnexus 2>/dev/null)/lib/node_modules/gitnexus/skills"
+    if [ -d "$CLAUDE_DIR" ] && [ -d "$PKG_SKILLS" ]; then
+      run install -d "$CLAUDE_DIR/skills"
+      for src in "$PKG_SKILLS"/gitnexus-*; do
+        [ -e "$src" ] || continue
+        name="$(basename "$src" .md)"
+        dest="$CLAUDE_DIR/skills/$name"
+        [ -L "$dest" ] && continue
+        if [ -d "$src" ]; then
+          [ -f "$src/SKILL.md" ] || continue
+          run rm -rf "$dest"
+          run cp -R "$src" "$dest"
+        else
+          run install -d "$dest"
+          run install -m 0644 "$src" "$dest/SKILL.md"
+        fi
+      done
     fi
-    # The MCP entry itself is written even before the shim exists (a fresh host installs the mise global
-    # after the first switch), and always points at the shim, never npx. Same entry as home/agent-host
-    # writes per account, so ~/.claude and every ~/.claude-<acct> get gitnexus.
+
+    # 2. drop the hooks an earlier `gitnexus setup` registered
+    SETTINGS="$CLAUDE_DIR/settings.json"
+    if [ -f "$SETTINGS" ]; then
+      TMP="$(mktemp)"
+      if $JQ '
+        if (.hooks | type) == "object" then
+          .hooks |= (with_entries(.value |= map(select(
+                       ((.hooks // []) | map(.command // "") | any(test("gitnexus-hook"))) | not)))
+                     | with_entries(select((.value | length) > 0)))
+        else . end' "$SETTINGS" > "$TMP" 2>/dev/null; then
+        if cmp -s "$TMP" "$SETTINGS"; then rm -f "$TMP"; else run mv "$TMP" "$SETTINGS"; fi
+      else
+        rm -f "$TMP"
+      fi
+    fi
+    [ -d "$CLAUDE_DIR/hooks/gitnexus" ] && run rm -rf "$CLAUDE_DIR/hooks/gitnexus"
+
+    # 3. MCP entry
     DST_JSON="${config.home.homeDirectory}/.claude.json"
     [ -f "$DST_JSON" ] || { echo '{}' > "$DST_JSON"; chmod 600 "$DST_JSON"; }
     TMP="$(mktemp)"
-    if ${pkgs.jq}/bin/jq --arg c "$GITNEXUS_BIN" '.mcpServers.gitnexus = {type: "stdio", command: $c, args: ["mcp"]}' "$DST_JSON" > "$TMP" 2>/dev/null; then
+    if $JQ --arg c "$GITNEXUS_BIN" '.mcpServers.gitnexus = {type: "stdio", command: $c, args: ["mcp"]}' "$DST_JSON" > "$TMP" 2>/dev/null; then
       if cmp -s "$TMP" "$DST_JSON"; then rm -f "$TMP"; else chmod 600 "$TMP"; mv "$TMP" "$DST_JSON"; fi
     else
       rm -f "$TMP"

@@ -154,10 +154,8 @@ in
 
     # Per-account gitnexus Claude integration (home/cli/claude does ~/.claude).
     #
-    # `gitnexus setup -c claude` ignores CLAUDE_CONFIG_DIR: it always writes the
-    # MCP server to ~/.claude.json and the skills to ~/.claude/skills. Running
-    # it per account therefore configured nothing for the account dirs, so
-    # sessions using ~/.claude-<acct> had no gitnexus MCP tools. Write the
+    # home/cli/claude installs the gitnexus skills into ~/.claude/skills and the MCP entry into ~/.claude.json
+    # only (it no longer runs `gitnexus setup`, which also added search hooks). Write the
     # user-scope mcpServers.gitnexus entry and mirror the gitnexus-* skills
     # into every account dir. The entry runs the installed mise shim, not
     # `npx -y gitnexus@x mcp`: npx re-resolves against the registry on every
