@@ -28,6 +28,14 @@ in
             eval "$(/opt/homebrew/bin/brew shellenv)"
         fi
 
+        # mise shims for non-interactive shells (git hooks, scripts, agents' Bash tool), which never read
+        # .zshrc and so never run `mise activate`. A plain PATH entry, not `mise activate zsh --shims`, so no
+        # mise process starts per shell. Interactive shells still run `mise activate zsh` (initContent), which
+        # puts the active tool versions first. Safe since auto_install is off and the global tools are pinned.
+        if [[ -d "$HOME/.local/share/mise/shims" && ":$PATH:" != *":$HOME/.local/share/mise/shims:"* ]]; then
+          export PATH="$HOME/.local/share/mise/shims:$PATH"
+        fi
+
         # Read system-wide modifications.
         if test -f ~/.zshenv.local; then
           source ~/.zshenv.local
@@ -44,7 +52,7 @@ in
         export PATH="$(brew --prefix python)/libexec/bin:$PATH"
       '';
       shellAliases = {
-        switch = "sudo darwin-rebuild switch --flake ${homePrefix}/${user}/nix-darwin-hm";
+        switch = "sudo darwin-rebuild switch --flake ${homePrefix}/${user}/projects/personal/nix-darwin-hm";
       };
     };
   };

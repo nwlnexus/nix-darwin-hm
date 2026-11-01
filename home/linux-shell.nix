@@ -38,7 +38,12 @@ in
   '';
 
   # rustup's toolchain (native install); ~/.zshenv no longer sources ~/.cargo/env.
-  home.sessionPath = [ "${home}/.cargo/bin" ];
+  # mise shims for non-interactive shells (git hooks, scripts, agents' Bash tool): the mise zsh integration
+  # above only runs in interactive shells. sessionPath is exported from .zshenv, so every zsh gets it.
+  home.sessionPath = [
+    "${home}/.local/share/mise/shims"
+    "${home}/.cargo/bin"
+  ];
 
   home.shellAliases.switch = "${repo}/scripts/linux-switch.sh";
 }
