@@ -405,7 +405,13 @@ in
           (flake.darwinConfigurations.data-hub.extendModules {
             modules = [
               # data-hub is a server; as a fixture it is a plain Mac (the role asserts the memory client off).
-              { d.server.enable = lib.mkForce false; }
+              {
+                d.server = {
+                  enable = lib.mkForce false;
+                  ciRunner.enable = lib.mkForce false;
+                  linuxVm.enable = lib.mkForce false;
+                };
+              }
               { home-manager.users.nwilliams-lucas.d.memory.enable = true; }
             ];
           }).config;

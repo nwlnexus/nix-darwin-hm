@@ -560,4 +560,48 @@ in
       "d.server.ciRunner: the credential files must live outside workDir, which is wiped and owned by the runner user."
     ];
   };
+
+  # data-hub (olympus-sdk #701): compute like the minis, with a larger VM; Tailscale stays Ansible's, Postgres is gone.
+  testDataHubCompute = {
+    expr =
+      let
+        dh = flake.darwinConfigurations.data-hub.config;
+      in
+      {
+        inherit (dh.d.server) tailscaleDaemon;
+        runner = dh.d.server.ciRunner.enable;
+        vm = {
+          inherit (dh.d.server.linuxVm)
+            enable
+            name
+            cpus
+            memoryGiB
+            ;
+        };
+        daemons = map (n: dh.launchd.daemons ? ${n}) [
+          "ci-runner"
+          "server-vm"
+          "tailscaled"
+        ];
+        postgres = lib.elem "postgresql@16" (brews dh);
+        failing = failing dh;
+      };
+    expected = {
+      tailscaleDaemon = false;
+      runner = true;
+      vm = {
+        enable = true;
+        name = "data-hub-vm";
+        cpus = 8;
+        memoryGiB = 32;
+      };
+      daemons = [
+        true
+        true
+        false
+      ];
+      postgres = false;
+      failing = [ ];
+    };
+  };
 }

@@ -1,9 +1,11 @@
 # data-hub runbook
 
-`data-hub` is a Mac Studio (M1 Max, 64 GB, macOS 26) that runs headless as personal infrastructure. Today it
-serves three llama-server instances (the fallback inference tier behind the A9), a temporary Postgres, and the
-atlas daemon. Its next role is CI compute as a native macOS runner (olympus-sdk #661, #391). The host file is
-`hosts/darwinM/data-hub.nix`.
+`data-hub` is a Mac Studio (M1 Max, 64 GB, macOS 26) that runs headless as personal infrastructure. Since
+olympus-sdk #701 it is compute like the Mac minis: the native macOS CI runner and the Tart k3s agent VM
+`data-hub-vm` (8 vCPU, 32 GiB). It also serves two small llama-server instances (the coder-light fallback
+behind the A9, and an embed fallback) and runs the atlas daemon. #701 retired its 27B instance and its Postgres.
+The host file is `hosts/darwinM/data-hub.nix`. The runner and VM steps are in
+[CI runner and Linux VM](#ci-runner-and-linux-vm).
 
 The host still runs the nix-darwin 25.05 generation it got in September 2025 (built from the old `MACST-02.nix`)
 on **Determinate Nix**. This repo now targets nix-darwin 26.05 on **upstream Nix**, and nix-darwin will not
@@ -18,8 +20,9 @@ replaces it.
 nix-darwin manages:
 
 - the `base` and `dev` profiles (CLI tools, `op` beta, Tailscale as the Homebrew formula), with no GUI profiles;
-- the Homebrew packages the live services run from: `ansible`, `llama.cpp`, `postgresql@16`, `ddclient`,
-  `cloudflared`, `tailscale`;
+- the Homebrew packages the live services run from: `ansible`, `llama.cpp`, `ddclient`, `cloudflared`,
+  `tailscale`;
+- the native CI runner (`io.olympus.ci-runner`) and the k3s VM (`io.olympus.server-vm`), as on the minis;
 - the host name, Remote Login (`services.openssh.enable`), and the power settings it has today: never sleep,
   restart after a power failure or a freeze, wake on network access;
 - home-manager for the primary user, personal-only, with no 1Password desktop integration, no op-secrets and no
@@ -29,9 +32,9 @@ It does not manage, and leaves to Ansible:
 
 | Item | Owner |
 | --- | --- |
-| `com.olympus.llama-server.{qwen36-27b,qwen25-7b,nomic-embed}` daemons, their wrappers, the GGUF models in `/opt/olympus/models`, the `llama.cpp` pin | Ansible `llama-server` role (push run for install and pin; pull run asserts) |
+| `com.olympus.llama-server.{qwen25-7b,nomic-embed}` daemons, their wrappers, the GGUF models in `/opt/olympus/models`, the `llama.cpp` pin | Ansible `llama-server` role (push run for install and pin; pull run asserts) |
 | `com.olympus.llama-server-watchdog` | Ansible `llama-server` role |
-| `com.olympus.postgres`, `postgres-serve`, `/opt/olympus/data/postgres`, the `_postgres` user | Ansible `data-services` role (push only) |
+| Postgres retirement (#701: daemon booted out and deleted, `postgresql@16` uninstalled, data dir kept) | Ansible `data-services` role (push only) |
 | `net.nwlnexus.atlas` and `net.nwlnexus.atlas-updater`, `/usr/local/bin/atlas`, the `_atlas` user | Ansible `atlas` role (atlas updates itself) |
 | `com.olympus.ansible-pull`, `/opt/ansible-pull`, the `ansible` user | Ansible `ansible-pull` role |
 | `net.nwlnexus.tailscale-watchdog` | Ansible `tailscale` role |
@@ -214,6 +217,20 @@ uninstall and reinstall below safe.
    sudo launchctl bootstrap system /Library/LaunchDaemons/com.olympus.ansible-pull.plist
    sudo launchctl bootstrap system /Library/LaunchDaemons/net.nwlnexus.atlas-updater.plist
    ```
+
+## CI runner and Linux VM
+
+The same modules as on the minis (`system/darwin/server-ci-runner.nix`, `system/darwin/server-linux-vm.nix`). Their
+one-time steps are the ones in [mmini-01.md](mmini-01.md#one-time-steps-owner), with `data-hub` for `mmini-01`:
+
+1. The GitHub App credentials in `/var/root/ci-runner/` (root-only).
+2. The Ansible public key in `/etc/server-vm/ansible.pub`.
+3. `server-vm-provision` as the owner. It creates `data-hub-vm` at 8 vCPU / 32 GiB / 150 GB on `en0`.
+4. A DHCP reservation for the MAC address it prints. Then the VM joins k3s through olympus-infra (inventory
+   group `k3s_mac_agents`), like mmini-01-vm and mmini-02-vm.
+
+The VM takes the memory the 27B instance used. Memory plan: macOS and the two small llama-server instances use
+about 12 GB, the VM 32 GiB, and a runner job uses the rest.
 
 ## Rollback
 
