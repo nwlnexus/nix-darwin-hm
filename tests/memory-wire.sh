@@ -198,10 +198,10 @@ home4="$tmp/home4/.claude"
 mkdir -p "$home4"
 echo '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"their-guard"}]}]}}' >"$home4/settings.json"
 mkspec "$tmp/spec7.json" "$store" default "$home4" "$tmp/home4/.claude.json"
-jq --arg st "$store" '.targets[0].hooks.PreToolUse = {"matcher":"mcp__memory__.*","hooks":[{"type":"command","timeout":10,
+jq --arg st "$store" '.targets[0].hooks.PreToolUse = {"matcher":"mcp__(claude_ai_)?memory__.*","hooks":[{"type":"command","timeout":10,
   "command":("MEMORY_ROUTES_FILE=/nix/store/x-memory-routes.json " + $st + "/bin/memory-mcp-guard")}]}' "$tmp/spec7.json" >"$tmp/spec7g.json"
 bash "$wire" apply --spec "$tmp/spec7g.json" --manifest "$tmp/state/w5.json" 2>"$tmp/err"
-eqjson "routes: guard added after the foreign PreToolUse hook" "$home4/settings.json" '.hooks.PreToolUse | length == 2 and .[0].hooks[0].command == "their-guard" and .[1].matcher == "mcp__memory__.*" and (.[1].hooks[0].command | endswith("/bin/memory-mcp-guard"))'
+eqjson "routes: guard added after the foreign PreToolUse hook" "$home4/settings.json" '.hooks.PreToolUse | length == 2 and .[0].hooks[0].command == "their-guard" and .[1].matcher == "mcp__(claude_ai_)?memory__.*" and (.[1].hooks[0].command | endswith("/bin/memory-mcp-guard"))'
 bash "$wire" apply --spec "$tmp/spec7g.json" --manifest "$tmp/state/w5.json" 2>"$tmp/err"
 eqjson "routes: re-apply does not double the guard" "$home4/settings.json" '[.hooks.PreToolUse[].hooks[] | select(.command | test("memory-mcp-guard"))] | length == 1'
 bash "$wire" apply --spec "$tmp/spec7.json" --manifest "$tmp/state/w5.json" 2>"$tmp/err"

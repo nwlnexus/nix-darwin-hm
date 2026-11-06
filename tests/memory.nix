@@ -192,7 +192,7 @@ in
         Stop = null;
         PreCompact = "manual|auto";
         SessionEnd = null;
-        PreToolUse = "mcp__memory__.*";
+        PreToolUse = "mcp__(claude_ai_)?memory__.*";
       };
       timeouts = {
         SessionStart = 8;
