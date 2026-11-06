@@ -154,7 +154,9 @@ let
     acct:
     lib.optionalAttrs (routesOf acct != null) {
       PreToolUse = hookGroup {
-        matcher = "mcp__memory__.*";
+        # Both the nix-installed `memory` server and the claude.ai connector (`claude.ai memory`, tools
+        # `mcp__claude_ai_memory__*`) reach the personal gateway, so both go through the cwd guard.
+        matcher = "mcp__(claude_ai_)?memory__.*";
         timeout = 10;
         command = guardCommand acct;
       };
