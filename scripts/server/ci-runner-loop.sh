@@ -162,6 +162,19 @@ foreign_launchd_services() {
   done
 }
 
+# lan6_prefixes: the /56 around each global unicast IPv6 address of the host, one per line; ::/0 when an address
+# has a compressed first half (cannot be cut safely without a full parser), so the caller blocks all IPv6 instead.
+lan6_prefixes() {
+  ifconfig 2>/dev/null | awk '$1 == "inet6" {print $2}' | sed 's/%.*//' | grep -Ei '^[23][0-9a-f]{0,3}:' |
+    while IFS=: read -r a b c d _; do
+      if [ -z "$a" ] || [ -z "$b" ] || [ -z "$c" ] || [ -z "$d" ]; then
+        echo "::/0"
+      else
+        printf '%s:%s:%s:%02x00::/56\n' "$a" "$b" "$c" "$(((0x$d >> 8) & 0xff))"
+      fi
+    done | sort -u
+}
+
 # Kill whatever the runner user left running, remove every persistence path it has and wipe its home (with ~/Library),
 # its DARWIN_USER_* dirs, its runner copy and its files in the shared tmp directories, then recreate the home clean.
 # Returns non-zero when anything could not be cleaned; the caller then registers no runner.
@@ -260,8 +273,20 @@ ensure_pf() {
     log "pf: could not load $CI_PF_RULES into $CI_PF_ANCHOR"
     return 1
   }
-  # The resolvers DHCP gave the host (tools with their own resolver query them as the runner user). Only IPv4: the
-  # rules block all IPv6 but ::1 for the runner user.
+  # The site's own global IPv6 prefixes: the /56 around every global address of the host (the ISP delegates the
+  # prefix, so it is read here, every iteration). An address that cannot be parsed blocks all IPv6 (fail closed).
+  if pfctl -a "$CI_PF_ANCHOR" -sT 2>/dev/null | grep -qx ci_lan6; then
+    pfctl -q -a "$CI_PF_ANCHOR" -t ci_lan6 -T flush >/dev/null 2>&1 || true
+    lan6=$(lan6_prefixes)
+    if [ -n "$lan6" ]; then
+      # shellcheck disable=SC2086 # one prefix per word
+      pfctl -q -a "$CI_PF_ANCHOR" -t ci_lan6 -T add $lan6 >/dev/null 2>&1 || {
+        log "pf: could not fill <ci_lan6>"
+        return 1
+      }
+    fi
+  fi
+  # The resolvers DHCP gave the host (tools with their own resolver query them as the runner user). Only IPv4.
   ns=$(awk '$1 == "nameserver" && $2 ~ /^[0-9.]+$/ {print $2}' /etc/resolv.conf 2>/dev/null || true)
   if [ -n "$ns" ]; then
     # shellcheck disable=SC2086 # one address per word

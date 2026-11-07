@@ -558,6 +558,7 @@ in
         failClosedPf = has "if ! ensure_pf; then";
         pfVerifies = has "grep -q \"user = $uid\"";
         dnsFromResolvConf = has "-t ci_dns -T add $ns";
+        lan6Filled = has "-t ci_lan6 -T add $lan6";
         keepsAppleRuleset = has "pfctl -q -f /etc/pf.conf" && !(has "pfctl -F all");
         # Registration comes after both checks.
         order =
@@ -588,6 +589,7 @@ in
         failClosedPf = true;
         pfVerifies = true;
         dnsFromResolvConf = true;
+        lan6Filled = true;
         keepsAppleRuleset = true;
         order = true;
       };
@@ -628,8 +630,9 @@ in
             "pass out quick proto { udp tcp } from any to <ci_dns> port 53 user _ghrunner keep state"
             "block return out quick on lo0 proto { tcp udp } from any to any port < 49152 user _ghrunner"
             "block return out quick inet proto { tcp udp } from any to { 0.0.0.0/8 10.0.0.0/8 100.64.0.0/10 169.254.0.0/16 172.16.0.0/12 192.168.0.0/16 224.0.0.0/4 255.255.255.255 } user _ghrunner"
-            "pass out quick on lo0 inet6 proto { tcp udp } from any to ::1 user _ghrunner keep state"
-            "block return out quick inet6 proto { tcp udp } from any to any user _ghrunner"
+            "table <ci_lan6> persist"
+            "block return out quick inet6 proto { tcp udp } from any to <ci_lan6> user _ghrunner"
+            "block return out quick inet6 proto { tcp udp } from any to { fc00::/7 fe80::/10 ff00::/8 } user _ghrunner"
           ];
         };
       in
@@ -664,12 +667,22 @@ in
         lib.filter (l: lib.hasInfix "100.101.102.103" l || lib.hasInfix "inet6" l) (
           lib.splitString "\n" c.d.server.ciRunner.networkIsolation.rules
         );
+      allV6 =
+        lib.filter (lib.hasInfix "inet6") (
+          lib.splitString "\n"
+            (with' { d.server.ciRunner.networkIsolation.blockIPv6 = true; }).d.server.ciRunner.networkIsolation.rules
+        );
     };
     expected = {
       off = "";
       exception = [
         "pass out quick proto tcp from any to 100.101.102.103 port 443 user _ghrunner keep state"
+        "block return out quick inet6 proto { tcp udp } from any to <ci_lan6> user _ghrunner"
         "block return out quick inet6 proto { tcp udp } from any to { fc00::/7 fe80::/10 ff00::/8 } user _ghrunner"
+      ];
+      allV6 = [
+        "pass out quick on lo0 inet6 proto { tcp udp } from any to ::1 user _ghrunner keep state"
+        "block return out quick inet6 proto { tcp udp } from any to any user _ghrunner"
       ];
     };
   };
