@@ -297,7 +297,7 @@ in
       "${h}/.claude-work"
     ];
   };
-  # The harness (agents, contract, hooks, settings) targets the account dirs, as on Linux (~/.claude left
+  # The harness (plugins, settings) targets the account dirs, as on Linux (~/.claude left
   # unwired), and the memory module's default account set gains the account (it stays off unless enabled).
   testDarwinHarnessTargetsAccountDirs = {
     expr = [

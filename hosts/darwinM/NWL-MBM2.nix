@@ -35,11 +35,15 @@ in
             };
           };
 
-          # Memory gateway client (olympus-sdk #444/#559): key field `NWL-MBM2-default`
-          # in the 1Password item memory-gateway-keys (vault Dev). Tailnet mode.
+          # Memory comes from the olympus-memory plugin (olympus-sdk#753): ~/.claude declares
+          # the private olympus-private marketplace and enables olympus-memory; its
+          # /olympus-memory:setup writes ~/.config/memory (key field `NWL-MBM2-default` in the
+          # 1Password item memory-gateway-keys, vault Dev). The nix memory module is off and
+          # cleanup removes its hook entries and `memory` MCP entry; key files stay.
+          d.claudeHarness.plugins.private.enable = true;
           d.memory = {
-            enable = true;
-            host = "NWL-MBM2";
+            enable = false;
+            cleanup = true;
           };
         };
     };

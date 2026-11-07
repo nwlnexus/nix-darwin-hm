@@ -38,13 +38,15 @@ in
             };
           };
 
-          # Memory gateway client (olympus-sdk #444/#559): ~/.claude gets the capture
-          # hooks and the `memory` MCP server; key field `nwl-mstudio-default` in the
-          # 1Password item memory-gateway-keys (vault Dev). Tailnet mode, no fallback
-          # until the Cloudflare Access application exists.
+          # Memory comes from the olympus-memory plugin (olympus-sdk#753): ~/.claude declares
+          # the private olympus-private marketplace and enables olympus-memory; its
+          # /olympus-memory:setup writes ~/.config/memory (key field `nwl-mstudio-default` in the
+          # 1Password item memory-gateway-keys, vault Dev). The nix memory module is off and
+          # cleanup removes its hook entries and `memory` MCP entry; key files stay.
+          d.claudeHarness.plugins.private.enable = true;
           d.memory = {
-            enable = true;
-            host = "nwl-mstudio";
+            enable = false;
+            cleanup = true;
           };
         };
     };

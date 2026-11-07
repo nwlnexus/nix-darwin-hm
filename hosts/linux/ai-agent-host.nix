@@ -40,24 +40,15 @@
       # olympus-sdk#576 layer 2).
       d.claudeHarness.settings.autoModeHost = "ai-agent-host";
 
-      # Memory gateway client (Claude Code MCP server + capture hooks, home/cli/memory; olympus-sdk #559).
-      # Key: 1Password Dev/memory-gateway-keys, field ai-agent-host-personal (client id of the same name,
-      # minted with memory-admin). Tailnet only, no public fallback.
+      # Memory comes from the olympus-memory plugin (olympus-sdk#753): ~/.claude-personal declares the private
+      # olympus-private marketplace and enables olympus-memory; its /olympus-memory:setup writes ~/.config/memory
+      # (key field ai-agent-host-personal of Dev/memory-gateway-keys). The nix memory module is off and cleanup
+      # removes its hook entries and `memory` MCP entry from the files it recorded; key files stay. ~/.claude stays
+      # unwired (owner decision H17).
+      d.claudeHarness.plugins.private.enable = true;
       d.memory = {
-        enable = true;
-        mode = "tailnet";
-        fallback = false;
-        # The module's default account set (~/.claude plus one per d.agentHost.accounts) is replaced as soon
-        # as any accounts.* is defined, so list the accounts explicitly. ~/.claude is not used by any agent
-        # session here (owner decision), so it stays unwired.
-        #
-        # There is no work account on this host (olympus-sdk#693; work runs on dtlr-ai-agent-host). The
-        # personal account uses the module's default routes, which stay fail-closed:
-        # ~/projects/personal -> gateway, ~/projects/work -> none (olympus-sdk #675).
-        accounts = {
-          default.enable = false;
-          personal = { };
-        };
+        enable = false;
+        cleanup = true;
       };
     };
 

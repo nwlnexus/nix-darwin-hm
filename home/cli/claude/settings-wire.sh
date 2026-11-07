@@ -5,7 +5,7 @@
 #
 # <allow.json> is a JSON array of permission rules; <auto-mode.json> is a JSON object, or `-` to leave
 # .autoMode alone. Claude Code owns and rewrites settings.json, so this never replaces the file from nix. It edits
-# two keys with jq, the same way ./hook-wire.sh and home/cli/memory/wire.sh do:
+# two keys with jq, the same way ./plugin-wire.sh and home/cli/memory/wire.sh do:
 #   - .permissions.allow: every rule of <allow.json> that is missing is appended, in order; nothing is ever
 #     removed or reordered (a rule added by hand or by Claude Code stays);
 #   - .autoMode: replaced as a whole by <auto-mode.json> (nix owns that key), unless `-` was given;
