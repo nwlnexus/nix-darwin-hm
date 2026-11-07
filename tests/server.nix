@@ -755,7 +755,10 @@ in
       in
       {
         hosts = {
-          data-hub = shared;
+          data-hub = {
+            CI_GROUP = "olympus-release";
+            CI_LABELS = "self-hosted,macOS,ARM64,macos-release";
+          };
           mmini-01 = shared;
           mmini-02 = shared;
         };
