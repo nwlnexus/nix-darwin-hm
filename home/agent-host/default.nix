@@ -21,6 +21,7 @@ in
   imports = [
     ./services.nix
     ./second-brain.nix
+    ./memory-wiki-sync.nix
   ];
 
   options.d.agentHost = {

@@ -310,4 +310,52 @@ in
       false
     ];
   };
+  # Nightly auto-memory to wiki-inbox proposals (olympus-sdk #669): a user timer, personal account only.
+  testMemoryWikiSyncTimer = {
+    expr =
+      let
+        t = hm.systemd.user.timers.memory-wiki-sync.Timer;
+        u = hm.systemd.user.services.memory-wiki-sync.Service;
+      in
+      [
+        t.OnCalendar
+        t.Persistent
+        (lib.hasSuffix "/bin/memory-wiki-sync-run" (str u.ExecStart))
+        (lib.any (lib.hasPrefix "MEMORY_WIKI_SYNC_ACCOUNTS=personal") (lib.toList u.Environment))
+      ];
+    expected = [
+      "*-*-* 03:30:00"
+      true
+      true
+      true
+    ];
+  };
+  testMemoryWikiSyncGuards = {
+    expr =
+      let
+        evaluates =
+          mods:
+          (builtins.tryEval (
+            builtins.unsafeDiscardStringContext
+              (flake.homeConfigurations."nwilliams-lucas@ai-agent-host".extendModules {
+                modules = mods;
+              }).config.home.activationPackage.drvPath
+          )).success;
+      in
+      map evaluates [
+        [ { d.agentHost.memoryWikiSync.accounts = [ "personal" ]; } ]
+        [ { d.agentHost.memoryWikiSync.accounts = [ "work" ]; } ]
+        [
+          {
+            d.agentHost.secondBrain.enable = false;
+            d.agentHost.memoryWikiSync.enable = true;
+          }
+        ]
+      ];
+    expected = [
+      true
+      false
+      false
+    ];
+  };
 }
