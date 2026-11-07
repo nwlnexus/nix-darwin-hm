@@ -180,10 +180,9 @@ uninstall and reinstall below safe.
    (350 today). home-manager activates for the first time and backs up files it takes over with a `.backup`
    suffix (for example `~/.ssh/config`, whose Colima and OrbStack includes it replaces).
 
-7. **Later switches.** As your user, build first, then switch:
+7. **Later switches.** As your user (it builds unprivileged first, so the private input is read with your ssh key):
 
    ```sh
-   just build
    just switch
    ```
 
