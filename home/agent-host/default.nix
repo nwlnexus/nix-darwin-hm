@@ -21,6 +21,7 @@ in
   imports = [
     ./services.nix
     ./second-brain.nix
+    ./memory-compile.nix
     ./memory-wiki-sync.nix
     ./agent-jobs.nix
   ];

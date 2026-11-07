@@ -424,4 +424,23 @@ in
     );
     expected = [ ];
   };
+  # Nightly knowledge compile (olympus-sdk#455): a timer, the personal account, its own clone.
+  testMemoryCompileTimer = {
+    expr = [
+      (str hm.systemd.user.timers.memory-compile.Timer.OnCalendar)
+      (lib.hasSuffix "/bin/memory-compile-run" (str svc.memory-compile.Service.ExecStart))
+      (lib.elem "CLAUDE_CONFIG_DIR=${h}/.claude-personal" (
+        lib.toList svc.memory-compile.Service.Environment
+      ))
+      (lib.elem "MEMORY_COMPILE_DIR=${h}/.local/state/memory-compile/second-brain" (
+        lib.toList svc.memory-compile.Service.Environment
+      ))
+    ];
+    expected = [
+      "*-*-* 04:45:00"
+      true
+      true
+      true
+    ];
+  };
 }
