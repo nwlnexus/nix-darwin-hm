@@ -357,11 +357,11 @@
     "olympus-sdk": {
       "flake": false,
       "locked": {
-        "lastModified": 1794069183,
-        "narHash": "sha256-KeYM5f+8flwpghaCrpmXbSQDHj2O3q7cvG3OWex1Aho=",
+        "lastModified": 1794074709,
+        "narHash": "sha256-1f6bePGGH8UzrXe3Foz7hkiQBAkJ+WCiO1qOYJ/eSAg=",
         "ref": "main",
-        "rev": "d7b33cd340e72cfa6961153c9ed1b1a4233c51e2",
-        "revCount": 1467,
+        "rev": "029bda7088dba01b173648c87b663eda975baef5",
+        "revCount": 1479,
         "type": "git",
         "url": "ssh://git@github.com/nwlnexus/olympus-sdk"
       },
