@@ -416,7 +416,7 @@ in
         generatesJit = lib.hasInfix "/actions/runners/generate-jitconfig" codeText;
         rs256 = lib.hasInfix "openssl dgst -sha256 -sign" codeText;
         nice = lib.hasInfix "nice -n" codeText;
-        wipes = lib.hasInfix "find \"$CI_WORK_DIR/home\" -mindepth 1 -maxdepth 1 ! -name Library -exec rm -rf {} +" codeText;
+        wipes = lib.hasInfix "empty_dir \"$home\" || rc=1" codeText;
       };
       expected = {
         envVar = true;
@@ -430,6 +430,229 @@ in
         wipes = true;
       };
     };
+
+  # Per-job wipe hardening (olympus-sdk #394 F1a): every persistence path of the runner user is cleared between jobs,
+  # and the loop registers no runner when the wipe or the pf check fails (fail closed).
+  testRunnerWipeHardening =
+    let
+      script = builtins.readFile ../scripts/server/ci-runner-loop.sh;
+      code = lib.filter (l: !(lib.hasPrefix "#" (lib.trim l))) (lib.splitString "\n" script);
+      codeText = lib.concatStringsSep "\n" code;
+      has = s: lib.hasInfix s codeText;
+    in
+    {
+      expr = {
+        bootoutUser = has "launchctl bootout \"user/$uid\"";
+        bootoutGui = has "launchctl bootout \"gui/$uid\"";
+        killsAndChecks = has "pkill -KILL -U \"$uid\"" && has "pgrep -U \"$uid\"";
+        crontab = has "crontab -u \"$CI_USER\" -r";
+        atJobs = has "/usr/lib/cron/jobs/";
+        denyChecked = has "for d in cron.deny at.deny; do";
+        darwinDirs = map has [
+          "DARWIN_USER_DIR"
+          "DARWIN_USER_CACHE_DIR"
+          "DARWIN_USER_TEMP_DIR"
+        ];
+        libraryNotSpared = !(has "! -name Library");
+        foreignLaunchd = has "foreign_launchd_services \"$uid\"";
+        failClosedWipe = has "if ! wipe; then";
+        failClosedPf = has "if ! ensure_pf; then";
+        pfVerifies = has "grep -q \"user = $uid\"";
+        dnsFromResolvConf = has "-t ci_dns -T add $ns";
+        keepsAppleRuleset = has "pfctl -q -f /etc/pf.conf" && !(has "pfctl -F all");
+        # Registration comes after both checks.
+        order =
+          let
+            before =
+              a: b:
+              lib.stringLength (lib.head (lib.splitString a codeText))
+              < lib.stringLength (lib.head (lib.splitString b codeText));
+          in
+          before "if ! wipe; then" "jit=$(get_jit_config)"
+          && before "if ! ensure_pf; then" "jit=$(get_jit_config)";
+      };
+      expected = {
+        bootoutUser = true;
+        bootoutGui = true;
+        killsAndChecks = true;
+        crontab = true;
+        atJobs = true;
+        denyChecked = true;
+        darwinDirs = [
+          true
+          true
+          true
+        ];
+        libraryNotSpared = true;
+        foreignLaunchd = true;
+        failClosedWipe = true;
+        failClosedPf = true;
+        pfVerifies = true;
+        dnsFromResolvConf = true;
+        keepsAppleRuleset = true;
+        order = true;
+      };
+    };
+
+  # Network isolation (olympus-sdk #394 F4) on all three runner Macs: the loop gets the anchor and the rules; the rules
+  # pass DNS to the host's resolvers only (a table the loop fills from /etc/resolv.conf), then block loopback below the ephemeral range, the private, CGNAT/tailnet,
+  # link-local and multicast IPv4 ranges and all IPv6 but ::1, for the runner user only.
+  testRunnerNetworkIsolation = {
+    expr = lib.genAttrs [ "data-hub" "mmini-01" "mmini-02" ] (
+      h:
+      let
+        c = flake.darwinConfigurations.${h}.config;
+        e = c.launchd.daemons.ci-runner.serviceConfig.EnvironmentVariables;
+        lines = lib.filter (l: l != "" && !(lib.hasPrefix "#" l)) (
+          lib.splitString "\n" c.d.server.ciRunner.networkIsolation.rules
+        );
+      in
+      {
+        anchor = e.CI_PF_ANCHOR;
+        rulesInStore = lib.hasSuffix "-ci-runner.pf.conf" e.CI_PF_RULES;
+        log = e.CI_LOG_FILE;
+        allForRunner = lib.all (lib.hasSuffix "user _ghrunner") (
+          map (l: lib.removeSuffix " keep state" l) (lib.filter (l: !(lib.hasPrefix "table " l)) lines)
+        );
+        inherit lines;
+      }
+    );
+    expected =
+      let
+        one = {
+          anchor = "com.apple/400.olympus-ci-runner";
+          rulesInStore = true;
+          log = "/var/log/ci-runner.log";
+          allForRunner = true;
+          lines = [
+            "table <ci_dns> persist"
+            "pass out quick proto { udp tcp } from any to <ci_dns> port 53 user _ghrunner keep state"
+            "block return out quick on lo0 proto { tcp udp } from any to any port < 49152 user _ghrunner"
+            "block return out quick inet proto { tcp udp } from any to { 0.0.0.0/8 10.0.0.0/8 100.64.0.0/10 169.254.0.0/16 172.16.0.0/12 192.168.0.0/16 224.0.0.0/4 255.255.255.255 } user _ghrunner"
+            "pass out quick on lo0 inet6 proto { tcp udp } from any to ::1 user _ghrunner keep state"
+            "block return out quick inet6 proto { tcp udp } from any to any user _ghrunner"
+          ];
+        };
+      in
+      {
+        data-hub = one;
+        mmini-01 = one;
+        mmini-02 = one;
+      };
+  };
+
+  # Per host: isolation off empties CI_PF_RULES (the loop then flushes the anchor); an exception and IPv6 ranges are
+  # rendered as narrow rules.
+  testRunnerNetworkIsolationOptions = {
+    expr = {
+      off =
+        (with' { d.server.ciRunner.networkIsolation.enable = false; })
+        .launchd.daemons.ci-runner.serviceConfig.EnvironmentVariables.CI_PF_RULES;
+      exception =
+        let
+          c = with' {
+            d.server.ciRunner.networkIsolation = {
+              allowedDestinations = [
+                {
+                  address = "100.101.102.103";
+                  port = 443;
+                }
+              ];
+              blockIPv6 = false;
+            };
+          };
+        in
+        lib.filter (l: lib.hasInfix "100.101.102.103" l || lib.hasInfix "inet6" l) (
+          lib.splitString "\n" c.d.server.ciRunner.networkIsolation.rules
+        );
+    };
+    expected = {
+      off = "";
+      exception = [
+        "pass out quick proto tcp from any to 100.101.102.103 port 443 user _ghrunner keep state"
+        "block return out quick inet6 proto { tcp udp } from any to { fc00::/7 fe80::/10 ff00::/8 } user _ghrunner"
+      ];
+    };
+  };
+
+  # Activation (#394 F1a, F13): the log is created root 0600 before the daemon loads; cron and at deny the runner
+  # user; a direct Public-folder share group membership is removed.
+  testRunnerActivationHardening = {
+    expr =
+      let
+        pre = sys.system.activationScripts.preActivation.text;
+        post = postActivation sys;
+      in
+      {
+        logMode = lib.hasInfix "/bin/chmod 0600 /var/log/ci-runner.log" pre;
+        logOwner = lib.hasInfix "/usr/sbin/chown root:wheel /var/log/ci-runner.log" pre;
+        cronDeny = lib.hasInfix "/usr/lib/cron/cron.deny /usr/lib/cron/at.deny" post;
+        noCronAllow = !(lib.hasInfix "cron.allow" post);
+        sharepoint = lib.hasInfix "dseditgroup -o edit -d _ghrunner -t user" post;
+        control = lib.hasInfix "cron.deny" (postActivation ctl);
+      };
+    expected = {
+      logMode = true;
+      logOwner = true;
+      cronDeny = true;
+      noCronAllow = true;
+      sharepoint = true;
+      control = false;
+    };
+  };
+
+  # Runner group and labels per host (#394 F1b prep): the three Macs keep the shared group and labels; a host can
+  # register in another group with its own label, and the loop gets both.
+  testRunnerGroupLabels = {
+    expr = {
+      hosts = lib.genAttrs [ "data-hub" "mmini-01" "mmini-02" ] (
+        h:
+        let
+          e =
+            flake.darwinConfigurations.${h}.config.launchd.daemons.ci-runner.serviceConfig.EnvironmentVariables;
+        in
+        {
+          inherit (e) CI_GROUP CI_LABELS;
+        }
+      );
+      release =
+        let
+          e =
+            (with' {
+              d.server.ciRunner = {
+                group = "olympus-release";
+                labels = [
+                  "self-hosted"
+                  "macOS"
+                  "ARM64"
+                  "macos-release"
+                ];
+              };
+            }).launchd.daemons.ci-runner.serviceConfig.EnvironmentVariables;
+        in
+        {
+          inherit (e) CI_GROUP CI_LABELS;
+        };
+    };
+    expected =
+      let
+        shared = {
+          CI_GROUP = "olympus-ci";
+          CI_LABELS = "self-hosted,macOS,ARM64,macos-arm64";
+        };
+      in
+      {
+        hosts = {
+          data-hub = shared;
+          mmini-01 = shared;
+          mmini-02 = shared;
+        };
+        release = {
+          CI_GROUP = "olympus-release";
+          CI_LABELS = "self-hosted,macOS,ARM64,macos-release";
+        };
+      };
+  };
 
   # The Tart daemon: runs as the primary user, headless on the bridged NIC, KeepAlive, logs under /var/log.
   testVmDaemon = {

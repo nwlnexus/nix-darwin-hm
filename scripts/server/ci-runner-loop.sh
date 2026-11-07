@@ -4,15 +4,20 @@
 #   1. mint a GitHub App installation token (JWT RS256 signed with openssl);
 #   2. resolve the runner group id and ask for a JIT config for a fresh runner name;
 #   3. run the runner as the unprivileged runner user, the JIT config only in its environment;
-#   4. kill what the job left behind and wipe the runner user's home and work dir.
+#   4. kill what the job left behind and wipe every place the runner user can persist in (olympus-sdk #394 F1a):
+#      its launchd user/gui domains, cron and at jobs, processes, home (with ~/Library), DARWIN_USER_DIR/CACHE/TEMP
+#      and its files in the shared tmp directories.
+# Before every registration it also loads the pf anchor that keeps the runner user off private and tailnet
+# addresses (#394 F4). Both fail closed: if the wipe or the pf check fails, no runner is registered.
 # The App key is root-only and never reaches the runner user. Configuration comes from the environment (set by the
 # LaunchDaemon): CI_ORG CI_GROUP CI_LABELS CI_APP_ID_FILE CI_INSTALLATION_ID_FILE CI_PRIVATE_KEY_FILE CI_USER
-# CI_WORK_DIR CI_RUNNER_DIR CI_NICE.
+# CI_WORK_DIR CI_RUNNER_DIR CI_NICE CI_PF_ANCHOR CI_PF_RULES (empty: isolation off) CI_LOG_FILE.
 set -euo pipefail
 umask 077
 
 : "${CI_ORG:?}" "${CI_GROUP:?}" "${CI_LABELS:?}" "${CI_APP_ID_FILE:?}" "${CI_INSTALLATION_ID_FILE:?}"
 : "${CI_PRIVATE_KEY_FILE:?}" "${CI_USER:?}" "${CI_WORK_DIR:?}" "${CI_RUNNER_DIR:?}" "${CI_NICE:=10}"
+: "${CI_PF_ANCHOR:=com.apple/400.olympus-ci-runner}" "${CI_PF_RULES:=}" "${CI_LOG_FILE:=}"
 
 backoff_start=30
 backoff_cap=300
@@ -79,26 +84,184 @@ get_jit_config() {
   printf '%s' "$resp" | jq -er .encoded_jit_config
 }
 
-# Kill whatever the runner user left running and wipe its home, its runner copy and its files in the shared tmp
-# directories, then recreate the home clean.
-wipe() {
-  local uid group
-  uid=$(id -u "$CI_USER")
-  group=$(id -gn "$CI_USER")
-  pkill -KILL -U "$uid" 2>/dev/null || true
-  # macOS refuses to remove a directory that is a user's registered home, even as root and even when empty, so
-  # empty the home rather than deleting it.
-  rm -rf "${CI_WORK_DIR:?}/runner"
-  # macOS also creates ~/Library for any user that runs processes, and its containermanagerd subfolders are
-  # TCC-protected: root in this daemon cannot remove them, and failing here stopped the loop for good (mmini-01).
-  # Leave ~/Library to macOS (nothing in it runs without a GUI login, which a server never has) and never let
-  # the wipe end the loop.
-  if [ -d "$CI_WORK_DIR/home" ]; then
-    find "$CI_WORK_DIR/home" -mindepth 1 -maxdepth 1 ! -name Library -exec rm -rf {} + || log "wipe: some files could not be removed"
+# Paths under the runner user's home and DARWIN_USER_* dirs that macOS keeps out of root's reach (TCC: app containers
+# owned by containermanagerd). Root in this daemon cannot remove them, and neither can the job's own (unsandboxed)
+# processes write into them, so they are the only leftovers a wipe accepts (mmini-01 stopped on them before).
+tcc_protected() {
+  case "$1" in
+  *"/Library/Containers" | *"/Library/Containers/"* | *"/Library/Group Containers" | *"/Library/Group Containers/"*) return 0 ;;
+  *"/Library/Daemon Containers" | *"/Library/Daemon Containers/"* | *containermanagerd*) return 0 ;;
+  esac
+  return 1
+}
+
+# empty_dir DIR: remove everything inside DIR; fail if anything is left but a TCC-protected path or a directory that
+# only stays because one lives below it.
+empty_dir() {
+  local dir=$1 p q ok
+  local -a rest=() protected=() left=()
+  [ -d "$dir" ] || return 0
+  find "$dir" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
+  while IFS= read -r -d '' p; do
+    if tcc_protected "$p"; then protected+=("$p"); else rest+=("$p"); fi
+  done < <(find "$dir" -mindepth 1 -print0 2>/dev/null)
+  for p in ${rest[@]+"${rest[@]}"}; do
+    ok=0
+    if [ -d "$p" ]; then
+      for q in ${protected[@]+"${protected[@]}"}; do
+        case "$q" in "$p"/*) ok=1 && break ;; esac
+      done
+    fi
+    [ "$ok" = 1 ] || left+=("$p")
+  done
+  if [ "${#left[@]}" -gt 0 ]; then
+    log "wipe: could not remove: ${left[*]}"
+    return 1
   fi
-  find /private/tmp /private/var/tmp -xdev -maxdepth 1 -user "$CI_USER" -exec rm -rf {} + 2>/dev/null || true
+}
+
+# Every launchd service label the runner user's domains may hold after a bootout: Apple's own agents and the ones
+# installed system-wide in /Library/LaunchAgents (root-owned). Anything else was loaded by a job.
+foreign_launchd_services() {
+  local uid=$1 domain allowed label
+  allowed=$(for f in /Library/LaunchAgents/*.plist; do
+    [ -f "$f" ] && /usr/libexec/PlistBuddy -c 'Print :Label' "$f" 2>/dev/null
+  done)
+  for domain in "user/$uid" "gui/$uid"; do
+    launchctl print "$domain" 2>/dev/null |
+      awk '/^\tservices = \{/{s=1; next} s && /^\t\}/{s=0} s {print $NF}' |
+      while IFS= read -r label; do
+        case "$label" in com.apple.*) continue ;; esac
+        printf '%s\n' "$allowed" | grep -qxF "$label" && continue
+        printf '%s %s\n' "$domain" "$label"
+      done
+  done
+}
+
+# Kill whatever the runner user left running, remove every persistence path it has and wipe its home (with ~/Library),
+# its DARWIN_USER_* dirs, its runner copy and its files in the shared tmp directories, then recreate the home clean.
+# Returns non-zero when anything could not be cleaned; the caller then registers no runner.
+wipe() {
+  local uid group home v d foreign rc=0
+  if ! uid=$(id -u "$CI_USER") || ! group=$(id -gn "$CI_USER"); then
+    log "wipe: no user $CI_USER"
+    return 1
+  fi
+  home="$CI_WORK_DIR/home"
+  # launchd first: a job can bootstrap or `launchctl submit` a KeepAlive agent into its own user domain, which would
+  # restart whatever pkill kills and outlive the wipe. A gui domain only exists after a GUI login (never on a server).
+  launchctl bootout "gui/$uid" >/dev/null 2>&1 || true
+  launchctl bootout "user/$uid" >/dev/null 2>&1 || true
+  for _ in 1 2 3 4 5; do
+    pkill -KILL -U "$uid" 2>/dev/null || true
+    pgrep -U "$uid" >/dev/null 2>&1 || break
+    sleep 1
+  done
+  if pgrep -U "$uid" >/dev/null 2>&1; then
+    log "wipe: processes of $CI_USER survived: $(pgrep -U "$uid" | tr '\n' ' ')"
+    rc=1
+  fi
+  # cron and at: denied for the user by cron.deny/at.deny (managed by nix); remove anything queued anyway.
+  crontab -u "$CI_USER" -r >/dev/null 2>&1 || true
+  rm -f "/usr/lib/cron/tabs/$CI_USER"
+  find /usr/lib/cron/jobs/ -mindepth 1 -maxdepth 1 -user "$uid" -exec rm -f {} + 2>/dev/null || true
+  if [ -e "/usr/lib/cron/tabs/$CI_USER" ] || [ -n "$(find /usr/lib/cron/jobs/ -mindepth 1 -maxdepth 1 -user "$uid" -print -quit 2>/dev/null)" ]; then
+    log "wipe: cron or at jobs of $CI_USER remain"
+    rc=1
+  fi
+  for d in cron.deny at.deny; do
+    if ! grep -qxF "$CI_USER" "/usr/lib/cron/$d" 2>/dev/null; then
+      log "wipe: $CI_USER is not in /usr/lib/cron/$d (darwin-rebuild switch manages it)"
+      rc=1
+    fi
+  done
+  # The per-user temporary and cache dirs under /var/folders (DARWIN_USER_DIR, _CACHE_DIR, _TEMP_DIR). Asked of the
+  # user itself (the path derives from its uuid); getconf exits at once.
+  for v in DARWIN_USER_DIR DARWIN_USER_CACHE_DIR DARWIN_USER_TEMP_DIR; do
+    d=$(sudo -u "$CI_USER" /usr/bin/getconf "$v" 2>/dev/null || true)
+    d=${d%/}
+    case "$d" in
+    /var/folders/?*/?*/?*) empty_dir "$d" || rc=1 ;;
+    *)
+      log "wipe: unexpected $v '$d' for $CI_USER"
+      rc=1
+      ;;
+    esac
+  done
+  # Anything still loaded into the user's launchd domains that is not Apple's or system-wide.
+  foreign=$(foreign_launchd_services "$uid")
+  if [ -n "$foreign" ]; then
+    log "wipe: launchd services of $CI_USER survived the bootout: $(printf '%s' "$foreign" | tr '\n' ' ')"
+    rc=1
+  fi
+  # macOS refuses to remove a directory that is a user's registered home, even as root and even when empty, so
+  # empty the home rather than deleting it. ~/Library goes too (LaunchAgents, Preferences, Keychains, caches);
+  # only its TCC-protected container folders may stay (see tcc_protected).
+  rm -rf "${CI_WORK_DIR:?}/runner"
+  if [ -e "$CI_WORK_DIR/runner" ]; then
+    log "wipe: could not remove $CI_WORK_DIR/runner"
+    rc=1
+  fi
+  empty_dir "$home" || rc=1
+  find /private/tmp /private/var/tmp /Users/Shared -xdev -maxdepth 1 -user "$uid" -exec rm -rf {} + 2>/dev/null || true
+  if [ -n "$(find /private/tmp /private/var/tmp /Users/Shared -xdev -maxdepth 1 -user "$uid" -print -quit 2>/dev/null)" ]; then
+    log "wipe: files of $CI_USER remain in the shared tmp directories"
+    rc=1
+  fi
   install -d -m 0755 -o root -g wheel "$CI_WORK_DIR"
-  install -d -m 0700 -o "$CI_USER" -g "$group" "$CI_WORK_DIR/home" "$CI_WORK_DIR/home/tmp"
+  install -d -m 0700 -o "$CI_USER" -g "$group" "$home" "$home/tmp"
+  return "$rc"
+}
+
+# Loads the pf anchor that blocks the runner user from private, link-local, loopback (below the ephemeral ports) and
+# tailnet addresses and enables pf, then proves it is in force. Apple's main ruleset and com.apple anchors stay as
+# they are: the rules live in a child of the com.apple anchor, which /etc/pf.conf already evaluates. With isolation
+# off (CI_PF_RULES empty) the anchor is flushed instead.
+ensure_pf() {
+  local uid ns
+  if [ -z "$CI_PF_RULES" ]; then
+    pfctl -q -a "$CI_PF_ANCHOR" -F rules >/dev/null 2>&1 || true
+    return 0
+  fi
+  uid=$(id -u "$CI_USER")
+  # Something flushed the main ruleset: put Apple's back (it carries the com.apple anchor point).
+  if ! pfctl -sr 2>/dev/null | grep -qF 'anchor "com.apple/*"'; then
+    log "pf: main ruleset lacks the com.apple anchor point; reloading /etc/pf.conf"
+    pfctl -q -f /etc/pf.conf >/dev/null 2>&1 || {
+      log "pf: could not load /etc/pf.conf"
+      return 1
+    }
+  fi
+  pfctl -q -a "$CI_PF_ANCHOR" -f "$CI_PF_RULES" >/dev/null 2>&1 || {
+    log "pf: could not load $CI_PF_RULES into $CI_PF_ANCHOR"
+    return 1
+  }
+  # The resolvers DHCP gave the host (tools with their own resolver query them as the runner user). Only IPv4: the
+  # rules block all IPv6 but ::1 for the runner user.
+  ns=$(awk '$1 == "nameserver" && $2 ~ /^[0-9.]+$/ {print $2}' /etc/resolv.conf 2>/dev/null || true)
+  if [ -n "$ns" ]; then
+    # shellcheck disable=SC2086 # one address per word
+    pfctl -q -a "$CI_PF_ANCHOR" -t ci_dns -T add $ns >/dev/null 2>&1 || log "pf: could not add the resolvers to <ci_dns>"
+  fi
+  if ! pfctl -s info 2>/dev/null | grep -q '^Status: Enabled'; then
+    # -E takes an enable reference (pf stays on for everyone that relies on it), unlike -e.
+    pfctl -E >/dev/null 2>&1 || true
+  fi
+  if ! pfctl -s info 2>/dev/null | grep -q '^Status: Enabled'; then
+    log "pf: could not enable pf"
+    return 1
+  fi
+  if ! pfctl -a "$CI_PF_ANCHOR" -sr 2>/dev/null | grep -q "user = $uid"; then
+    log "pf: anchor $CI_PF_ANCHOR holds no rules for $CI_USER"
+    return 1
+  fi
+}
+
+# Back off before the next attempt (doubling, capped).
+backoff() {
+  log "$1; retrying in ${delay}s"
+  sleep "$delay"
+  delay=$((delay * 2 > backoff_cap ? backoff_cap : delay * 2))
 }
 
 # A writable copy of the pinned runner (an APFS clone when the store allows, else a plain copy).
@@ -114,24 +277,33 @@ stage_runner() {
 on_term() {
   trap - TERM INT
   [ -n "$child" ] && kill -TERM "$child" 2>/dev/null || true
-  wipe
+  wipe || true
   exit 0
 }
 trap on_term TERM INT
 
 delay=$backoff_start
 while :; do
+  # launchd creates the log 0644 if it is missing; it holds job output and runner names.
+  if [ -n "$CI_LOG_FILE" ] && [ -f "$CI_LOG_FILE" ]; then
+    chown root:wheel "$CI_LOG_FILE" || true
+    chmod 0600 "$CI_LOG_FILE" || true
+  fi
   if ! { check_secret "$CI_APP_ID_FILE" && check_secret "$CI_INSTALLATION_ID_FILE" && check_secret "$CI_PRIVATE_KEY_FILE"; }; then
-    log "waiting ${delay}s for the credential files"
-    sleep "$delay"
-    delay=$((delay * 2 > backoff_cap ? backoff_cap : delay * 2))
+    backoff "waiting for the credential files"
     continue
   fi
-  wipe
+  # Fail closed: a runner is only registered on a clean user and with the network isolation in force.
+  if ! wipe; then
+    backoff "wipe incomplete, not registering a runner"
+    continue
+  fi
+  if ! ensure_pf; then
+    backoff "network isolation not in force, not registering a runner"
+    continue
+  fi
   if ! jit=$(get_jit_config); then
-    log "could not get a JIT config; retrying in ${delay}s"
-    sleep "$delay"
-    delay=$((delay * 2 > backoff_cap ? backoff_cap : delay * 2))
+    backoff "could not get a JIT config"
     continue
   fi
   stage_runner
@@ -146,11 +318,10 @@ while :; do
   wait "$child" || status=$?
   child=""
   log "runner exited with status $status"
-  wipe
+  # The next iteration wipes again before it registers; this pass only clears up right after the job.
+  wipe || log "wipe after the job incomplete; the next registration waits for a clean wipe"
   if [ "$status" -ne 0 ] && [ $(($(date +%s) - started)) -lt 20 ]; then
-    log "runner failed fast; backing off ${delay}s"
-    sleep "$delay"
-    delay=$((delay * 2 > backoff_cap ? backoff_cap : delay * 2))
+    backoff "runner failed fast"
   else
     delay=$backoff_start
   fi
