@@ -378,11 +378,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1790808801,
-        "narHash": "sha256-CQuBPTD7XEmOK4Y7+elvTVQQUGNWYpotVbCpSMKnyEc=",
+        "lastModified": 1794068038,
+        "narHash": "sha256-AsAD5axvuRuEYCziiqx+ElQ9S7mQrKjejg27o64sFmA=",
         "owner": "nwlnexus",
         "repo": "nix-op-secrets",
-        "rev": "50a0089d74346225dbcfe2a0817d7e2f470c7a87",
+        "rev": "a8fb7f3d55474aea81806869daff989bed9bc092",
         "type": "github"
       },
       "original": {
