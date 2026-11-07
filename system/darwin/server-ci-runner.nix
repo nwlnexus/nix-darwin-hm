@@ -83,15 +83,21 @@ let
       ]
       ++ (
         if net.blockIPv6 then
-          # The LAN hands out global IPv6 addresses, so blocking ULA/link-local alone would leave every LAN host
-          # reachable over IPv6. GitHub is IPv4-only; everything else falls back to IPv4.
-          # ::1 stays open above loopbackMinPort, like 127.0.0.1 (a test server on `localhost`).
+          # Everything but ::1 (above loopbackMinPort, like 127.0.0.1: a test server on `localhost`).
           [
             "pass out quick on lo0 inet6 proto { tcp udp } from any to ::1 user ${u} keep state"
             "block return out quick inet6 proto { tcp udp } from any to any user ${u}"
           ]
         else
-          [ "block return out quick inet6 proto { tcp udp } from any to ${list net.blockedIPv6} user ${u}" ]
+          # The LAN hands out global IPv6 addresses, so ULA/link-local alone would leave every LAN host reachable.
+          # <ci_lan6> holds this site's own global prefixes (the /56 around each global address of the host), filled
+          # by the loop at load time because the ISP assigns them (nothing site-specific is written here); public
+          # IPv6 stays open (the 1Password Connect host answers on IPv6 and Go clients do not fall back).
+          [
+            "table <ci_lan6> persist"
+            "block return out quick inet6 proto { tcp udp } from any to <ci_lan6> user ${u}"
+            "block return out quick inet6 proto { tcp udp } from any to ${list net.blockedIPv6} user ${u}"
+          ]
       )
       ++ [ "" ]
     )
@@ -243,8 +249,8 @@ in
       };
       blockIPv6 = lib.mkOption {
         type = lib.types.bool;
-        default = true;
-        description = "Block all IPv6 for the runner user (LAN hosts have global IPv6 addresses). Off: only blockedIPv6.";
+        default = false;
+        description = "Block all IPv6 for the runner user. Off (default): the site's own global prefixes (<ci_lan6>, found at runtime) and blockedIPv6.";
       };
       blockedIPv6 = lib.mkOption {
         type = lib.types.listOf lib.types.str;
@@ -253,7 +259,7 @@ in
           "fe80::/10"
           "ff00::/8"
         ];
-        description = "IPv6 destinations blocked when blockIPv6 is off (fc00::/7 covers the tailnet's fd7a:115c:a1e0::/48).";
+        description = "IPv6 destinations blocked besides <ci_lan6> when blockIPv6 is off (fc00::/7 covers the tailnet's fd7a:115c:a1e0::/48).";
       };
       rules = lib.mkOption {
         type = lib.types.lines;
