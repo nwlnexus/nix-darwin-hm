@@ -27,6 +27,18 @@ let
     "PATH=${config.d.agentHost.agentPath}"
   ];
   python = "${pkgs.python3}/bin/python3";
+  acct = config.d.agentHost.defaultAccount;
+  # Same environment as the claude-<acct> launchers (services.nix): the session vars, the account's .env and
+  # GH_TOKEN from its GitHub token. A unit gets no login shell, so without this `gh` is logged out.
+  withAccountEnv = pkgs.writeShellScript "agent-job-env" ''
+    sessionVars=${lib.escapeShellArg "${home}/.nix-profile/etc/profile.d/hm-session-vars.sh"}
+    envFile=${lib.escapeShellArg "${config.d.agentHost.accounts.${acct}.root}/.env"}
+    if [ -f "$sessionVars" ]; then . "$sessionVars"; fi
+    if [ -f "$envFile" ]; then set -a; . "$envFile"; set +a; fi
+    if [ -n "''${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]; then export GH_TOKEN="$GITHUB_PERSONAL_ACCESS_TOKEN"; fi
+    export CLAUDE_CONFIG_DIR=${lib.escapeShellArg "${home}/.claude-${acct}"}
+    exec "$@"
+  '';
 in
 {
   options.d.agentHost.jobs = {
@@ -40,7 +52,7 @@ in
       Service = {
         Type = "oneshot";
         Environment = env;
-        ExecStart = "${python} ${sdk}/scripts/agent-readout/readout.py --issue";
+        ExecStart = "${withAccountEnv} ${python} ${sdk}/scripts/agent-readout/readout.py --issue";
         TimeoutStartSec = "30min";
       };
     };
@@ -62,7 +74,9 @@ in
         Type = "oneshot";
         Environment = env;
         WorkingDirectory = "${home}/projects/personal/olympus-sdk";
-        ExecStart = "${python} ${sdk}/scripts/goal-runner/goal_runner.py --timeout 14400";
+        ExecStart = "${withAccountEnv} ${python} ${sdk}/scripts/goal-runner/goal_runner.py --timeout 14400";
+        # The runner exits 3 for a stuck goal (reported on the issue); only runner errors mark the unit failed.
+        SuccessExitStatus = 3;
         # Must exceed --timeout plus the report; KillMode=mixed lets the runner stop its session cleanly.
         TimeoutStartSec = "5h";
         KillMode = "mixed";

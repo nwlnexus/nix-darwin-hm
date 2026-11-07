@@ -380,6 +380,10 @@ in
         (str s.goal-runner.Service.KillMode)
         (str s.goal-runner.Service.TimeoutStartSec)
         (lib.hasInfix "${h}/.local/bin" (str s.goal-runner.Service.Environment))
+        # gh needs GH_TOKEN from the account .env, like the claude-<acct> launchers.
+        (lib.hasInfix "agent-job-env" (str s.agent-readout.Service.ExecStart))
+        (lib.hasInfix "agent-job-env" (str s.goal-runner.Service.ExecStart))
+        s.goal-runner.Service.SuccessExitStatus
       ];
     expected = [
       "Tue *-*-* 14:17:00 UTC"
@@ -393,6 +397,9 @@ in
       "mixed"
       "5h"
       true
+      true
+      true
+      3
     ];
   };
   testAgentJobsOffByDefault = {
