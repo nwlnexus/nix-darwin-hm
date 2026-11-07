@@ -7,9 +7,8 @@ name: validate
 # runners, which fork pull requests must not reach), with a read-only token and no secrets.
 #
 # The flake has a PRIVATE input, `olympus-sdk` (git+ssh://git@github.com/nwlnexus/olympus-sdk), which a
-# public runner cannot fetch, and we will not give CI a deploy key for it. `just test` does force it:
-# tests/memory.nix reads `flake.inputs.olympus-sdk.rev` and builds the memory-hooks package path from the
-# input. Nothing reads file contents from it, though, so the "Replace the private olympus-sdk input" step
+# public runner cannot fetch, and we will not give CI a deploy key for it. `just test` does force it
+# (the tests read `flake.inputs.olympus-sdk.rev` and the autoMode/telemetry source paths from it). Nothing reads file contents from it, though, so the "Replace the private olympus-sdk input" step
 # re-points the input, in this runner's checkout only, at the stub under tests/fixtures/olympus-sdk-stub,
 # committed into a throwaway git repo so the input keeps a `rev`. flake.lock is not committed back.
 on:
@@ -60,7 +59,6 @@ jobs:
         run: >-
           nix shell --inputs-from . nixpkgs#just nixpkgs#jq nixpkgs#tmux -c
           bash -euo pipefail -c '
-          just test-memory-wire;
           just test-claude-contract;
           just test-claude-plugin-wire;
           just test-claude-settings-wire;

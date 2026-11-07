@@ -42,12 +42,11 @@
     atuin.url = "github:atuinsh/atuin/v18.23.0";
     atuin.flake = false;
 
-    # Claude Code memory hooks (packages/memory-hooks) for home/cli/memory.
+    # Claude autoMode and telemetry sources (config/claude/*.json), read by home/cli/claude/harness.nix.
     # olympus-sdk is PRIVATE, so this is read over ssh (the user's key; the
     # 1Password agent on Macs), not through the github: fetcher. Source only
-    # (flake = false); only the packages/memory-hooks subtree is installed,
-    # the rest of the checkout never enters a host's closure. Pinned by
-    # flake.lock: bump with `nix flake update olympus-sdk` after hooks change.
+    # (flake = false). Pinned by flake.lock: bump with
+    # `nix flake update olympus-sdk` after those sources change.
     olympus-sdk.url = "git+ssh://git@github.com/nwlnexus/olympus-sdk?ref=main";
     olympus-sdk.flake = false;
 

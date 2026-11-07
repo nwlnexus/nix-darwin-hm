@@ -15,7 +15,6 @@ let
     ./agent-host-darwin.nix
     ./work-only.nix
     ./linuxbrew.nix
-    ./memory.nix
     ./claude-harness.nix
     ./server.nix
   ];

@@ -12,7 +12,7 @@ configuration:
 - op-secrets reads only the work 1Password account (`d.apps.onepassword.allowedAccounts`), with the work
   service-account token file. There is no personal token, no personal ssh key, no `personal-env` and no
   `op-connect-env`.
-- No memory-gateway client (`d.memory.enable = false`, asserted).
+- No memory-gateway client (the private `olympus-private` marketplace and `olympus-memory` plugin are never declared, asserted).
 - No second-brain: no checkout, no pull agent, no `/brain` command, and no `SECOND_BRAIN_PATH`.
 - The Claude harness keeps the generic agents, hooks, skills and allow rules. It has no autoMode source and no
   telemetry source (`d.claudeHarness.settings.autoModeFile = null`, `d.claudeHarness.telemetry.file = null`):

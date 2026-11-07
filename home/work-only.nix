@@ -38,10 +38,6 @@ in
 
     assertions = [
       {
-        assertion = !config.d.memory.enable;
-        message = "d.workOnly: the memory-gateway client (d.memory) is personal; leave it off on a work-only host.";
-      }
-      {
         assertion = config.d.apps.onepassword.tokenFiles.personal == null;
         message = "d.workOnly: no personal 1Password service-account token file on a work-only host.";
       }

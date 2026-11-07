@@ -165,10 +165,9 @@ in
     ];
   };
 
-  # No memory client, second-brain or agent-host layer; no 1Password app integration; no private input.
+  # No second-brain or agent-host layer; no 1Password app integration; no private input.
   testServerNothingPersonal = {
     expr = [
-      hm.d.memory.enable
       (hm.d.agentHost.enable or false)
       hm.d.apps.onepassword.gui
       hm.d.claudeHarness.settings.autoModeFile
@@ -176,7 +175,6 @@ in
       sys.environment.etc."nix/inputs/olympus-sdk".enable
     ];
     expected = [
-      false
       false
       false
       null
@@ -221,17 +219,6 @@ in
       "d.server: gaming is a GUI profile; a server runs none."
       "d.server: gui-full is a GUI profile (the Claude Desktop app, the 1Password app); a server runs none."
       "d.server: gui-small is a GUI profile; a server runs none."
-    ];
-  };
-  testServerAssertMemory = {
-    expr = failing (with' {
-      home-manager.users.${user}.d.memory = {
-        enable = true;
-        host = "mmini-01";
-      };
-    });
-    expected = [
-      "${user} profile: d.server: the memory-gateway client (d.memory) is personal; leave it off on a server."
     ];
   };
   testServerAssertTailscaleApp = {

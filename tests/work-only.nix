@@ -116,22 +116,6 @@ in
     ];
   };
 
-  # No memory-gateway client: module off, nothing wired, no secrets fetched, no hooks package.
-  testWorkOnlyNoMemory = {
-    expr = [
-      hm.d.memory.enable
-      (hm.home.activation ? memoryWire)
-      (hm.home.activation ? memorySecrets)
-      (lib.elem "memory-hooks" (map lib.getName hm.home.packages))
-    ];
-    expected = [
-      false
-      false
-      false
-      false
-    ];
-  };
-
   # Plugins (olympus-sdk#753, design P13): the work account dir declares only the public marketplace and
   # agent-harness; the private marketplace and olympus-memory never appear (nwl-mstudio, the control, has both).
   testWorkOnlyPublicPluginsOnly = {

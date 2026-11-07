@@ -11,7 +11,7 @@
 # root brew service and a watchdog), so the role's own daemon is off here.
 #
 # Audit (2026-10-31) and the migration from its Determinate Nix / nix-darwin 25.05 generation: docs/hosts/data-hub.md.
-# data-hub is also a test fixture (tests/agent-host-darwin.nix, tests/memory.nix), which turn the server role off.
+# data-hub is also a test fixture (tests/agent-host-darwin.nix), which turn the server role off.
 { lib, user, ... }:
 {
   config = {

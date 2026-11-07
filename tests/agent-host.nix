@@ -172,7 +172,7 @@ in
   };
 
   # Personal-only (olympus-sdk#693, home/personal-only.nix): ai-agent-host carries no work account, tree, secret,
-  # git include or ssh block. The memory route table still denies ~/projects/work (tests/memory.nix).
+  # git include or ssh block.
   testPersonalOnlyOn = {
     expr = [
       hm.d.personalOnly.enable

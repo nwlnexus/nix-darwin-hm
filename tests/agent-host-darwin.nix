@@ -298,20 +298,13 @@ in
     ];
   };
   # The harness (plugins, settings) targets the account dirs, as on Linux (~/.claude left
-  # unwired), and the memory module's default account set gains the account (it stays off unless enabled).
+  # unwired).
   testDarwinHarnessTargetsAccountDirs = {
     expr = [
       work.d.claudeHarness.dirs
-      (lib.sort lib.lessThan (lib.attrNames work.d.memory.accounts))
-      work.d.memory.enable
     ];
     expected = [
       [ ".claude-work" ]
-      [
-        "default"
-        "work"
-      ]
-      false
     ];
   };
   # Second-brain: absent on the work host (no clone, no agent, no path override), on by default otherwise.

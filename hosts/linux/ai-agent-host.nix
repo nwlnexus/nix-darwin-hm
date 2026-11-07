@@ -42,14 +42,8 @@
 
       # Memory comes from the olympus-memory plugin (olympus-sdk#753): ~/.claude-personal declares the private
       # olympus-private marketplace and enables olympus-memory; its /olympus-memory:setup writes ~/.config/memory
-      # (key field ai-agent-host-personal of Dev/memory-gateway-keys). The nix memory module is off and cleanup
-      # removes its hook entries and `memory` MCP entry from the files it recorded; key files stay. ~/.claude stays
-      # unwired (owner decision H17).
+      # (key field ai-agent-host-personal of Dev/memory-gateway-keys). ~/.claude stays unwired (owner decision H17).
       d.claudeHarness.plugins.private.enable = true;
-      d.memory = {
-        enable = false;
-        cleanup = true;
-      };
     };
 
   os = {
