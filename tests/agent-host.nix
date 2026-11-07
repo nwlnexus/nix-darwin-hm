@@ -358,4 +358,70 @@ in
       false
     ];
   };
+
+  # Scheduled agent jobs (olympus-sdk#572/#573, home/agent-host/agent-jobs.nix): on for ai-agent-host, off by default.
+  testAgentJobsOnHost = {
+    expr =
+      let
+        t = hm.systemd.user.timers;
+        s = hm.systemd.user.services;
+      in
+      [
+        (str t.agent-readout.Timer.OnCalendar)
+        t.agent-readout.Timer.Persistent
+        (lib.hasSuffix "/scripts/agent-readout/readout.py --issue" (str s.agent-readout.Service.ExecStart))
+        (lib.hasInfix "CLAUDE_CONFIG_DIR=${h}/.claude-personal" (str s.agent-readout.Service.Environment))
+        (str t.goal-runner.Timer.OnUnitInactiveSec)
+        (str t.goal-runner.Timer.OnBootSec)
+        (lib.hasSuffix "/scripts/goal-runner/goal_runner.py --timeout 14400" (
+          str s.goal-runner.Service.ExecStart
+        ))
+        (str s.goal-runner.Service.WorkingDirectory)
+        (str s.goal-runner.Service.KillMode)
+        (str s.goal-runner.Service.TimeoutStartSec)
+        (lib.hasInfix "${h}/.local/bin" (str s.goal-runner.Service.Environment))
+      ];
+    expected = [
+      "Tue *-*-* 14:17:00 UTC"
+      true
+      true
+      true
+      "15min"
+      "10min"
+      true
+      "${h}/projects/personal/olympus-sdk"
+      "mixed"
+      "5h"
+      true
+    ];
+  };
+  testAgentJobsOffByDefault = {
+    expr =
+      let
+        off =
+          (flake.homeConfigurations."nwilliams-lucas@ai-agent-host".extendModules {
+            modules = [
+              {
+                d.agentHost.jobs.readout.enable = lib.mkForce false;
+                d.agentHost.jobs.goalRunner.enable = lib.mkForce false;
+              }
+            ];
+          }).config;
+      in
+      map (n: off.systemd.user.timers ? ${n} || off.systemd.user.services ? ${n}) [
+        "agent-readout"
+        "goal-runner"
+      ];
+    expected = [
+      false
+      false
+    ];
+  };
+  # Remote Control units are not touched by the jobs.
+  testAgentJobsNoRcUnits = {
+    expr = lib.sort lib.lessThan (
+      lib.attrNames (lib.filterAttrs (n: _: lib.hasInfix "-rc-" n) hm.systemd.user.timers)
+    );
+    expected = [ ];
+  };
 }

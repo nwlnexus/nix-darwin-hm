@@ -22,6 +22,7 @@ in
     ./services.nix
     ./second-brain.nix
     ./memory-wiki-sync.nix
+    ./agent-jobs.nix
   ];
 
   options.d.agentHost = {
@@ -63,6 +64,13 @@ in
       type = lib.types.bool;
       default = true;
       description = "Write the gitnexus MCP entry and mirror the gitnexus-* skills into every account dir.";
+    };
+
+    agentPath = lib.mkOption {
+      type = lib.types.str;
+      readOnly = true;
+      internal = true;
+      description = "PATH the agent services get (set by services.nix); the scheduled jobs in agent-jobs.nix reuse it.";
     };
 
     darwinDaemons = lib.mkOption {

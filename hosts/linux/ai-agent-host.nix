@@ -36,6 +36,13 @@
         };
       };
 
+      # Scheduled agent jobs (home/agent-host/agent-jobs.nix): the weekly readout issue (olympus-sdk#573) and the
+      # headless goal runner (#572). Only this host runs them.
+      d.agentHost.jobs = {
+        readout.enable = true;
+        goalRunner.enable = true;
+      };
+
       # Picks this host's entry of hostContainment in the autoMode source (home/cli/claude/harness.nix,
       # olympus-sdk#576 layer 2).
       d.claudeHarness.settings.autoModeHost = "ai-agent-host";

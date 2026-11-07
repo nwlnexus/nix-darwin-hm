@@ -121,6 +121,21 @@ printf '{}\n' >"$s7"
 wire "$allow" "$auto1" "$s6" "$s7" 2>/dev/null
 check "both files wired" bash -c 'jq -e ".permissions.allow | length == 3" "$1" >/dev/null && jq -e ".permissions.allow | length == 3" "$2" >/dev/null' _ "$s6" "$s7"
 
+# 9b. --set: extra top-level keys deep-merged, others kept, idempotent, bad source leaves the file alone
+s8="$tmp/h/settings.json"
+mkdir -p "$tmp/h"
+printf '{"model": "opus", "isolatePeerMachines": false, "env": {"A": "1"}}\n' >"$s8"
+printf '{"isolatePeerMachines": true, "env": {"B": "2"}}\n' >"$tmp/extra.json"
+wire "$allow" - --set "$tmp/extra.json" "$s8" 2>/dev/null
+check "--set: key set, nested keys merged, others kept" \
+  jqe '.isolatePeerMachines == true and .env == {"A": "1", "B": "2"} and .model == "opus" and (.crossSessionInbound | not)' "$s8"
+out="$(wire "$allow" - --set "$tmp/extra.json" "$s8" 2>&1)"
+check "--set: second run prints nothing" [ -z "$out" ]
+cp "$s8" "$tmp/h.orig"
+printf '[1]\n' >"$tmp/extra-bad.json"
+wire "$allow" - --set "$tmp/extra-bad.json" "$s8" 2>/dev/null
+check "--set: bad source leaves the file untouched" cmp -s "$s8" "$tmp/h.orig"
+
 # 10. usage errors exit 2
 bash "$script" "$allow" - >/dev/null 2>&1
 check "too few arguments: exit 2" [ "$?" = 2 ]
