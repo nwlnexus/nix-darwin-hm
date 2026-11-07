@@ -132,6 +132,42 @@ in
     ];
   };
 
+  # Plugins (olympus-sdk#753, design P13): the work account dir declares only the public marketplace and
+  # agent-harness; the private marketplace and olympus-memory never appear (nwl-mstudio, the control, has both).
+  testWorkOnlyPublicPluginsOnly = {
+    expr =
+      let
+        spec = c: builtins.toJSON c.d.claudeHarness.plugins.spec;
+        markers = [
+          "olympus-private"
+          "olympus-memory"
+          "memory-hooks"
+          "op://Dev/memory-gateway-keys"
+        ];
+      in
+      [
+        (lib.attrNames hm.d.claudeHarness.plugins.spec)
+        hm.d.claudeHarness.plugins.spec.".claude-work".enable
+        (lib.attrNames hm.d.claudeHarness.plugins.spec.".claude-work".marketplaces)
+        hm.d.claudeHarness.plugins.private.dirs
+        (lib.filter (m: lib.hasInfix m (spec hm)) markers)
+        (lib.filter (m: lib.hasInfix m (dump hm)) markers)
+        (lib.filter (m: lib.hasInfix m (spec ctl)) markers)
+      ];
+    expected = [
+      [ ".claude-work" ]
+      { "agent-harness@nwlnexus" = true; }
+      [ "nwlnexus" ]
+      [ ]
+      [ ]
+      [ ]
+      [
+        "olympus-private"
+        "olympus-memory"
+      ]
+    ];
+  };
+
   # No second-brain: no checkout, no pull agent, no /brain command, and no SECOND_BRAIN_PATH at all (so nothing
   # falls back to the personal Obsidian vault).
   testWorkOnlyNoSecondBrain = {

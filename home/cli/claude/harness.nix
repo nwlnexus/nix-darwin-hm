@@ -1,15 +1,19 @@
-# Agent harness from github:nwlnexus/agent-skills (flake input, source only): every agents/<name>.md becomes
-# <claude dir>/agents/<name>.md, and fragments/session-contract.md is kept in a marked block at the end of
-# <claude dir>/CLAUDE.md (./contract.sh). Each hook in `hooks` below (hooks/<name> in agent-skills) is linked to
-# <claude dir>/hooks/ and merged into <claude dir>/settings.json as an entry for its event (matcher "*") by
-# ./hook-wire.sh, which edits only its own entry and never replaces the file. ./settings-wire.sh adds the
-# nix-owned permission allow rules and sets autoMode in the same file (settings.* options). Skills are linked by
-# ./default.nix and home/agent-host.
-# Design: nwlnexus/olympus-sdk docs/superpowers/specs/2026-10-26-agent-harness-knowledge-and-hosts-design.md
-# (H1, H3, H4, H5, H12, H19), issues olympus-sdk#560, #561, #565 and #576. ./telemetry-wire.sh sets the Claude Code
-# OTLP telemetry env (H12) in each dir's settings.json `env`, from config/claude/telemetry.json of the private
-# olympus-sdk input; Claude Code reads that block at startup for interactive, headless and Remote Control sessions
-# alike (all of them run with CLAUDE_CONFIG_DIR set to the account dir), so one place covers them all.
+# Agent harness, declared as Claude Code plugins (olympus-sdk#753, design
+# docs/superpowers/specs/2026-11-07-claude-code-plugins-design.md P13/P14): ./plugin-wire.sh merges
+# `extraKnownMarketplaces` and `enabledPlugins` into <claude dir>/settings.json. Every dir gets the public `nwlnexus`
+# marketplace (github nwlnexus/agent-plugins) with `agent-harness` (long-task and gitnexus-no-churn skills, the
+# claim-verifier agent, the session contract as a SessionStart hook, the progress-stale and permission-denied-log
+# hooks). Dirs in `plugins.private.dirs` (personal dirs on hosts that set `plugins.private.enable`) also get the
+# private `olympus-private` marketplace (github nwlnexus/olympus-memory) with `olympus-memory`; a work-only host and
+# any `~/.claude-work` never do. Claude Code clones a declared marketplace and downloads the enabled plugins itself.
+#
+# The same activation takes out what the old nix harness wired from the agent-skills input (hook entries running
+# <dir>/hooks/<name>; ./contract.sh drops the session-contract block from <dir>/CLAUDE.md); home-manager removes
+# the old agents/, hooks/ and skills/ links itself. ./settings-wire.sh adds the nix-owned permission allow rules and
+# sets autoMode in the same file (settings.* options); ./telemetry-wire.sh sets the Claude Code OTLP telemetry env
+# (H12) in each dir's settings.json `env`, from config/claude/telemetry.json of the private olympus-sdk input.
+# Earlier design: docs/superpowers/specs/2026-10-26-agent-harness-knowledge-and-hosts-design.md (H1, H3, H4, H5,
+# H12, H19), issues olympus-sdk#560, #561, #565 and #576.
 #
 # Which Claude dirs: the per-account dirs on agent hosts (~/.claude-<acct>; ~/.claude stays unwired there,
 # owner decision H17), ~/.claude everywhere else (the Macs).
@@ -22,39 +26,57 @@
 }:
 let
   cfg = config.d.claudeHarness;
-  agentSkills = inputs.agent-skills;
   home = config.home.homeDirectory;
   # Optional: home/agent-host is not imported on every platform.
   agentHost = config.d.agentHost or { enable = false; };
 
-  agentsDir = "${agentSkills}/agents";
-  agentFiles =
-    if builtins.pathExists agentsDir then
-      lib.attrNames (
-        lib.filterAttrs (n: t: t == "regular" && lib.hasSuffix ".md" n) (builtins.readDir agentsDir)
-      )
-    else
-      [ ];
-
-  fragmentName = "session-contract";
-  fragment = "${agentSkills}/fragments/${fragmentName}.md";
-  hasFragment = builtins.pathExists fragment;
-
-  # Hooks from agent-skills hooks/: <name> is linked to <dir>/hooks/<name> and wired as an <event> entry, matcher
-  # "*". The identity regex is the escaped file name, so an entry running an older store path or a hand-installed
-  # copy of the same script (any directory) is replaced in place instead of doubled.
-  hooks = lib.filter (h: builtins.pathExists "${agentSkills}/hooks/${h.name}") [
-    {
-      name = "progress-stale.sh";
-      event = "Stop";
-    }
-    {
-      name = "permission-denied-log.sh";
-      event = "PermissionDenied";
-    }
+  # Hook files the old harness linked to <dir>/hooks/<name> and wired by absolute path; their settings entries are
+  # removed (the agent-harness plugin runs them now).
+  legacyHooks = [
+    "progress-stale.sh"
+    "permission-denied-log.sh"
   ];
-  # Where a hook lands in a Claude dir; the settings entry runs this path, so a flake bump never changes it.
   hookPath = dir: name: "${home}/${dir}/hooks/${name}";
+
+  pcfg = cfg.plugins;
+  publicMarketplace = {
+    nwlnexus = {
+      source = {
+        source = "github";
+        repo = "nwlnexus/agent-plugins";
+      };
+      autoUpdate = true;
+    };
+  };
+  privateMarketplace = {
+    olympus-private = {
+      source = {
+        source = "github";
+        repo = "nwlnexus/olympus-memory";
+      };
+      autoUpdate = true;
+    };
+  };
+  pluginSpec =
+    dir:
+    let
+      private = lib.elem dir pcfg.private.dirs;
+    in
+    {
+      marketplaces = publicMarketplace // lib.optionalAttrs private privateMarketplace;
+      enable = {
+        "agent-harness@nwlnexus" = true;
+      }
+      // lib.optionalAttrs private { "olympus-memory@olympus-private" = true; };
+      removeHookCommands = map (hookPath dir) legacyHooks;
+    };
+  pluginSpecJson = dir: pkgs.writeText "claude-plugins.json" (builtins.toJSON (pluginSpec dir));
+  # Tool names of the plugin's memory server (design P6/P7), allowed like the nix `memory` server's.
+  privateAllow = lib.optionals (pcfg.private.dirs != [ ]) [
+    "mcp__plugin_olympus-memory_memory__list_recent"
+    "mcp__plugin_olympus-memory_memory__search"
+    "mcp__plugin_olympus-memory_memory__recall"
+  ];
 
   # autoMode source: config/claude/auto-mode.json of the private olympus-sdk input. Until the pinned olympus-sdk
   # has that file (it landed with olympus-sdk#585), the default is null and autoMode is left untouched.
@@ -64,9 +86,12 @@ let
       null
     else
       import ./auto-mode.nix { inherit lib; } cfg.settings.autoModeFile cfg.settings.autoModeHost;
-  allowJson = pkgs.writeText "claude-allow.json" (builtins.toJSON cfg.settings.allow);
+  allowJson = pkgs.writeText "claude-allow.json" (
+    builtins.toJSON (cfg.settings.allow ++ privateAllow)
+  );
   autoModeJson = pkgs.writeText "claude-auto-mode.json" (builtins.toJSON autoMode);
-  wireSettings = cfg.settings.enable && (cfg.settings.allow != [ ] || autoMode != null);
+  wireSettings =
+    cfg.settings.enable && (cfg.settings.allow ++ privateAllow != [ ] || autoMode != null);
 
   # Telemetry source: config/claude/telemetry.json of the private olympus-sdk input ({ endpoint, protocol,
   # resourceAttributes }). Until the pinned olympus-sdk has that file (olympus-sdk#565) and in CI, where the input
@@ -107,13 +132,13 @@ let
   telemetryEnvJson =
     dir: pkgs.writeText "claude-telemetry-env.json" (builtins.toJSON (telemetryEnv dir));
 
-  hookWire = pkgs.writeShellApplication {
-    name = "hook-wire";
+  pluginWire = pkgs.writeShellApplication {
+    name = "plugin-wire";
     runtimeInputs = [
       pkgs.jq
       pkgs.coreutils
     ];
-    text = builtins.readFile ./hook-wire.sh;
+    text = builtins.readFile ./plugin-wire.sh;
   };
 
   settingsWire = pkgs.writeShellApplication {
@@ -134,12 +159,12 @@ let
     text = builtins.readFile ./telemetry-wire.sh;
   };
 
-  contractWire = pkgs.writeShellApplication {
-    name = "contract-wire";
+  contractUnwire = pkgs.writeShellApplication {
+    name = "contract-unwire";
     runtimeInputs = [
       pkgs.coreutils
       pkgs.gawk
-      pkgs.diffutils
+      pkgs.gnugrep
     ];
     text = builtins.readFile ./contract.sh;
   };
@@ -149,7 +174,7 @@ in
     enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
-      description = "Install the agent-skills agents and session contract into the Claude config dirs.";
+      description = "Declare the agent harness plugins (and wire settings, telemetry) in the Claude config dirs.";
     };
     dirs = lib.mkOption {
       type = lib.types.listOf lib.types.str;
@@ -161,17 +186,38 @@ in
       defaultText = lib.literalMD "`~/.claude-<acct>` per `d.agentHost.accounts` on agent hosts, else `~/.claude`";
       description = "Claude config dirs, relative to the home directory.";
     };
-    agents = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
-      readOnly = true;
-      default = agentFiles;
-      description = "Agent files found in the agent-skills input (for tests).";
-    };
-    hooks = lib.mkOption {
-      type = lib.types.listOf lib.types.attrs;
-      readOnly = true;
-      default = hooks;
-      description = "Hooks found in the agent-skills input and wired into settings.json (for tests).";
+    plugins = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          Declare the plugin marketplaces and enabled plugins in each dir's settings.json (and remove the old nix
+          harness wiring). Off: nothing is written; what was written stays.
+        '';
+      };
+      private = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = ''
+            Also declare the private `olympus-private` marketplace and enable `olympus-memory` (personal hosts only;
+            asserted off on work-only and server hosts).
+          '';
+        };
+        dirs = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = if pcfg.private.enable then lib.filter (d: !(lib.hasSuffix "-work" d)) cfg.dirs else [ ];
+          defaultText = lib.literalMD "every dir of `dirs` not ending in `-work` when `private.enable`, else none";
+          description = "Dirs that get the private marketplace and `olympus-memory`.";
+        };
+      };
+      spec = lib.mkOption {
+        type = lib.types.attrsOf lib.types.attrs;
+        readOnly = true;
+        internal = true;
+        default = lib.genAttrs cfg.dirs pluginSpec;
+        description = "What plugin-wire merges into each dir's settings.json, by dir (for tests).";
+      };
     };
 
     telemetry = {
@@ -269,30 +315,31 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    home.file = lib.mkMerge (
-      map (
-        dir:
-        lib.listToAttrs (
-          map (f: lib.nameValuePair "${dir}/agents/${f}" { source = "${agentsDir}/${f}"; }) agentFiles
-        )
-        // lib.listToAttrs (
-          map (
-            h: lib.nameValuePair "${dir}/hooks/${h.name}" { source = "${agentSkills}/hooks/${h.name}"; }
-          ) hooks
-        )
-      ) cfg.dirs
-    );
+    assertions = [
+      {
+        assertion =
+          pcfg.private.dirs == [ ]
+          || !(config.d.workOnly.enable or false) && !(config.d.server.enable or false);
+        message = "d.claudeHarness.plugins.private: never on a work-only or server host (design P13).";
+      }
+      {
+        assertion = !(lib.any (lib.hasSuffix "-work") pcfg.private.dirs);
+        message = "d.claudeHarness.plugins.private.dirs: never a work account dir (design P13).";
+      }
+    ];
 
-    # One entry per hook in each dir's settings.json (Claude Code owns that file: jq-merge, own entry only).
-    # Fail-soft: a settings.json that does not parse is left alone.
-    home.activation.claudeHooks = lib.mkIf (hooks != [ ]) (
+    # Marketplaces + enabled plugins in each dir's settings.json, and the old harness hook entries out (Claude Code
+    # owns that file: jq-merge, named entries only). Fail-soft: a settings.json that does not parse is left alone.
+    home.activation.claudePlugins = lib.mkIf pcfg.enable (
       lib.hm.dag.entryAfter [ "writeBoundary" "agentHostDirs" ] (
-        lib.concatMapStringsSep "\n" (
-          dir:
-          lib.concatMapStringsSep "\n" (h: ''
-            run ${hookWire}/bin/hook-wire ${h.event} '*' ${lib.escapeShellArg (lib.strings.escapeRegex h.name)} ${lib.escapeShellArg (hookPath dir h.name)} ${lib.escapeShellArg "${home}/${dir}/settings.json"} || true
-          '') hooks
-        ) cfg.dirs
+        lib.concatMapStringsSep "\n" (dir: ''
+          run ${pluginWire}/bin/plugin-wire ${pluginSpecJson dir} ${lib.escapeShellArg "${home}/${dir}/settings.json"} || true
+        '') cfg.dirs
+        + ''
+          run ${contractUnwire}/bin/contract-unwire session-contract ${
+            lib.concatMapStringsSep " " (dir: lib.escapeShellArg "${home}/${dir}/CLAUDE.md") cfg.dirs
+          } || true
+        ''
       )
     );
 
@@ -316,15 +363,6 @@ in
           run ${telemetryWire}/bin/telemetry-wire ${telemetryEnvJson dir} ${lib.escapeShellArg "${home}/${dir}/settings.json"} || true
         '') cfg.dirs
       )
-    );
-
-    # After agentHostDirs (when present), so a new account dir already exists with its 0700 mode.
-    home.activation.claudeSessionContract = lib.mkIf hasFragment (
-      lib.hm.dag.entryAfter [ "writeBoundary" "agentHostDirs" ] ''
-        run ${contractWire}/bin/contract-wire ${fragmentName} ${lib.escapeShellArg fragment} ${
-          lib.concatMapStringsSep " " (dir: lib.escapeShellArg "${home}/${dir}/CLAUDE.md") cfg.dirs
-        }
-      ''
     );
   };
 }

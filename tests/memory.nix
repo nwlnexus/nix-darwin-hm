@@ -1,9 +1,9 @@
 # Claude Code memory-gateway client (home/cli/memory). Disabled by default; the enabled variants are evaluated
 # through extendModules on the agent host (eval only, nothing is built or activated).
 #
-# ai-agent-host itself enables the module (tailnet, personal only since #675, no ~/.claude: olympus-sdk #559), so the
-# generic option tests start from `base`, the host with that choice undone, and testAgentHostEnablesMemory
-# pins what the host really sets.
+# Since olympus-sdk#753 the personal hosts get memory from the olympus-memory plugin and switch this module off with
+# cleanup (testHostsCleanUpMemory pins that). The generic option tests start from `base`: ai-agent-host with the
+# module's account set as the host had it (personal, plus ~/.claude for the default-account tests).
 { flake, lib }:
 let
   deployed = flake.homeConfigurations."nwilliams-lucas@ai-agent-host";
@@ -12,7 +12,11 @@ let
       {
         d.memory = {
           enable = lib.mkForce false;
-          accounts.default.enable = lib.mkForce true;
+          cleanup = lib.mkForce false;
+          accounts = {
+            default = { };
+            personal = { };
+          };
         };
       }
     ];
@@ -49,60 +53,36 @@ let
   short = builtins.substring 0 8 flake.inputs.olympus-sdk.rev;
 in
 {
-  # What hosts/linux/ai-agent-host.nix really sets: tailnet only, no fallback, ~/.claude left unwired, and since
-  # olympus-sdk #675 the work account unwired (no target, so memory-wire removes its entries; no key fetched).
-  testAgentHostEnablesMemory = {
+  # What the personal hosts set since olympus-sdk#753: module off with cleanup, so the only activation step is
+  # `memory-wire remove` over the files its manifest recorded (hook entries, guard, `memory` MCP entry); no secrets
+  # are fetched any more (the key files stay; the plugin's setup owns them).
+  testHostsCleanUpMemory = {
     expr =
       let
-        m = deployed.config.d.memory;
+        hms = [
+          deployed.config
+          flake.darwinConfigurations.NWL-MBM2.config.home-manager.users.nwilliams-lucas
+          flake.darwinConfigurations.nwl-mstudio.config.home-manager.users.nwilliams-lucas
+        ];
       in
-      [
-        m.enable
-        m.mode
-        m.fallback
-        (map (t: t.name) m.wiring.targets)
-        (map (s: s.ref) m.secrets)
-        (deployed.config.home.activation ? memoryWire)
-        (deployed.config.home.activation ? memorySecrets)
-      ];
-    expected = [
-      true
-      "tailnet"
-      false
-      [ "personal" ]
-      [ "op://Dev/memory-gateway-keys/ai-agent-host-personal" ]
-      true
-      true
-    ];
-  };
-  # #675/#693: there is no work account on this host (personal-only); its settings.json and .claude.json were
-  # wired before, so they must not be in the spec
-  # (memory-wire apply then removes the entries from the files its manifest recorded), and nothing in the
-  # personal account's wiring may point at the work key or config dir.
-  testAgentHostWorkAccountUnwired = {
-    expr =
-      let
-        m = deployed.config.d.memory;
-        spec = builtins.toJSON m.wiring;
-      in
-      [
-        (m.accounts ? work)
-        (lib.hasInfix ".claude-work" spec)
-        (lib.hasInfix "gateway-key-work" spec)
-        (lib.any (s: lib.hasInfix "work" s.dest) m.secrets)
-        (lib.hasInfix "memory-wire apply" deployed.config.home.activation.memoryWire.data)
-      ];
-    expected = [
-      false
-      false
-      false
+      map (c: [
+        c.d.memory.enable
+        c.d.memory.cleanup
+        (lib.hasInfix "memory-wire remove --manifest" (c.home.activation.memoryWire.data or ""))
+        (lib.hasInfix "memory-wire apply" (c.home.activation.memoryWire.data or ""))
+        (c.home.activation ? memorySecrets)
+      ]) hms;
+    expected = lib.genList (_: [
       false
       true
-    ];
+      true
+      false
+      false
+    ]) 3;
   };
   # #675: the default route table: personal projects go to the gateway, work projects nowhere.
   testAgentHostRoutes = {
-    expr = builtins.fromJSON deployed.config.d.memory.routeTables.personal;
+    expr = builtins.fromJSON tailnet.d.memory.routeTables.personal;
     expected = {
       v = 1;
       routes = [
@@ -133,7 +113,7 @@ in
   testCleanupOnlyWhenAskedAndDisabled = {
     expr =
       let
-        c = (base.extendModules { modules = [ { d.memory.cleanup = true; } ]; }).config;
+        c = (base.extendModules { modules = [ { d.memory.cleanup = lib.mkOverride 40 true; } ]; }).config;
       in
       [
         (c.home.activation ? memoryWire)
@@ -542,48 +522,5 @@ in
           }).d.memory.routeTables
       )).success;
     expected = false;
-  };
-  # #675: the Macs that enable the module (one ~/.claude for CLI and Desktop Code sessions alike) route
-  # ~/projects/work to none; the work Mac stays off.
-  testDarwinHostsRoutes = {
-    expr =
-      let
-        hm = n: flake.darwinConfigurations.${n}.config.home-manager.users.nwilliams-lucas.d.memory;
-        mac = n: {
-          enable = (hm n).enable;
-          table = builtins.fromJSON (hm n).routeTables.default;
-          guard = (lib.head (hm n).wiring.targets).hooks ? PreToolUse;
-        };
-      in
-      [
-        (mac "NWL-MBM2")
-        (mac "nwl-mstudio")
-        (hm "DTLR-NWLMMINI").enable
-      ];
-    expected =
-      let
-        mac = {
-          enable = true;
-          guard = true;
-          table = {
-            v = 1;
-            routes = [
-              {
-                root = "/Users/nwilliams-lucas/projects/personal";
-                backend = "gateway";
-              }
-              {
-                root = "/Users/nwilliams-lucas/projects/work";
-                backend = "none";
-              }
-            ];
-          };
-        };
-      in
-      [
-        mac
-        mac
-        false
-      ];
   };
 }

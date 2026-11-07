@@ -157,13 +157,13 @@ test-memory-wire:
     bash tests/memory-wire.sh
     bash tests/memory-fetch-secrets.sh
 
-# Behaviour tests for the session-contract activation script (temp files only; no nix needed).
+# Behaviour tests for the script that removes the old session-contract block from CLAUDE.md (temp files only; no nix needed).
 test-claude-contract:
     bash tests/claude-contract.sh
 
-# Behaviour tests for the Stop-hook merge script (temp copies of settings files; needs jq, no nix).
-test-claude-hook-wire:
-    bash tests/claude-hook-wire.sh
+# Behaviour tests for the plugin-declaration merge script (temp copies of settings files; needs jq, no nix).
+test-claude-plugin-wire:
+    bash tests/claude-plugin-wire.sh
 
 # Behaviour tests for the allow-rules/autoMode merge script (temp copies of settings files; needs jq, no nix).
 test-claude-settings-wire:

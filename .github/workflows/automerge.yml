@@ -21,7 +21,7 @@ name: automerge
 # The labels are read again right before the merge call, so a run that started before someone removed
 # `automerge` does not merge.
 #
-# The same file lives in olympus-sdk, olympus-infra, olympus-gitops, agent-skills and nix-darwin-hm;
+# The same file lives in olympus-sdk, olympus-infra, olympus-gitops, agent-plugins and nix-darwin-hm;
 # only the `workflow_run.workflows` list differs (the workflows whose completion should re-check).
 on:
   pull_request:

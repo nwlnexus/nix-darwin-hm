@@ -42,12 +42,6 @@
     atuin.url = "github:atuinsh/atuin/v18.23.0";
     atuin.flake = false;
 
-    # Reusable coding-agent skills (SKILL.md dirs under skills/). Source only;
-    # home/cli/claude and home/agent-host symlink them into the Claude config
-    # dirs. Bump with `nix flake update agent-skills`.
-    agent-skills.url = "github:nwlnexus/agent-skills";
-    agent-skills.flake = false;
-
     # Claude Code memory hooks (packages/memory-hooks) for home/cli/memory.
     # olympus-sdk is PRIVATE, so this is read over ssh (the user's key; the
     # 1Password agent on Macs), not through the github: fetcher. Source only

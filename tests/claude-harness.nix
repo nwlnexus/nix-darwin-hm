@@ -1,5 +1,6 @@
-# Agent harness from agent-skills (home/cli/claude/harness.nix): agents/, the session-contract block in
-# CLAUDE.md, the hooks and the settings wiring (allow rules, autoMode), for the account dirs on the agent host
+# Agent harness (home/cli/claude/harness.nix): the plugin declarations (olympus-sdk#753; marketplaces, enabled
+# plugins, removal of the old nix harness hook entries and CLAUDE.md block) and the settings wiring (allow rules,
+# autoMode), for the account dirs on the agent host
 # (never ~/.claude there) and ~/.claude on a Mac. The autoMode variants use a made-up fixture
 # (tests/fixtures/claude-auto-mode.json) through extendModules; nothing is built or activated.
 { flake, lib }:
@@ -9,8 +10,39 @@ let
   mac = flake.darwinConfigurations.nwl-mstudio.config.home-manager.users.nwilliams-lucas;
   h = "/home/nwilliams-lucas";
   m = "/Users/nwilliams-lucas";
-  contract = c: c.home.activation.claudeSessionContract.data or "";
-  hooksData = c: c.home.activation.claudeHooks.data or "";
+  pluginsData = c: c.home.activation.claudePlugins.data or "";
+  spec = c: c.d.claudeHarness.plugins.spec;
+  public = {
+    nwlnexus = {
+      source = {
+        source = "github";
+        repo = "nwlnexus/agent-plugins";
+      };
+      autoUpdate = true;
+    };
+  };
+  private = {
+    olympus-private = {
+      source = {
+        source = "github";
+        repo = "nwlnexus/olympus-memory";
+      };
+      autoUpdate = true;
+    };
+  };
+  # A generic agent host with a personal and a work account, private plugins on.
+  twoAccounts =
+    (deployed.extendModules {
+      modules = [
+        {
+          d.personalOnly.enable = lib.mkOverride 40 false;
+          d.claudeHarness.dirs = lib.mkOverride 40 [
+            ".claude-personal"
+            ".claude-work"
+          ];
+        }
+      ];
+    }).config;
   settingsData = c: c.home.activation.claudeSettings.data or "";
   with' =
     settings:
@@ -45,170 +77,101 @@ let
   sdkHasTelemetry = builtins.pathExists "${flake.inputs.olympus-sdk}/config/claude/telemetry.json";
 in
 {
-  testHarnessAgentsFound = {
-    expr = lib.elem "claim-verifier.md" host.d.claudeHarness.agents;
-    expected = true;
-  };
   testHarnessHostDirs = {
     expr = host.d.claudeHarness.dirs;
     expected = [ ".claude-personal" ];
   };
-  testHarnessHostAgents = {
-    expr = map (f: host.home.file ? ${f}) [
-      ".claude-personal/agents/claim-verifier.md"
-      ".claude-work/agents/claim-verifier.md"
-      ".claude/agents/claim-verifier.md"
-    ];
-    expected = [
-      true
-      false
-      false
-    ];
+
+  # Personal dirs declare both marketplaces and enable both plugins; the old harness hook entries are removed.
+  testHarnessPluginsHost = {
+    expr = spec host;
+    expected = {
+      ".claude-personal" = {
+        marketplaces = public // private;
+        enable = {
+          "agent-harness@nwlnexus" = true;
+          "olympus-memory@olympus-private" = true;
+        };
+        removeHookCommands = [
+          "${h}/.claude-personal/hooks/progress-stale.sh"
+          "${h}/.claude-personal/hooks/permission-denied-log.sh"
+        ];
+      };
+    };
   };
-  testHarnessHostContract = {
-    expr = map (f: lib.hasInfix f (contract host)) [
-      " ${h}/.claude-personal/CLAUDE.md"
-      " ${h}/.claude-work/CLAUDE.md"
-      " ${h}/.claude/CLAUDE.md"
-      "fragments/session-contract.md"
-    ];
-    expected = [
-      true
-      false
-      false
-      true
-    ];
-  };
-  testHarnessContractAfterAccountDirs = {
-    expr = lib.elem "agentHostDirs" host.home.activation.claudeSessionContract.after;
-    expected = true;
-  };
-  # The long-task skill reaches the account dirs through the existing skills wiring.
-  testHarnessHostSkill = {
-    expr = map (f: host.home.file ? ${f}) [
-      ".claude-personal/skills/long-task"
-      ".claude-work/skills/long-task"
-    ];
-    expected = [
-      true
-      false
-    ];
-  };
-  testHarnessMac = {
+  testHarnessPluginsMac = {
     expr = [
       mac.d.claudeHarness.dirs
-      (mac.home.file ? ".claude/agents/claim-verifier.md")
-      (mac.home.file ? ".claude/skills/long-task")
-      (lib.hasInfix " ${m}/.claude/CLAUDE.md" (contract mac))
+      (spec mac).".claude".marketplaces
+      (spec mac).".claude".enable
     ];
     expected = [
       [ ".claude" ]
-      true
-      true
-      true
-    ];
-  };
-
-  # The progress-stale Stop hook: linked into each account dir (never ~/.claude on the host) and merged into
-  # settings.json by hook-wire for exactly those dirs, as a Stop entry with matcher "*".
-  testHarnessHostHookLinks = {
-    expr = map (f: host.home.file ? ${f}) [
-      ".claude-personal/hooks/progress-stale.sh"
-      ".claude-work/hooks/progress-stale.sh"
-      ".claude/hooks/progress-stale.sh"
-    ];
-    expected = [
-      true
-      false
-      false
-    ];
-  };
-  testHarnessHostHookWire = {
-    expr =
-      let
-        data = hooksData host;
-      in
-      map (f: lib.hasInfix f data) [
-        "hook-wire Stop '*' 'progress-stale\\.sh' ${h}/.claude-personal/hooks/progress-stale.sh ${h}/.claude-personal/settings.json"
-        "hook-wire Stop '*' 'progress-stale\\.sh' ${h}/.claude-work/hooks/progress-stale.sh ${h}/.claude-work/settings.json"
-        "/.claude/settings.json"
-      ];
-    expected = [
-      true
-      false
-      false
-    ];
-  };
-  testHarnessMacHook = {
-    expr = [
-      (mac.home.file ? ".claude/hooks/progress-stale.sh")
-      (lib.hasInfix "hook-wire Stop '*' 'progress-stale\\.sh' ${m}/.claude/hooks/progress-stale.sh ${m}/.claude/settings.json" (
-        hooksData mac
-      ))
-    ];
-    expected = [
-      true
-      true
-    ];
-  };
-
-  # The permission-denied-log hook (olympus-sdk#576 layer 3): linked like progress-stale and wired as a
-  # PermissionDenied entry. Its identity regex also matches a hand-installed copy elsewhere, so that entry is
-  # replaced, not doubled.
-  testHarnessHooksFound = {
-    expr = host.d.claudeHarness.hooks;
-    expected = [
+      (public // private)
       {
-        name = "progress-stale.sh";
-        event = "Stop";
-      }
-      {
-        name = "permission-denied-log.sh";
-        event = "PermissionDenied";
+        "agent-harness@nwlnexus" = true;
+        "olympus-memory@olympus-private" = true;
       }
     ];
   };
-  testHarnessHostDenialHook = {
-    expr =
-      map (f: host.home.file ? ${f}) [
-        ".claude-personal/hooks/permission-denied-log.sh"
-        ".claude-work/hooks/permission-denied-log.sh"
-        ".claude/hooks/permission-denied-log.sh"
-      ]
-      ++ map (f: lib.hasInfix f (hooksData host)) [
-        "hook-wire PermissionDenied '*' 'permission-denied-log\\.sh' ${h}/.claude-personal/hooks/permission-denied-log.sh ${h}/.claude-personal/settings.json"
-        "hook-wire PermissionDenied '*' 'permission-denied-log\\.sh' ${h}/.claude-work/hooks/permission-denied-log.sh ${h}/.claude-work/settings.json"
-      ];
-    expected = [
-      true
-      false
-      false
-      true
-      false
-    ];
-  };
-  testHarnessDenialRegexMatchesHandCopy = {
-    expr =
-      builtins.match ".*${lib.strings.escapeRegex "permission-denied-log.sh"}.*" "${h}/.local/libexec/agent-hooks/permission-denied-log.sh"
-      != null;
-    expected = true;
-  };
-  testHarnessMacDenialHook = {
+  # A work account dir never gets the private marketplace, even with private plugins on for the host.
+  testHarnessPluginsWorkDir = {
     expr = [
-      (mac.home.file ? ".claude/hooks/permission-denied-log.sh")
-      (lib.hasInfix "hook-wire PermissionDenied '*' 'permission-denied-log\\.sh' ${m}/.claude/hooks/permission-denied-log.sh ${m}/.claude/settings.json" (
-        hooksData mac
-      ))
+      twoAccounts.d.claudeHarness.plugins.private.dirs
+      (spec twoAccounts).".claude-work".marketplaces
+      (spec twoAccounts).".claude-work".enable
+      (lib.hasInfix "olympus" (builtins.toJSON (spec twoAccounts).".claude-work"))
+    ];
+    expected = [
+      [ ".claude-personal" ]
+      public
+      { "agent-harness@nwlnexus" = true; }
+      false
+    ];
+  };
+  testHarnessPluginsWire = {
+    expr = map (f: lib.hasInfix f (pluginsData host)) [
+      "/bin/plugin-wire /nix/store/"
+      "-claude-plugins.json ${h}/.claude-personal/settings.json"
+      "/bin/contract-unwire session-contract ${h}/.claude-personal/CLAUDE.md"
+      "/.claude/settings.json"
+      "/.claude/CLAUDE.md"
     ];
     expected = [
       true
       true
+      true
+      false
+      false
     ];
+  };
+  # Nothing is linked from the retired agent-skills input any more.
+  testHarnessNoVendoredFiles = {
+    expr =
+      map
+        (
+          c:
+          lib.filter (t: builtins.match ".*/(agents|hooks|skills)/.*" "/${t}" != null) (
+            lib.attrNames c.home.file
+          )
+        )
+        [
+          host
+          mac
+        ];
+    expected = [
+      [ ]
+      [ ]
+    ];
+  };
+  testHarnessNoAgentSkillsInput = {
+    expr = flake.inputs ? agent-skills;
+    expected = false;
   };
   # Both settings.json activations run after agentHostDirs, so a new account dir already exists with mode 0700.
   testHarnessWiringAfterAccountDirs = {
     expr = map (a: lib.elem "agentHostDirs" host.home.activation.${a}.after) [
-      "claudeHooks"
+      "claudePlugins"
       "claudeSettings"
     ];
     expected = [
@@ -298,7 +261,7 @@ in
   testHarnessSettingsOff = {
     expr = [
       (settingsOff.home.activation ? claudeSettings)
-      (settingsOff.home.activation ? claudeHooks)
+      (settingsOff.home.activation ? claudePlugins)
     ];
     expected = [
       false

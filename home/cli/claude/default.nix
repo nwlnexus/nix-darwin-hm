@@ -3,29 +3,11 @@
   pkgs,
   lib,
   config,
-  inputs,
   ...
 }:
-let
-  agentSkills = inputs.agent-skills;
-  # Our reusable skills (github:nwlnexus/agent-skills, flake input): every
-  # skills/<name> becomes <claude dir>/skills/<name>. Ours, not gitnexus's, so
-  # they are nix-managed symlinks and the gitnexus-* mirroring in
-  # home/agent-host skips them (it builds the same set per account dir).
-  skillDirs = lib.attrNames (
-    lib.filterAttrs (_: type: type == "directory") (builtins.readDir "${agentSkills}/skills")
-  );
-  skillFiles =
-    claudeDir:
-    lib.listToAttrs (
-      map (
-        name: lib.nameValuePair "${claudeDir}/skills/${name}" { source = "${agentSkills}/skills/${name}"; }
-      ) skillDirs
-    );
-in
 {
-  # agents/ + the session-contract block in CLAUDE.md + the progress-stale Stop hook, per Claude dir; the
-  # agent-session tmux launcher.
+  # The agent harness plugins (agent-harness@nwlnexus, olympus-memory@olympus-private on personal dirs) declared
+  # in each Claude dir's settings.json; the agent-session tmux launcher.
   imports = [
     ./harness.nix
     ./agent-session.nix
@@ -38,8 +20,7 @@ in
       enable = !config.d.workOnly.enable;
       source = ./commands/brain.md;
     };
-  }
-  // skillFiles ".claude";
+  };
 
   # Obsidian vault on the Macs; the agent host overrides it (home/agent-host/second-brain.nix). A work-only host
   # gets no SECOND_BRAIN_PATH at all, so nothing falls back to the personal vault.
@@ -95,8 +76,8 @@ in
   # timeout on every such tool call) and wrote an `npx` MCP entry when the binary was not on PATH. The owner
   # chose to drop the hooks (2026-11-01), so this step does only what is wanted:
   #   1. copies the gitnexus skills from the installed package (`mise where npm:gitnexus`) into ~/.claude/skills,
-  #      as `gitnexus setup` laid them out (<name>/SKILL.md; folder skills copied whole). Nix-managed skill links
-  #      (agent-skills, e.g. gitnexus-no-churn) are never touched. home/agent-host mirrors these into each
+  #      as `gitnexus setup` laid them out (<name>/SKILL.md; folder skills copied whole). A skill that is a
+  #      symlink is never touched. home/agent-host mirrors these into each
   #      ~/.claude-<acct>;
   #   2. removes the hooks an earlier `gitnexus setup` registered (entries whose command mentions
   #      `gitnexus-hook`) and their scripts in ~/.claude/hooks/gitnexus;
