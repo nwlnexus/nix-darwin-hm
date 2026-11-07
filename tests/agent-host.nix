@@ -442,9 +442,13 @@ in
       (lib.elem "MEMORY_COMPILE_DIR=${h}/.local/state/memory-compile/second-brain" (
         lib.toList svc.memory-compile.Service.Environment
       ))
+      (lib.elem "MEMORY_COMPILE_SECRETS_FILE=${h}/projects/personal/.env" (
+        lib.toList svc.memory-compile.Service.Environment
+      ))
     ];
     expected = [
       "*-*-* 04:45:00"
+      true
       true
       true
       true
