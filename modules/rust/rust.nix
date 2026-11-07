@@ -21,8 +21,10 @@ let
   # duplicated per-repo and there is a single place to sweep. `cargo-sweep`
   # discovers `.fingerprint` dirs by walking, so it sweeps this cleanly.
   #
-  # Lives under ~/projects (the external disk) on purpose: the internal boot
-  # volume filled up when this sat in ~/.cache (91 GB of target dirs).
+  # Lives under ~/projects on purpose: on the retired NWL-MMINI, ~/projects was
+  # an external disk, and the internal boot volume filled up when this sat in
+  # ~/.cache (91 GB of target dirs). On hosts where ~/projects is a plain
+  # directory (nwl-mstudio, for example) it is on the boot volume like ~/.cache.
   #
   # Set ONLY via ~/.cargo/config.toml ([build] target-dir, below), never via the
   # CARGO_TARGET_DIR env var: the env var overrides config.toml, so a stale copy
