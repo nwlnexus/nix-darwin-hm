@@ -90,8 +90,10 @@ let
     builtins.toJSON (cfg.settings.allow ++ privateAllow)
   );
   autoModeJson = pkgs.writeText "claude-auto-mode.json" (builtins.toJSON autoMode);
+  extraJson = pkgs.writeText "claude-settings-extra.json" (builtins.toJSON cfg.settings.extra);
   wireSettings =
-    cfg.settings.enable && (cfg.settings.allow ++ privateAllow != [ ] || autoMode != null);
+    cfg.settings.enable
+    && (cfg.settings.allow ++ privateAllow != [ ] || autoMode != null || cfg.settings.extra != { });
 
   # Telemetry source: config/claude/telemetry.json of the private olympus-sdk input ({ endpoint, protocol,
   # resourceAttributes }). Until the pinned olympus-sdk has that file (olympus-sdk#565) and in CI, where the input
@@ -287,6 +289,21 @@ in
           removed; olympus-sdk#576 layer 1).
         '';
       };
+      extra = lib.mkOption {
+        type = lib.types.attrs;
+        default = {
+          # Per-session-kind peer policy (olympus-sdk#574, spec H16). Interactive sessions get the safe user-level
+          # default here: no peer-machine discovery/messaging (isolatePeerMachines), and `crossSessionInbound` is
+          # deliberately NOT set, so they keep the per-message default (ask before acting on a peer's message).
+          # Unattended sessions opt in themselves: the goal runner (olympus-sdk scripts/goal-runner, #572) passes
+          # `"crossSessionInbound":"accept"` in its own --settings, because nobody is there to approve.
+          isolatePeerMachines = true;
+        };
+        description = ''
+          Top-level settings.json keys set (deep-merged) in each dir at activation. See the default's comment for
+          the per-session-kind peer policy.
+        '';
+      };
       autoModeFile = lib.mkOption {
         type = lib.types.nullOr lib.types.path;
         default = if builtins.pathExists autoModeDefault then autoModeDefault else null;
@@ -346,7 +363,7 @@ in
       lib.hm.dag.entryAfter [ "writeBoundary" "agentHostDirs" ] ''
         run ${settingsWire}/bin/settings-wire ${allowJson} ${
           if autoMode == null then "-" else "${autoModeJson}"
-        } ${
+        } ${lib.optionalString (cfg.settings.extra != { }) "--set ${extraJson}"} ${
           lib.concatMapStringsSep " " (dir: lib.escapeShellArg "${home}/${dir}/settings.json") cfg.dirs
         } || true
       ''

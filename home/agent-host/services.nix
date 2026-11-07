@@ -282,6 +282,9 @@ in
 lib.mkIf cfg.enable {
   home.packages = map (p: p.launcher) pairs ++ [ agents ];
 
+  # Shared with the scheduled jobs (./agent-jobs.nix).
+  d.agentHost.agentPath = agentPath;
+
   # macOS: no launchd.agents for Remote Control. The daemon specs are exposed for system/darwin/agent-host.nix,
   # which installs them as LaunchDaemons running as this user.
   d.agentHost.darwinDaemons = lib.optionalAttrs isDarwin (

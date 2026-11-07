@@ -214,6 +214,19 @@ in
       false
     ];
   };
+  # Per-session-kind peer policy (olympus-sdk#574, H16): isolatePeerMachines everywhere, crossSessionInbound never.
+  testHarnessSettingsPeerPolicy = {
+    expr = [
+      host.d.claudeHarness.settings.extra
+      (lib.hasInfix " --set /nix/store/" (settingsData host))
+      (lib.hasInfix "crossSessionInbound" (builtins.toJSON host.d.claudeHarness.settings.extra))
+    ];
+    expected = [
+      { isolatePeerMachines = true; }
+      true
+      false
+    ];
+  };
   testHarnessSettingsHost = {
     expr = host.d.claudeHarness.settings.autoModeHost;
     expected = "ai-agent-host";
@@ -232,7 +245,7 @@ in
   testHarnessSettingsAutoModeHost = {
     expr = [
       onHost.d.claudeHarness.settings.autoMode
-      (lib.hasInfix "-claude-auto-mode.json ${h}/.claude-personal/settings.json" (settingsData onHost))
+      (lib.hasInfix "-claude-auto-mode.json --set /nix/store/" (settingsData onHost))
     ];
     expected = [
       {
