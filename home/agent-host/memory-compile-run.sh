@@ -23,6 +23,14 @@ fi
 . "$MEMORY_ENV_FILE"
 export MEMORY_GATEWAY_URL MEMORY_KEY_FILE
 
+# gh (the compile opens its PR with it) authenticates from GH_TOKEN, as in the claude-<acct> launchers.
+if [ -z "${GH_TOKEN:-}" ] && [ -n "${MEMORY_COMPILE_SECRETS_FILE:-}" ] && [ -r "$MEMORY_COMPILE_SECRETS_FILE" ]; then
+  # shellcheck disable=SC1090
+  GITHUB_PERSONAL_ACCESS_TOKEN="$(set -a; . "$MEMORY_COMPILE_SECRETS_FILE" >/dev/null 2>&1; printf '%s' "${GITHUB_PERSONAL_ACCESS_TOKEN:-}")"
+  if [ -n "$GITHUB_PERSONAL_ACCESS_TOKEN" ]; then export GH_TOKEN="$GITHUB_PERSONAL_ACCESS_TOKEN"; fi
+  unset GITHUB_PERSONAL_ACCESS_TOKEN
+fi
+
 if ! git -C "$MEMORY_COMPILE_DIR" rev-parse --git-dir >/dev/null 2>&1; then
   mkdir -p "$(dirname "$MEMORY_COMPILE_DIR")"
   git clone --quiet "$SECOND_BRAIN_REPO" "$MEMORY_COMPILE_DIR"

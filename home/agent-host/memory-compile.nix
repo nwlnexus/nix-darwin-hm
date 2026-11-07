@@ -29,6 +29,9 @@ let
     SECOND_BRAIN_REPO = config.d.agentHost.secondBrain.repo;
     MEMORY_ENV_FILE = "${home}/.config/memory/env-${cfg.account}";
     CLAUDE_CONFIG_DIR = "${home}/.claude-${cfg.account}";
+    # The account's op-secrets env file (as the claude-<acct> launchers use, services.nix): GITHUB_PERSONAL_ACCESS_TOKEN
+    # for `gh pr create`. The unit has no login shell, so nothing else provides it.
+    MEMORY_COMPILE_SECRETS_FILE = "${config.d.agentHost.accounts.${cfg.account}.root}/.env";
   };
 in
 {
