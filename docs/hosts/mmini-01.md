@@ -147,8 +147,11 @@ and Tart. Neither does anything useful until the owner has done the one-time ste
   `self-hosted, macOS, ARM64, macos-arm64`, and runs the pinned official `actions/runner` as the hidden user
   `_ghrunner` (uid 533, no shell, not an admin, not in sudoers, home under `/var/lib/ci-runner`), under `nice -n 10`.
   The JIT config reaches the runner in its environment (`ACTIONS_RUNNER_INPUT_JITCONFIG`), never on a command
-  line. After the job the loop kills the user's processes, deletes its home and runner copy and its files in
-  `/private/tmp`, and starts again. Errors back off from 30 s to 5 min. The App key stays root-only; the runner user
+  line. After the job the loop boots out the user's launchd domains, kills its processes, removes its crontab and at
+  jobs, empties its home (with `~/Library`), its `/var/folders` dirs and runner copy and its files in `/private/tmp`,
+  `/private/var/tmp` and `/Users/Shared`, loads the pf anchor that keeps `_ghrunner` off private, tailnet, link-local
+  and loopback addresses (olympus-sdk #394), and starts again. If the wipe or the pf check fails it registers no
+  runner and says why in the log. Errors back off from 30 s to 5 min. The App key stays root-only; the runner user
   never sees it. Log: `/var/log/ci-runner.log`.
 - **VM**: `io.olympus.server-vm`, a LaunchDaemon that runs `tart run --no-graphics --net-bridged=en0 mmini-01-vm`
   at boot with nobody logged in, KeepAlive, as the owner's account (see `system/darwin/server-linux-vm.nix` for why
@@ -230,6 +233,20 @@ sudo stat -f '%Su %Lp %N' /var/root/ci-runner/*
 sudo -u _ghrunner cat /var/root/ci-runner/private-key.pem
 ps -axo user,args | grep -i jitconfig
 ```
+
+Isolation and persistence (olympus-sdk #394), as root:
+
+```sh
+sudo pfctl -s info | grep Status
+sudo pfctl -a com.apple/400.olympus-ci-runner -sr
+grep -x _ghrunner /usr/lib/cron/cron.deny /usr/lib/cron/at.deny
+stat -f '%Su %Lp' /var/log/ci-runner.log
+sudo -u _ghrunner /usr/bin/curl -sS -m 5 -o /dev/null -w '%{http_code}\n' https://github.com
+sudo -u _ghrunner /usr/bin/curl -sS -m 5 -o /dev/null https://<LAN_HOST>/
+```
+
+Expect `Status: Enabled`, the anchor's rules with `user = 533`, `_ghrunner` in both files, `root 600`, `200` for
+GitHub and a refused connection for any LAN address (`<LAN_HOST>`, e.g. the router).
 
 Expect `registered runner mmini-01-<timestamp> in group olympus-ci`, `root 400` for all three files, a permission
 error for the `_ghrunner` read, and no `jitconfig` in `ps` output. In the organization settings, one idle runner
