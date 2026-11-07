@@ -11,13 +11,15 @@
 # addresses (#394 F4). Both fail closed: if the wipe or the pf check fails, no runner is registered.
 # The App key is root-only and never reaches the runner user. Configuration comes from the environment (set by the
 # LaunchDaemon): CI_ORG CI_GROUP CI_LABELS CI_APP_ID_FILE CI_INSTALLATION_ID_FILE CI_PRIVATE_KEY_FILE CI_USER
-# CI_WORK_DIR CI_RUNNER_DIR CI_NICE CI_PF_ANCHOR CI_PF_RULES (empty: isolation off) CI_LOG_FILE.
+# CI_WORK_DIR CI_RUNNER_DIR CI_NICE CI_PF_ANCHOR CI_PF_RULES (empty: isolation off) CI_LOG_FILE CI_STATE_FILE (empty: no
+# state). The state file (root-only key=value lines: last_wipe_ok, last_wipe_timestamp, last_registration_timestamp)
+# is read by the health heartbeat (scripts/server/ci-runner-heartbeat.sh, olympus-sdk #392); it never holds a secret.
 set -euo pipefail
 umask 077
 
 : "${CI_ORG:?}" "${CI_GROUP:?}" "${CI_LABELS:?}" "${CI_APP_ID_FILE:?}" "${CI_INSTALLATION_ID_FILE:?}"
 : "${CI_PRIVATE_KEY_FILE:?}" "${CI_USER:?}" "${CI_WORK_DIR:?}" "${CI_RUNNER_DIR:?}" "${CI_NICE:=10}"
-: "${CI_PF_ANCHOR:=com.apple/400.olympus-ci-runner}" "${CI_PF_RULES:=}" "${CI_LOG_FILE:=}"
+: "${CI_PF_ANCHOR:=com.apple/400.olympus-ci-runner}" "${CI_PF_RULES:=}" "${CI_LOG_FILE:=}" "${CI_STATE_FILE:=}"
 
 backoff_start=30
 backoff_cap=300
@@ -25,6 +27,24 @@ job_path=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 child=""
 
 log() { printf '%s ci-runner: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
+
+# state_set KEY VALUE [KEY VALUE ...]: record health facts in the state file (replaced atomically). Never fails the
+# loop: the runner works without it, only the heartbeat goes blind.
+state_set() {
+  [ -n "$CI_STATE_FILE" ] || return 0
+  local tmp="$CI_STATE_FILE.tmp" keys="" k
+  for ((k = 1; k <= $#; k += 2)); do keys="$keys${keys:+|}${!k}"; done
+  {
+    install -d -m 0700 -o root -g wheel "$(dirname "$CI_STATE_FILE")" &&
+      {
+        if [ -f "$CI_STATE_FILE" ]; then grep -Ev "^($keys)=" "$CI_STATE_FILE" || true; fi
+        while [ $# -ge 2 ]; do
+          printf '%s=%s\n' "$1" "$2"
+          shift 2
+        done
+      } >"$tmp" && mv -f "$tmp" "$CI_STATE_FILE"
+  } 2>/dev/null || log "state: could not write $CI_STATE_FILE"
+}
 
 # A secret file must be a regular file owned by root and closed to group and others.
 check_secret() {
@@ -295,9 +315,11 @@ while :; do
   fi
   # Fail closed: a runner is only registered on a clean user and with the network isolation in force.
   if ! wipe; then
+    state_set last_wipe_ok 0 last_wipe_timestamp "$(date +%s)"
     backoff "wipe incomplete, not registering a runner"
     continue
   fi
+  state_set last_wipe_ok 1 last_wipe_timestamp "$(date +%s)"
   if ! ensure_pf; then
     backoff "network isolation not in force, not registering a runner"
     continue
@@ -306,6 +328,7 @@ while :; do
     backoff "could not get a JIT config"
     continue
   fi
+  state_set last_registration_timestamp "$(date +%s)"
   stage_runner
   started=$(date +%s)
   # The JIT config travels in the environment only (sudo keeps just the named variables); argv carries no secret.
@@ -319,7 +342,12 @@ while :; do
   child=""
   log "runner exited with status $status"
   # The next iteration wipes again before it registers; this pass only clears up right after the job.
-  wipe || log "wipe after the job incomplete; the next registration waits for a clean wipe"
+  if wipe; then
+    state_set last_wipe_ok 1 last_wipe_timestamp "$(date +%s)"
+  else
+    state_set last_wipe_ok 0 last_wipe_timestamp "$(date +%s)"
+    log "wipe after the job incomplete; the next registration waits for a clean wipe"
+  fi
   if [ "$status" -ne 0 ] && [ $(($(date +%s) - started)) -lt 20 ]; then
     backoff "runner failed fast"
   else

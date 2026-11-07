@@ -37,6 +37,13 @@ let
     ${builtins.readFile ../../scripts/server/ci-runner-loop.sh}
   '';
 
+  heartbeat = pkgs.writeScript "ci-runner-heartbeat" ''
+    #!${pkgs.bash}/bin/bash
+    ${builtins.readFile ../../scripts/server/ci-runner-heartbeat.sh}
+  '';
+  hb = cfg.heartbeat;
+  hbLog = "/var/log/ci-runner-heartbeat.log";
+
   # The runner user's uid and gid: the range nix-darwin's own runner module uses for its service account.
   id = 533;
   dedicated = cfg.user != "root" && cfg.user != primary;
@@ -147,6 +154,37 @@ in
       type = lib.types.ints.between 0 19;
       default = 10;
       description = "nice(1) value for the job, so it yields to the VM and the system daemons.";
+    };
+    stateFile = lib.mkOption {
+      type = lib.types.str;
+      default = "/var/db/ci-runner/state";
+      description = ''
+        Root-only file where the loop records its last wipe result and last registration time (key=value lines, no
+        secrets), read by the heartbeat. Must live outside workDir, which is wiped.
+      '';
+    };
+    heartbeat = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          Push health gauges for this runner to an OpenTelemetry collector over OTLP/HTTP JSON from a root
+          LaunchDaemon (olympus-sdk #392): ci_runner_daemon_up, ci_runner_runner_up,
+          ci_runner_last_registration_timestamp_seconds and ci_runner_last_wipe_ok, with resource attributes
+          service.name=ci-runner and host.name=<LocalHostName>. The cluster alerts on them (olympus-gitops,
+          rule group ci-runners-macos).
+        '';
+      };
+      endpoint = lib.mkOption {
+        type = lib.types.str;
+        default = "http://obs-otlp.raptor-mimosa.ts.net:4318";
+        description = "Base URL of the collector's OTLP/HTTP receiver; /v1/metrics is appended. Tailnet-only by default.";
+      };
+      interval = lib.mkOption {
+        type = lib.types.ints.between 15 600;
+        default = 60;
+        description = "Seconds between pushes (launchd StartInterval).";
+      };
     };
     networkIsolation = {
       enable = lib.mkOption {
@@ -261,10 +299,14 @@ in
     # the rotated file.
     system.activationScripts.preActivation.text = lib.mkAfter ''
       /usr/bin/install -d -m 0755 -o root -g wheel ${lib.escapeShellArg cfg.workDir}
+      /usr/bin/install -d -m 0700 -o root -g wheel ${lib.escapeShellArg (dirOf cfg.stateFile)}
       /bin/mkdir -p ${lib.escapeShellArg "${cfg.workDir}/home"}
       /usr/bin/touch ${logFile}
       /usr/sbin/chown root:wheel ${logFile}
       /bin/chmod 0600 ${logFile}
+      /usr/bin/touch ${hbLog}
+      /usr/sbin/chown root:wheel ${hbLog}
+      /bin/chmod 0600 ${hbLog}
     '';
 
     # After the users step (#394 F1a, F13):
@@ -322,6 +364,7 @@ in
           CI_PF_ANCHOR = net.anchor;
           CI_PF_RULES = if net.enable then "${pfRules}" else "";
           CI_LOG_FILE = logFile;
+          CI_STATE_FILE = cfg.stateFile;
         };
         RunAtLoad = true;
         KeepAlive = true;
@@ -329,6 +372,41 @@ in
         StandardOutPath = logFile;
         StandardErrorPath = logFile;
       };
+    };
+
+    # One push per StartInterval; the job runs for a second and exits. Only failures are logged (root-only log,
+    # rotated by newsyslog: launchd reopens it on every run).
+    launchd.daemons.ci-runner-heartbeat = lib.mkIf hb.enable {
+      serviceConfig = {
+        Label = "io.olympus.ci-runner-heartbeat";
+        ProgramArguments = [
+          "/bin/sh"
+          "-c"
+          "/bin/wait4path /nix/store && exec ${heartbeat}"
+        ];
+        EnvironmentVariables = {
+          PATH =
+            lib.makeBinPath [
+              pkgs.curl
+              pkgs.jq
+            ]
+            + ":/usr/bin:/bin:/usr/sbin:/sbin";
+          CI_HB_ENDPOINT = hb.endpoint;
+          CI_HB_LABEL = "io.olympus.ci-runner";
+          CI_USER = cfg.user;
+          CI_STATE_FILE = cfg.stateFile;
+        };
+        RunAtLoad = true;
+        StartInterval = hb.interval;
+        StandardOutPath = hbLog;
+        StandardErrorPath = hbLog;
+      };
+    };
+    environment.etc."newsyslog.d/ci-runner-heartbeat.conf" = lib.mkIf hb.enable {
+      text = ''
+        # logfilename                  [owner:group]  mode count size(KB) when flags
+        ${hbLog}  root:wheel     600  3     1024     *    N
+      '';
     };
 
     assertions = [
@@ -346,8 +424,13 @@ in
           cfg.appIdFile
           cfg.installationIdFile
           cfg.privateKeyFile
+          cfg.stateFile
         ];
-        message = "d.server.ciRunner: workDir and the credential file paths must be absolute.";
+        message = "d.server.ciRunner: workDir, stateFile and the credential file paths must be absolute.";
+      }
+      {
+        assertion = !(lib.hasPrefix "${cfg.workDir}/" cfg.stateFile);
+        message = "d.server.ciRunner: stateFile must live outside workDir, which is wiped.";
       }
       {
         assertion =

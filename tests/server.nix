@@ -354,6 +354,105 @@ in
     };
   };
 
+  # Health heartbeat (olympus-sdk #392) on all three runner Macs: a root daemon every 60 s pushes to the tailnet OTLP
+  # endpoint, the loop and the heartbeat share the state file outside workDir; the endpoint is per host; off removes
+  # the daemon; the loop records wipe results and registrations; the payload carries the gauge names the cluster alerts
+  # on. Sources are read, not built.
+  testRunnerHeartbeat =
+    let
+      loopCode = builtins.readFile ../scripts/server/ci-runner-loop.sh;
+      hbCode = builtins.readFile ../scripts/server/ci-runner-heartbeat.sh;
+    in
+    {
+      expr = {
+        hosts = lib.genAttrs [ "data-hub" "mmini-01" "mmini-02" ] (
+          h:
+          let
+            c = flake.darwinConfigurations.${h}.config;
+            d = c.launchd.daemons.ci-runner-heartbeat.serviceConfig;
+            e = d.EnvironmentVariables;
+          in
+          {
+            inherit (d) Label RunAtLoad StartInterval;
+            root = (d.UserName or null) == null;
+            waitsForStore = lib.hasPrefix "/bin/wait4path /nix/store && exec /nix/store/" (
+              lib.last d.ProgramArguments
+            );
+            inherit (e) CI_HB_ENDPOINT CI_HB_LABEL CI_USER;
+            sameState =
+              e.CI_STATE_FILE == c.launchd.daemons.ci-runner.serviceConfig.EnvironmentVariables.CI_STATE_FILE;
+            state = e.CI_STATE_FILE;
+            stateDir = lib.hasInfix "/usr/bin/install -d -m 0700 -o root -g wheel /var/db/ci-runner" c.system.activationScripts.preActivation.text;
+            newsyslog =
+              lib.hasInfix "/var/log/ci-runner-heartbeat.log"
+                c.environment.etc."newsyslog.d/ci-runner-heartbeat.conf".text;
+          }
+        );
+        endpoint =
+          (with' { d.server.ciRunner.heartbeat.endpoint = "http://collector.example:4318"; })
+          .launchd.daemons.ci-runner-heartbeat.serviceConfig.EnvironmentVariables.CI_HB_ENDPOINT;
+        off = (with' { d.server.ciRunner.heartbeat.enable = false; }).launchd.daemons ? ci-runner-heartbeat;
+        loopRecords = map (s: lib.hasInfix s loopCode) [
+          "state_set last_wipe_ok 0"
+          "state_set last_wipe_ok 1"
+          "state_set last_registration_timestamp"
+        ];
+        gauges = map (s: lib.hasInfix "\"${s}\"" hbCode) [
+          "ci_runner_daemon_up"
+          "ci_runner_runner_up"
+          "ci_runner_last_registration_timestamp_seconds"
+          "ci_runner_last_wipe_ok"
+        ];
+        resource = lib.hasInfix "\"service.name\"" hbCode && lib.hasInfix "\"host.name\"" hbCode;
+      };
+      expected = {
+        hosts =
+          let
+            one = {
+              Label = "io.olympus.ci-runner-heartbeat";
+              RunAtLoad = true;
+              StartInterval = 60;
+              root = true;
+              waitsForStore = true;
+              CI_HB_ENDPOINT = "http://obs-otlp.raptor-mimosa.ts.net:4318";
+              CI_HB_LABEL = "io.olympus.ci-runner";
+              CI_USER = "_ghrunner";
+              sameState = true;
+              state = "/var/db/ci-runner/state";
+              stateDir = true;
+              newsyslog = true;
+            };
+          in
+          {
+            data-hub = one;
+            mmini-01 = one;
+            mmini-02 = one;
+          };
+        endpoint = "http://collector.example:4318";
+        off = false;
+        loopRecords = [
+          true
+          true
+          true
+        ];
+        gauges = [
+          true
+          true
+          true
+          true
+        ];
+        resource = true;
+      };
+    };
+
+  # A state file inside workDir would be wiped with the runner user's files.
+  testRunnerStateOutsideWorkDir = {
+    expr = failing (with' {
+      d.server.ciRunner.stateFile = "/var/lib/ci-runner/state";
+    });
+    expected = [ "d.server.ciRunner: stateFile must live outside workDir, which is wiped." ];
+  };
+
   # The runner user: hidden, fixed id in the service range, no shell, not an admin, not in sudoers, no access to the
   # primary user's home.
   testRunnerUserUnprivileged = {

@@ -153,6 +153,12 @@ and Tart. Neither does anything useful until the owner has done the one-time ste
   and loopback addresses (olympus-sdk #394), and starts again. If the wipe or the pf check fails it registers no
   runner and says why in the log. Errors back off from 30 s to 5 min. The App key stays root-only; the runner user
   never sees it. Log: `/var/log/ci-runner.log`.
+- **Heartbeat** (olympus-sdk #392): `io.olympus.ci-runner-heartbeat`, a root LaunchDaemon that runs every 60 s and
+  pushes the gauges `ci_runner_daemon_up`, `ci_runner_runner_up`, `ci_runner_last_registration_timestamp_seconds` and
+  `ci_runner_last_wipe_ok` (resource attribute `host.name` = the LocalHostName) over OTLP/HTTP to
+  `d.server.ciRunner.heartbeat.endpoint` (the cluster collector on the tailnet). The last two come from the loop's
+  state file `/var/db/ci-runner/state` (root-only, no secrets). Only failed pushes are logged, in
+  `/var/log/ci-runner-heartbeat.log`. The cluster alerts on these (olympus-gitops, rule group `ci-runners-macos`).
 - **VM**: `io.olympus.server-vm`, a LaunchDaemon that runs `tart run --no-graphics --net-bridged=en0 mmini-01-vm`
   at boot with nobody logged in, KeepAlive, as the owner's account (see `system/darwin/server-linux-vm.nix` for why
   not root). Ubuntu 24.04 arm64 from `ghcr.io/cirruslabs/ubuntu:24.04`, 6 vCPU, 12 GiB, 150 GB. It starts only
@@ -253,6 +259,17 @@ error for the `_ghrunner` read, and no `jitconfig` in `ps` output. In the organi
 named `mmini-01-...` is in `olympus-ci`; a job with `runs-on: [self-hosted, macos-arm64]` runs, and afterwards that
 runner is gone and a new one has taken its place. Check the wipe after a job: `sudo ls -A /var/lib/ci-runner/home`
 shows only `tmp`.
+
+The heartbeat reaches the collector:
+
+```sh
+sudo launchctl print system/io.olympus.ci-runner-heartbeat | grep -E 'state|last exit code'
+sudo cat /var/db/ci-runner/state
+sudo cat /var/log/ci-runner-heartbeat.log
+```
+
+Expect `last exit code = 0`, `last_wipe_ok=1` and a `last_registration_timestamp`, and an empty log. In Grafana
+(Explore, Prometheus) `ci_runner_daemon_up{host_name="mmini-01"}` reads 1 within a minute.
 
 The VM is up, headless and bridged:
 
