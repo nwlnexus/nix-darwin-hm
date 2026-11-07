@@ -18,7 +18,18 @@
     d.server = {
       enable = true;
       tailscaleDaemon = false;
-      ciRunner.enable = true;
+      # Release-only runner (olympus-sdk #391, #394 F1b): the org runner group `olympus-release` admits only
+      # atlas-release.yml on main, so PR jobs can never land here and taint a release build. PR jobs use the minis.
+      ciRunner = {
+        enable = true;
+        group = "olympus-release";
+        labels = [
+          "self-hosted"
+          "macOS"
+          "ARM64"
+          "macos-release"
+        ];
+      };
       linuxVm = {
         enable = true;
         cpus = 8;
