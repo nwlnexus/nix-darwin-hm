@@ -117,27 +117,43 @@ tcc_protected() {
   return 1
 }
 
-# empty_dir DIR: remove everything inside DIR; fail if anything is left but a TCC-protected path or a directory that
-# only stays because one lives below it.
+# has_sunlnk PATH: macOS marks some system-created folders "system no unlink" (sunlnk); root cannot remove them and
+# a job cannot set the flag.
+has_sunlnk() {
+  case ",$(/usr/bin/stat -f %Sf "$1" 2>/dev/null)," in *,sunlnk,*) return 0 ;; esac
+  return 1
+}
+
+# no_files DIR: DIR holds directories only (nothing a job could leave behind).
+no_files() {
+  [ -z "$(find "$1" -mindepth 1 ! -type d -print -quit 2>/dev/null)" ]
+}
+
+# leftover_ok PATH: a path the wipe may leave: a TCC-protected container path; a file-free folder macOS recreates or
+# pins (cfprefsd's ~/Library/Preferences, sunlnk folders such as T/com.apple.trustd, seen on the minis); or a
+# folder whose every entry is one of those.
+leftover_ok() {
+  local p=$1 c n=0
+  tcc_protected "$p" && return 0
+  [ -d "$p" ] && [ ! -L "$p" ] || return 1
+  case "$p" in */Library/Preferences) no_files "$p" && return 0 ;; esac
+  has_sunlnk "$p" && no_files "$p" && return 0
+  while IFS= read -r -d '' c; do
+    n=$((n + 1))
+    leftover_ok "$c" || return 1
+  done < <(find "$p" -mindepth 1 -maxdepth 1 -print0 2>/dev/null)
+  [ "$n" -gt 0 ]
+}
+
+# empty_dir DIR: remove everything inside DIR; fail if anything is left that leftover_ok does not accept.
 empty_dir() {
-  local dir=$1 p q ok
-  local -a rest=() protected=() left=()
+  local dir=$1 p
+  local -a left=()
   [ -d "$dir" ] || return 0
   find "$dir" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
   while IFS= read -r -d '' p; do
-    if tcc_protected "$p"; then protected+=("$p"); else rest+=("$p"); fi
-  done < <(find "$dir" -mindepth 1 -print0 2>/dev/null)
-  for p in ${rest[@]+"${rest[@]}"}; do
-    ok=0
-    # cfprefsd recreates an empty ~/Library/Preferences as soon as it is removed (mmini-01); empty, it holds nothing.
-    case "$p" in */Library/Preferences) [ -d "$p" ] && [ -z "$(find "$p" -mindepth 1 -print -quit 2>/dev/null)" ] && ok=1 ;; esac
-    if [ "$ok" = 0 ] && [ -d "$p" ]; then
-      for q in ${protected[@]+"${protected[@]}"}; do
-        case "$q" in "$p"/*) ok=1 && break ;; esac
-      done
-    fi
-    [ "$ok" = 1 ] || left+=("$p")
-  done
+    leftover_ok "$p" || left+=("$p")
+  done < <(find "$dir" -mindepth 1 -maxdepth 1 -print0 2>/dev/null)
   if [ "${#left[@]}" -gt 0 ]; then
     log "wipe: could not remove: ${left[*]}"
     return 1
