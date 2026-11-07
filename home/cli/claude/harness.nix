@@ -71,7 +71,7 @@ let
       removeHookCommands = map (hookPath dir) legacyHooks;
     };
   pluginSpecJson = dir: pkgs.writeText "claude-plugins.json" (builtins.toJSON (pluginSpec dir));
-  # Tool names of the plugin's memory server (design P6/P7), allowed like the nix `memory` server's.
+  # Tool names of the plugin's memory server (design P6/P7), allowed for headless sessions.
   privateAllow = lib.optionals (pcfg.private.dirs != [ ]) [
     "mcp__plugin_olympus-memory_memory__list_recent"
     "mcp__plugin_olympus-memory_memory__search"
@@ -277,9 +277,6 @@ in
           "Bash(git push -u origin *)"
           # HW8 (olympus-sdk#566): the long-task skill's registry check and step-0 PR/branch checks must run in
           # headless (-p) sessions too, where default mode refuses unmatched MCP tools and Bash.
-          "mcp__memory__list_recent"
-          "mcp__memory__search"
-          "mcp__memory__recall"
           "Bash(git fetch *)"
           "Bash(git ls-remote *)"
           "Bash(gh pr list *)"

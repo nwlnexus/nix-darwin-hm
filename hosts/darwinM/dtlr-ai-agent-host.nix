@@ -67,8 +67,6 @@
             };
             secondBrain.enable = false;
           };
-
-          d.memory.enable = false;
         };
     };
   };

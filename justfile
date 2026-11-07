@@ -155,11 +155,6 @@ check-darwin host="nwl-mstudio" ref="origin/main":
     diff -u <(just darwin-snapshot {{ host }} {{ ref }}) <(just darwin-snapshot {{ host }}) \
       && echo "darwin {{ host }}: unchanged vs {{ ref }}"
 
-# Behaviour tests for the memory-gateway activation scripts (temp copies of settings files, fake `op`; no nix needed).
-test-memory-wire:
-    bash tests/memory-wire.sh
-    bash tests/memory-fetch-secrets.sh
-
 # Behaviour tests for the script that removes the old session-contract block from CLAUDE.md (temp files only; no nix needed).
 test-claude-contract:
     bash tests/claude-contract.sh

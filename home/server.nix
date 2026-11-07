@@ -26,10 +26,6 @@ in
 
     assertions = [
       {
-        assertion = !config.d.memory.enable;
-        message = "d.server: the memory-gateway client (d.memory) is personal; leave it off on a server.";
-      }
-      {
         assertion = !(config.d.agentHost.enable or false);
         message = "d.server: the agent-host layer runs as LaunchAgents, which need a GUI session; a server runs only LaunchDaemons.";
       }

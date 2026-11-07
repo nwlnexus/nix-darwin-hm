@@ -9,8 +9,6 @@
 #   home/linux-shell.nix);
 # - git: no work include (`gitdir:projects/work/` and the work remote patterns; home/cli/git);
 # - ssh: no work GitHub/GitLab alias, no dtlr switch or bastion blocks (home/ssh_config.nix);
-# - memory: nothing changes. The default routes still map ~/projects/work to `none` (fail closed); no work
-#   route is added here.
 { config, lib, ... }:
 let
   cfg = config.d.personalOnly;

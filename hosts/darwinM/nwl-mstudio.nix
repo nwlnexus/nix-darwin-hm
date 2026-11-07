@@ -41,13 +41,8 @@ in
           # Memory comes from the olympus-memory plugin (olympus-sdk#753): ~/.claude declares
           # the private olympus-private marketplace and enables olympus-memory; its
           # /olympus-memory:setup writes ~/.config/memory (key field `nwl-mstudio-default` in the
-          # 1Password item memory-gateway-keys, vault Dev). The nix memory module is off and
-          # cleanup removes its hook entries and `memory` MCP entry; key files stay.
+          # 1Password item memory-gateway-keys, vault Dev).
           d.claudeHarness.plugins.private.enable = true;
-          d.memory = {
-            enable = false;
-            cleanup = true;
-          };
         };
     };
   };
