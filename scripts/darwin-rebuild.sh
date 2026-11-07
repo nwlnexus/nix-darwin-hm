@@ -3,8 +3,9 @@
 # darwin-rebuild.sh
 #
 # Host-portable wrapper around `darwin-rebuild` that works whether this repo
-# lives on the boot volume (laptop) or on an external drive (the desktop
-# hosts, where ~/projects is a symlink to e.g. /Volumes/REALTEK/projects).
+# lives on the boot volume or on an external drive (a host where ~/projects
+# is a symlink to a volume, as /Volumes/REALTEK/projects was on the retired
+# NWL-MMINI; the current hosts keep ~/projects on the boot volume).
 #
 #   ./scripts/darwin-rebuild.sh switch [host] [extra darwin-rebuild args...]
 #   ./scripts/darwin-rebuild.sh build  [host]
@@ -16,7 +17,7 @@
 # bare path inside a git repo through its libgit2 `git+file://` fetcher, and
 # libgit2 refuses to open a repository whose owner it does not recognise:
 #
-#   error: opening Git repository "/Volumes/REALTEK/projects/personal/nix-darwin-hm":
+#   error: opening Git repository "/Volumes/<volume>/projects/personal/nix-darwin-hm":
 #          repository path ... is not owned by current user (libgit2 error code = 7)
 #
 # External drives are mounted `noowners` on macOS (confirm with

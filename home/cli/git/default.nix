@@ -176,9 +176,9 @@ in
       ];
 
       # NOTE: the `gitdir:` patterns are deliberately written WITHOUT a `~/`
-      # prefix. `~/projects` is a symlink to an external volume on this host
-      # (/Volumes/REALTEK/projects), and git matches `gitdir:` against the
-      # path as it was traversed. A `gitdir:~/projects/work/` pattern
+      # prefix. `~/projects` can be a symlink to an external volume (it was
+      # /Volumes/REALTEK/projects on the retired NWL-MMINI), and git matches
+      # `gitdir:` against the path as it was traversed. A `gitdir:~/projects/work/` pattern
       # therefore matches only when you reach the repo through the symlink,
       # and silently fails for anything that resolves the real path first —
       # IDEs, `git -C /Volumes/...`, and agent harnesses. The repo then falls
