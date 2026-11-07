@@ -13,8 +13,11 @@ fmt:
 # where ~/projects symlinks to /Volumes/<drive>/projects). See
 # scripts/darwin-rebuild.sh for why a bare `sudo darwin-rebuild switch` fails
 # on the external-drive hosts.
+# `switch` evaluates as root (sudo), and root has no ssh key, so it cannot
+# fetch the private `olympus-sdk` input (git+ssh). Building first as your user
+# puts the locked input in the store, so the root evaluation finds it there.
 # Rebuild and activate this host. Override the host: `just switch NWL-MBM2`.
-switch host="":
+switch host="": (build host)
     ./scripts/darwin-rebuild.sh switch {{ host }}
 
 # Uses the same flake reference as `just switch`, so it genuinely warms the
@@ -23,8 +26,8 @@ switch host="":
 build host="":
     ./scripts/darwin-rebuild.sh build {{ host }}
 
-# Dry-run: build this host and report what would change (needs sudo).
-check host="":
+# Dry-run: build this host and report what would change (builds as you first, then needs sudo).
+check host="": (build host)
     ./scripts/darwin-rebuild.sh check {{ host }}
 
 # Let ROOT's git open this repo, so `sudo darwin-rebuild switch --flake .`
