@@ -91,6 +91,8 @@ tcc_protected() {
   case "$1" in
   *"/Library/Containers" | *"/Library/Containers/"* | *"/Library/Group Containers" | *"/Library/Group Containers/"*) return 0 ;;
   *"/Library/Daemon Containers" | *"/Library/Daemon Containers/"* | *containermanagerd*) return 0 ;;
+  # containermanagerd's own bookkeeping (boot.txt, mcm_migration_status.plist); root gets EPERM on it (mmini-01).
+  *"/Library/ContainerManager" | *"/Library/ContainerManager/"*) return 0 ;;
   esac
   return 1
 }
@@ -107,7 +109,9 @@ empty_dir() {
   done < <(find "$dir" -mindepth 1 -print0 2>/dev/null)
   for p in ${rest[@]+"${rest[@]}"}; do
     ok=0
-    if [ -d "$p" ]; then
+    # cfprefsd recreates an empty ~/Library/Preferences as soon as it is removed (mmini-01); empty, it holds nothing.
+    case "$p" in */Library/Preferences) [ -d "$p" ] && [ -z "$(find "$p" -mindepth 1 -print -quit 2>/dev/null)" ] && ok=1 ;; esac
+    if [ "$ok" = 0 ] && [ -d "$p" ]; then
       for q in ${protected[@]+"${protected[@]}"}; do
         case "$q" in "$p"/*) ok=1 && break ;; esac
       done
