@@ -667,11 +667,11 @@ in
         lib.filter (l: lib.hasInfix "100.101.102.103" l || lib.hasInfix "inet6" l) (
           lib.splitString "\n" c.d.server.ciRunner.networkIsolation.rules
         );
-      allV6 =
-        lib.filter (lib.hasInfix "inet6") (
-          lib.splitString "\n"
-            (with' { d.server.ciRunner.networkIsolation.blockIPv6 = true; }).d.server.ciRunner.networkIsolation.rules
-        );
+      allV6 = lib.filter (lib.hasInfix "inet6") (
+        lib.splitString "\n"
+          (with' { d.server.ciRunner.networkIsolation.blockIPv6 = true; })
+          .d.server.ciRunner.networkIsolation.rules
+      );
     };
     expected = {
       off = "";
