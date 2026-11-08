@@ -58,6 +58,8 @@ The 2026-11-08 run imported an untracked proposal from the /brain checkout, `raw
 | 18:25 | claim-verifier on checks 1-3 (second-brain#26 at b908cd3) | - | `VERDICT: PASS` | b908cd3 |
 | 18:30 | nix-darwin-hm `nix eval --impure --json --expr 'import ./tests { }'` | 0 | `[]`; with the override reverted `[{"expected":[],"name":"testNoUnitReferencesUserborn","result":["suid-sgid-wrappers"]}]` | nix-darwin-hm#182 |
 | 18:31 | gitnexus `detect_changes` nix-darwin-hm unstaged | - | `changed_count 0, changed_files 2, risk_level low` (nix files carry no indexed symbols) | nix-darwin-hm#182 |
+| 18:52 | `systemctl --user start memory-compile` after second-brain#26 | 1 | `imported as "Auto-memory (feedback): feedback-automerge-all-repos (f61916bf)"` (fix works) but `duplicate title 'Compile draft 2026-11-08 Olympus SDK'` on the run's own drafts (rule 4b regression) | second-brain#26 |
+| 18:58 | second-brain#27: rule 4b only with a wiki page or ingested source in the group; draft titles carry the counter; `node --test …` 22/22, `test-lint` ✓ | 0 | `ℹ pass 22` `ℹ fail 0` | second-brain#27 |
 
 ## Decisions
 
@@ -66,6 +68,7 @@ The 2026-11-08 run imported an untracked proposal from the /brain checkout, `raw
 
 - 2026-11-08: Root cause also covers notes 44565600 and 17c6afb0 (revisions colliding with ingested titles); the import simulation renamed all three.
 - 2026-11-08: Userborn (part 2) is harmless engine noise caused by upstream's unconditional After=userborn.service on suid-sgid-wrappers; fixed in nix-darwin-hm#182 with mkOverride 40 (upstream uses mkForce).
+- 2026-11-08: Rule 4b narrowed (second-brain#27) after it rejected a run's own same-titled compile drafts; pending notes are never linked.
 
 ## Blocked-on
 
@@ -73,4 +76,4 @@ The 2026-11-08 run imported an untracked proposal from the /brain checkout, `raw
 
 ## Next
 
-1. Merge second-brain#26 (progress file moves to nix-darwin-hm#182's branch); run `systemctl --user start memory-compile`; merge nix-darwin-hm#182; owner runs the host switch.
+1. Merge second-brain#27 after verifier PASS; re-run `systemctl --user start memory-compile`; merge nix-darwin-hm#182; owner runs the host switch.
