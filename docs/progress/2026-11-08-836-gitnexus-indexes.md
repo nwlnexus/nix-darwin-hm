@@ -4,7 +4,7 @@
 - **Branch / worktree:** `chore/836-gitnexus-indexes` in `~/projects/personal/.worktrees/<repo>-836` (nix-darwin-hm, olympus-gitops, olympus-infra, olympus-tailnet); this file lives on the nix-darwin-hm branch
 - **Session:** `personal-olympus-sdk-836` on `ai-agent-host`; registry id `b6c508d2-5263-4e0c-bb22-5f83e9f9af80`
 - **Started:** 2026-11-08 16:30 local · **Turn cap:** 60
-- **Draft PRs:** olympus-gitops#248, olympus-infra#130, olympus-tailnet#16, nix-darwin-hm: not yet
+- **Draft PRs:** olympus-gitops#248, olympus-infra#130, olympus-tailnet#16, nix-darwin-hm#179
 
 ## Goal
 
@@ -50,6 +50,9 @@ Run from `~/projects/personal`.
 | 16:55 | `nix eval ...ai-agent-host...gitnexusSetup.data` | 0 | `for repo in /home/nwilliams-lucas/projects/personal/olympus-sdk /home/nwilliams-lucas/projects/personal/nix-darwin-hm; do` | |
 | 16:55 | same for `dtlr-ai-agent-host` (work-only) | 0 | `for repo in ; do` | |
 | 16:56 | `nix shell ... -c just test` | 0 | `[]` | |
+| 17:00 | commit in worktree (index present), `sleep 15; git status --short; gitnexus status` | 0 | empty status; `Status: ✅ up-to-date` at `d1b7ae9` | d1b7ae9 |
+| 17:05 | tailnet Validate ACL failed: `all actions must be pinned to a full-length commit SHA`; pinned in 4fc40b6 | - | rerun `Validate ACL pass` | tailnet 4fc40b6 |
+| 17:15 | `gh pr checks` gitops#248, infra#130, tailnet#16, nix-darwin-hm#179 | 0 | `validate pass` x3, `Validate ACL pass` | |
 
 ## Decisions
 
@@ -64,4 +67,4 @@ Run from `~/projects/personal`.
 
 ## Next
 
-1. Commit step 4/5 in nix-darwin-hm (no-churn check in the worktree index), push, open PR, verifier, ready + automerge on all four PRs.
+1. Verifier on the ready claim; then remove this file, ready + automerge label on all four PRs; after merge pull main in each repo and run checks 1-3 there.
