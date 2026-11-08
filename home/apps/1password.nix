@@ -20,41 +20,44 @@ let
   withToken = s: s // { serviceAccountTokenCommand = tokenCommand (s.account or null); };
   opSecrets = mapAttrs (_: withToken) (
     filterAttrs (_: s: cfg.allowedAccounts == null || elem (s.account or null) cfg.allowedAccounts) (
-      removeAttrs {
-        gitlab-work = {
-          type = "sshKey";
-          account = "my.1password.com";
-          source = "op://Dev/44adgxe36ozbj2jyhwg3dfdyui";
-          dest = "${config.home.homeDirectory}/.ssh/gitlab-work-gl";
-          writePublicKey = true;
-        };
-        github-personal = {
-          type = "sshKey";
-          account = "my.1password.com";
-          source = "op://Dev/ta7qkekssx6z5v2f27bksaotzi";
-          dest = "${config.home.homeDirectory}/.ssh/id_ed25519";
-          writePublicKey = true;
-          # No per-secret overrides — inherits module-level account + token.
-        };
-        personal-env = {
-          account = "my.1password.com";
-          template = ../secrets/personal-env.tpl;
-          dest = "${config.home.homeDirectory}/projects/personal/.env";
-          mode = "0600";
-        };
-        work-env = {
-          account = "dtlrinc.1password.com";
-          template = ../secrets/work-env.tpl;
-          dest = "${config.home.homeDirectory}/projects/work/.env";
-          mode = "0600";
-        };
-        op-connect-env = {
-          account = "my.1password.com";
-          template = ../secrets/op-connect.tpl;
-          dest = "${config.home.homeDirectory}/projects/personal/.op-connect";
-          mode = "0600";
-        };
-      } cfg.excludeSecrets
+      removeAttrs (
+        {
+          gitlab-work = {
+            type = "sshKey";
+            account = "my.1password.com";
+            source = "op://Dev/44adgxe36ozbj2jyhwg3dfdyui";
+            dest = "${config.home.homeDirectory}/.ssh/gitlab-work-gl";
+            writePublicKey = true;
+          };
+          github-personal = {
+            type = "sshKey";
+            account = "my.1password.com";
+            source = "op://Dev/ta7qkekssx6z5v2f27bksaotzi";
+            dest = "${config.home.homeDirectory}/.ssh/id_ed25519";
+            writePublicKey = true;
+            # No per-secret overrides — inherits module-level account + token.
+          };
+          personal-env = {
+            account = "my.1password.com";
+            template = ../secrets/personal-env.tpl;
+            dest = "${config.home.homeDirectory}/projects/personal/.env";
+            mode = "0600";
+          };
+          work-env = {
+            account = "dtlrinc.1password.com";
+            template = ../secrets/work-env.tpl;
+            dest = "${config.home.homeDirectory}/projects/work/.env";
+            mode = "0600";
+          };
+          op-connect-env = {
+            account = "my.1password.com";
+            template = ../secrets/op-connect.tpl;
+            dest = "${config.home.homeDirectory}/projects/personal/.op-connect";
+            mode = "0600";
+          };
+        }
+        // cfg.extraSecrets
+      ) cfg.excludeSecrets
     )
   );
 in
@@ -113,6 +116,13 @@ in
     excludeSecrets = mkOption {
       type = types.listOf types.str;
       default = [ ];
+    };
+
+    # Secrets other modules add (same shape as op-secrets.secrets entries; they get the account's token and the
+    # allowedAccounts filter like the ones above). home/agent-host/jev-router.nix adds its env file here.
+    extraSecrets = mkOption {
+      type = types.attrsOf types.attrs;
+      default = { };
     };
 
     # Accounts op-secrets may read from on this host; null = every account. A work-only host

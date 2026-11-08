@@ -66,3 +66,9 @@ jobs:
           just test-claude-agent-session;
           just test-second-brain-sync;
           just test-work-only-private-input'
+
+      # The packaged jev-router against local fakes (olympus-sdk#647): no Jev, no Anthropic, no key.
+      - name: jev-router behaviour tests
+        run: >-
+          nix shell --inputs-from . nixpkgs#just nixpkgs#jq nixpkgs#python3 nixpkgs#curl nixpkgs#git -c
+          just test-jev-router
