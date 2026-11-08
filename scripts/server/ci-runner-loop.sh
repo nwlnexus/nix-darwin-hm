@@ -130,13 +130,14 @@ no_files() {
 }
 
 # leftover_ok PATH: a path the wipe may leave: a TCC-protected container path; a file-free folder macOS recreates or
-# pins (cfprefsd's ~/Library/Preferences, sunlnk folders such as T/com.apple.trustd, seen on the minis); or a
+# pins (cfprefsd's ~/Library/Preferences, T/TemporaryItems on data-hub, sunlnk folders such as T/com.apple.trustd,
+# seen on the minis); or a
 # folder whose every entry is one of those.
 leftover_ok() {
   local p=$1 c n=0
   tcc_protected "$p" && return 0
   [ -d "$p" ] && [ ! -L "$p" ] || return 1
-  case "$p" in */Library/Preferences) no_files "$p" && return 0 ;; esac
+  case "$p" in */Library/Preferences | */T/TemporaryItems) no_files "$p" && return 0 ;; esac
   has_sunlnk "$p" && no_files "$p" && return 0
   while IFS= read -r -d '' c; do
     n=$((n + 1))
