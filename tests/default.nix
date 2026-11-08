@@ -17,6 +17,7 @@ let
     ./linuxbrew.nix
     ./claude-harness.nix
     ./server.nix
+    ./jev-router.nix
   ];
 in
 lib.debug.runTests (lib.foldl' (acc: f: acc // import f { inherit flake lib; }) { } suites)

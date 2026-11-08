@@ -12,7 +12,10 @@
 # Design: nwlnexus/olympus-sdk docs/superpowers/specs/2026-10-26-agent-harness-knowledge-and-hosts-design.md (H17b).
 #
 # Test hooks (environment): AGENT_SESSION_CLAUDE (command to run, default "claude"), AGENT_SESSION_PROJECTS
-# (default ~/projects), AGENT_SESSION_DRY_RUN=1 (print the tmux command instead of running it).
+# (default ~/projects), AGENT_SESSION_DRY_RUN=1 (print the tmux command instead of running it),
+# AGENT_SESSION_ROUTE_ENV / AGENT_SESSION_ROUTE_ACCOUNT (set by nix where jev-router runs, olympus-sdk#647: for that
+# account the command gets the KEY=value lines `jev-route-env <dir>` prints, so an allowlisted repo is routed through
+# the router while it is up; empty output keeps the session's static model).
 
 per_account="${AGENT_SESSION_PER_ACCOUNT:-0}"
 claude_cmd="${AGENT_SESSION_CLAUDE:-claude}"
@@ -100,6 +103,22 @@ fi
 cmd=""
 if [ "$per_account" = 1 ]; then
   cmd="CLAUDE_CONFIG_DIR=$HOME/.claude-$account "
+fi
+if [ -n "${AGENT_SESSION_ROUTE_ENV:-}" ] && [ "$account" = "${AGENT_SESSION_ROUTE_ACCOUNT:-}" ]; then
+  while IFS= read -r kv; do
+    # Only plain KEY=value pairs: the result goes into a shell string.
+    case "$kv" in
+      *=*) ;;
+      *) continue ;;
+    esac
+    case "${kv%%=*}" in
+      '' | *[!A-Z0-9_]*) continue ;;
+    esac
+    case "${kv#*=}" in
+      *[!A-Za-z0-9:/._-]*) continue ;;
+    esac
+    cmd="${cmd}$kv "
+  done < <("$AGENT_SESSION_ROUTE_ENV" "$dir" 2>/dev/null || true)
 fi
 cmd="${cmd}$claude_cmd --remote-control $name --name $name"
 for arg in "$@"; do

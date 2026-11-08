@@ -43,6 +43,11 @@
         goalRunner.enable = true;
       };
 
+      # jev-router (olympus-sdk#647, home/agent-host/jev-router.nix): Jev picks a model tier per human turn for
+      # personal sessions in the allowlisted public repos. Shadow mode (the default): decisions are logged and
+      # shipped, every request still goes to the account's default model.
+      d.agentHost.jevRouter.enable = true;
+
       # Picks this host's entry of hostContainment in the autoMode source (home/cli/claude/harness.nix,
       # olympus-sdk#576 layer 2).
       d.claudeHarness.settings.autoModeHost = "ai-agent-host";

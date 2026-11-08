@@ -66,6 +66,8 @@ in
     expected = [
       "github-personal"
       "gitlab-work"
+      # home/agent-host/jev-router.nix (olympus-sdk#647), ai-agent-host only.
+      "jev-router-env"
       "op-connect-env"
       "personal-env"
     ];
