@@ -187,6 +187,8 @@ shipit() { # log
 }
 log="$tmp/ship.log"
 cat "$tmp/main/router.log" "$tmp/slowr/router.log" >"$log"
+# A route the router decided by its own rules (a Claude Code side call: no Jev call).
+printf '%s\n' '{"ts":"2026-11-08T00:00:00.000Z","event":"route","req":99,"session":"aaaaaaaaaaaa","tier":"side","reason":"side-call","model":"claude-haiku-5-5","kind":"auxiliary","upstream":"api.anthropic.com","jev":null}' >>"$log"
 routes="$(grep -c '"event":"route"' "$log")"
 records() { jq -s '[.[].body.resourceLogs[].scopeLogs[].logRecords[]] | length' "$tmp/otlp.jsonl"; }
 check "shipper: first run exits 0" shipit "$log"
@@ -194,6 +196,9 @@ check "shipper: one record per route line ($routes)" [ "$(records)" = "$routes" 
 check "shipper: service.name=jev-router" \
   [ "$(jq -r '.body.resourceLogs[0].resource.attributes[] | select(.key == "service.name") | .value.stringValue' "$tmp/otlp.jsonl" | sort -u)" = jev-router ]
 check "shipper: no canary in OTLP" bash -c "! grep -q -e '$canary_a' -e '$canary_b' '$tmp/otlp.jsonl'"
+classifiers() { jq -r '.body.resourceLogs[].scopeLogs[].logRecords[].attributes[] | select(.key == "classifier") | .value.stringValue' "$tmp/otlp.jsonl" | sort -u | tr '\n' ' '; }
+check "shipper: a rule-decided route (side call) is classifier=rules" bash -c "jq -c '.body.resourceLogs[].scopeLogs[].logRecords[] | select(any(.attributes[]; .key == \"reason\" and .value.stringValue == \"side-call\")) | .attributes[] | select(.key == \"classifier\") | .value.stringValue' '$tmp/otlp.jsonl' | grep -qx '\"rules\"'"
+check "shipper: no record is labelled classifier=local (that name is the dispatch classifier)" bash -c "! grep -qw local <<<'$(classifiers)'"
 check "shipper: the timeout is shipped as jev.error_kind=timeout" grep -q '"key": "jev.error_kind", "value": {"stringValue": "timeout"}' "$tmp/otlp.jsonl"
 shipit "$log"
 check "shipper: a restart ships nothing twice" [ "$(records)" = "$routes" ]
