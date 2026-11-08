@@ -68,4 +68,20 @@ in
       false
     ];
   };
+  # Nothing may order on or pull in userborn.service: an ordering edge alone loads a not-found stub that the
+  # activation engine then tries to restart, logging an error on every switch (olympus-sdk#860).
+  testNoUnitReferencesUserborn = {
+    expr = lib.filter (
+      n:
+      lib.any (d: lib.elem "userborn.service" (sm.systemd.services.${n}.${d} or [ ])) [
+        "after"
+        "before"
+        "wants"
+        "requires"
+        "wantedBy"
+        "requiredBy"
+      ]
+    ) (lib.attrNames sm.systemd.services);
+    expected = [ ];
+  };
 }

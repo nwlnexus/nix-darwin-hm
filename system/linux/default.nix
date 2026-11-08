@@ -4,6 +4,7 @@
 # /dev/kvm access for mvmctl (./kvm.nix).
 {
   config,
+  lib,
   user,
   ...
 }:
@@ -16,6 +17,12 @@
   # Ubuntu owns users and groups. system-manager enables userborn by default,
   # which would rewrite /etc/passwd and /etc/group from its NixOS defaults.
   services.userborn.enable = false;
+  # Upstream's security-wrappers module orders suid-sgid-wrappers after userborn.service even when userborn is
+  # off (lib.mkForce, so a stronger priority is needed). That After= makes systemd load a not-found userborn.service
+  # stub, which the activation engine counts as present and tries to restart: "Unit userborn.service not found" on
+  # every switch (olympus-sdk#860; engine services.rs restart_userborn_if_exists). The wrappers need only the
+  # /run/wrappers mount; Ubuntu owns the users and groups they reference.
+  systemd.services.suid-sgid-wrappers.after = lib.mkOverride 40 [ "run-wrappers.mount" ];
 
   nix.settings = {
     experimental-features = [
