@@ -186,3 +186,13 @@ test-claude-agent-session:
 # Dry walk of install.sh (macOS bootstrap) with stubbed curl/sudo/scutil; no nix needed.
 test-install-sh:
     bash tests/install-sh.sh
+
+# The .githooks post-commit/post-merge/post-checkout/post-rewrite hooks do this on their own.
+# Refresh the GitNexus index at HEAD (index-only: never rewrites AGENTS.md or skills).
+gitnexus-index:
+    gitnexus analyze --index-only
+
+# Run only after a gitnexus upgrade changes the template, then commit the result.
+# Regenerate the managed GitNexus section in AGENTS.md without volatile counts.
+gitnexus-refresh-docs:
+    gitnexus analyze --force --no-stats --skip-skills

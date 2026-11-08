@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+# Refresh the GitNexus index (index-only, background). See scripts/git-hooks/gitnexus-refresh.sh.
+sh scripts/git-hooks/gitnexus-refresh.sh

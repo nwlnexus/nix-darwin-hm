@@ -5,6 +5,18 @@
   config,
   ...
 }:
+let
+  # Personal repos that carry a GitNexus index (olympus-sdk#836). Their committed post-commit/post-merge/
+  # post-checkout/post-rewrite hooks keep an existing index at HEAD, but only once one exists, so a fresh host
+  # never got one and sessions there met MUST rules for a missing index. gitnexusSetup below bootstraps each
+  # checkout that is present and not yet indexed. Never on a work-only host: these are personal repos.
+  gitnexusIndexedRepos = lib.optionals (!config.d.workOnly.enable) (
+    map (r: "${config.home.homeDirectory}/projects/personal/${r}") [
+      "olympus-sdk"
+      "nix-darwin-hm"
+    ]
+  );
+in
 {
   # The agent harness plugins (agent-harness@nwlnexus, olympus-memory@olympus-private on personal dirs) declared
   # in each Claude dir's settings.json; the agent-session tmux launcher.
@@ -82,7 +94,10 @@
   #   2. removes the hooks an earlier `gitnexus setup` registered (entries whose command mentions
   #      `gitnexus-hook`) and their scripts in ~/.claude/hooks/gitnexus;
   #   3. writes the MCP entry, even before the shim exists (a fresh host installs the mise global after the first
-  #      switch), always the shim, never npx. Same entry as home/agent-host writes per account.
+  #      switch), always the shim, never npx. Same entry as home/agent-host writes per account;
+  #   4. bootstraps the index of each repo in gitnexusIndexedRepos that is checked out but not indexed yet:
+  #      `analyze --index-only` (never rewrites CLAUDE.md/AGENTS.md/skills), detached so the switch does not
+  #      wait, log in $XDG_STATE_HOME/gitnexus/bootstrap-<repo>.log. Afterwards the repo's own hooks keep it at HEAD.
   # gitnexus is a mise global (npm:gitnexus, home/default.nix); the shim resolves its own node. Fail-soft throughout.
   home.activation.gitnexusSetup = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     GITNEXUS_BIN="${config.home.homeDirectory}/.local/share/mise/shims/gitnexus"
@@ -149,8 +164,29 @@
         rm -f "$TMP"
       fi
     }
+    gnx_bootstrap() {
+      # 4. index bootstrap for declared repos
+      [ -x "$GITNEXUS_BIN" ] || return 0
+      LOG_DIR="''${XDG_STATE_HOME:-${config.home.homeDirectory}/.local/state}/gitnexus"
+      for repo in ${lib.escapeShellArgs gitnexusIndexedRepos}; do
+        [ -e "$repo/.git" ] || continue
+        [ -f "$repo/.gitnexus/gitnexus.json" ] && continue
+        if [ -n "''${DRY_RUN:-}" ]; then
+          echo "gitnexusSetup: would index $repo (--index-only)"
+          continue
+        fi
+        mkdir -p "$LOG_DIR"
+        (
+          cd "$repo" || exit 0
+          PATH="${config.programs.mise.package}/bin:$PATH" nohup "$GITNEXUS_BIN" analyze --index-only \
+            > "$LOG_DIR/bootstrap-$(basename "$repo").log" 2>&1 &
+        ) > /dev/null 2>&1 < /dev/null
+        echo "gitnexusSetup: indexing $repo in the background"
+      done
+    }
     gnx_skills || echo "gitnexusSetup: skills step failed (continuing)" >&2
     gnx_unhook || echo "gitnexusSetup: hook removal failed (continuing)" >&2
     gnx_mcp || echo "gitnexusSetup: MCP entry failed (continuing)" >&2
+    gnx_bootstrap || echo "gitnexusSetup: index bootstrap failed (continuing)" >&2
   '';
 }
