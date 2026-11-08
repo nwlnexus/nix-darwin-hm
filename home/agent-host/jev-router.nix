@@ -267,34 +267,21 @@ let
 
   # Billing guard (olympus-sdk#647, Done-when 1). Credentials that would make Claude Code bill an API key instead
   # of the claude.ai plan.
-  forbidden = [
-    "ANTHROPIC_API_KEY"
-    "ANTHROPIC_AUTH_TOKEN"
-    "apiKeyHelper"
-  ];
   hc = config.d.claudeHarness;
-  managed = {
-    "d.claudeHarness.settings.extra" = lib.attrNames hc.settings.extra;
-    "d.claudeHarness.settings.extra.env" = lib.attrNames (hc.settings.extra.env or { });
-    "home.sessionVariables" = lib.attrNames config.home.sessionVariables;
-  }
-  // lib.mapAttrs' (
-    dir: env: lib.nameValuePair "d.claudeHarness.telemetry.env.${dir}" (lib.attrNames env)
-  ) hc.telemetry.env;
-  managedHits = lib.filterAttrs (_: names: lib.any (n: lib.elem n forbidden) names) managed;
-  unitEnv = lib.toList (config.systemd.user.services.jev-router.Service.Environment or [ ]);
-  unitHits = lib.filter (e: lib.any (n: lib.hasPrefix "${n}=" e) forbidden) unitEnv;
-  secretHits = lib.filter (n: lib.elem n forbidden) (lib.attrNames cfg.secretEnv);
-  allTargets = lib.concatLists (
-    lib.mapAttrsToList (
-      surface: targets:
-      lib.mapAttrsToList (name: t: t // { where = "surfaces.${surface}.${name}"; }) targets
-    ) routerConfig.surfaces
-  );
-  badAuth = lib.filter (t: (t.keyEnv or null) != null || (t.clientAuth or false) != true) allTargets;
-  badBetas = lib.filter (
-    t: lib.any (b: lib.hasInfix "oauth" (lib.toLower b)) (t.omitBetas or [ ])
-  ) allTargets;
+  # The billing guard (jev-billing-guard.nix): one message per broken rule, each turned into a failed assertion.
+  billingFailures = import ./jev-billing-guard.nix { inherit lib; } {
+    managed = {
+      "d.claudeHarness.settings.extra" = lib.attrNames hc.settings.extra;
+      "d.claudeHarness.settings.extra.env" = lib.attrNames (hc.settings.extra.env or { });
+      "home.sessionVariables" = lib.attrNames config.home.sessionVariables;
+    }
+    // lib.mapAttrs' (
+      dir: env: lib.nameValuePair "d.claudeHarness.telemetry.env.${dir}" (lib.attrNames env)
+    ) hc.telemetry.env;
+    unitEnv = lib.toList (config.systemd.user.services.jev-router.Service.Environment or [ ]);
+    secretEnv = cfg.secretEnv;
+    inherit (routerConfig) surfaces;
+  };
 in
 {
   options.d.agentHost.jevRouter = {
@@ -409,27 +396,11 @@ in
         assertion = accountCfg != null && !(lib.hasInfix "work" account);
         message = "d.agentHost.jevRouter.account must name a d.agentHost account, never a work account.";
       }
-      {
-        assertion = managedHits == { };
-        message = "jev-router billing guard: ${lib.concatStringsSep ", " forbidden} must not be set in managed Claude settings (found in ${lib.concatStringsSep ", " (lib.attrNames managedHits)}).";
-      }
-      {
-        assertion = unitHits == [ ] && secretHits == [ ];
-        message = "jev-router billing guard: the router unit must not get ${lib.concatStringsSep ", " forbidden} (Environment or secretEnv).";
-      }
-      {
-        assertion = badAuth == [ ];
-        message = "jev-router billing guard: every target must use the client's own login (clientAuth = true, no keyEnv): ${
-          lib.concatMapStringsSep ", " (t: t.where) badAuth
-        }.";
-      }
-      {
-        assertion = badBetas == [ ];
-        message = "jev-router billing guard: omitBetas must never drop the OAuth beta: ${
-          lib.concatMapStringsSep ", " (t: t.where) badBetas
-        }.";
-      }
-    ];
+    ]
+    ++ map (message: {
+      assertion = false;
+      inherit message;
+    }) billingFailures;
 
     home.packages = [ routeEnv ];
 
