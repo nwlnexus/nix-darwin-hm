@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# Branch checkouts only ($3 = 1) that actually move HEAD; file checkouts do not.
+[ "$3" = "1" ] && [ "$1" != "$2" ] || exit 0
+sh scripts/git-hooks/gitnexus-refresh.sh

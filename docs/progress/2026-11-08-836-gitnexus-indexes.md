@@ -30,8 +30,8 @@ Run from `~/projects/personal`.
 | 1 | Trial index-only build per repo, decide index vs remove claim | opus | main | done |
 | 2 | olympus-tailnet: issue templates, then replace block with a repo guide | opus | main | done (PR #16) |
 | 3 | olympus-gitops, olympus-infra: drop block + MUST rules, record why | opus | main | done (PR #248, #130) |
-| 4 | nix-darwin-hm: refresh script + .githooks post-*, justfile recipes, --no-stats block, hygiene section | opus | main | todo |
-| 5 | nix-darwin-hm: activation bootstraps declared repo indexes on every host | opus | main | todo |
+| 4 | nix-darwin-hm: refresh script + .githooks post-*, justfile recipes, --no-stats block, hygiene section | opus | main | done |
+| 5 | nix-darwin-hm: activation bootstraps declared repo indexes on every host | opus | main | done |
 | 6 | Registry and grep checks | haiku-level, run inline | main | todo |
 | 7 | claim-verifier, ready, automerge, pull main, no-churn check | sonnet (verifier) | subagent | todo |
 
@@ -46,10 +46,16 @@ Run from `~/projects/personal`.
 | 16:35 | same in agent-plugins | 0 | `83 nodes \| 82 edges \| 0 clusters \| 0 flows` | ae7fc41 |
 | 16:35 | same in olympus-memory | 0 | `150 nodes \| 231 edges \| 2 clusters \| 0 flows` (8 Function, 4 Route) | bc1223e |
 | 16:37 | `gitnexus clean -f` in the five small repos; `gitnexus list` | 0 | `olympus-sdk`, `nix-darwin-hm` | |
+| 16:50 | `gitnexus analyze --force --no-stats --skip-skills` (worktree) | 0 | AGENTS.md block updated, CLAUDE.md symlink kept (`CLAUDE.md -> AGENTS.md`) | |
+| 16:55 | `nix eval ...ai-agent-host...gitnexusSetup.data` | 0 | `for repo in /home/nwilliams-lucas/projects/personal/olympus-sdk /home/nwilliams-lucas/projects/personal/nix-darwin-hm; do` | |
+| 16:55 | same for `dtlr-ai-agent-host` (work-only) | 0 | `for repo in ; do` | |
+| 16:56 | `nix shell ... -c just test` | 0 | `[]` | |
 
 ## Decisions
 
 - 2026-11-08: index nix-darwin-hm (75 functions, 29 flows in its TypeScript tooling) and keep olympus-sdk. Do not index olympus-gitops, olympus-infra, olympus-tailnet (YAML/Ansible/HuJSON: GitNexus finds 0 to 2 code symbols), agent-plugins (shell and markdown: 0 symbols) or olympus-memory (8 functions). Remove the claim and MUST rules where present and say why in the repo docs. agent-plugins and olympus-memory never claimed an index, so they get no change.
+- 2026-11-08: nix-darwin-hm declares the indexed repos (olympus-sdk, nix-darwin-hm under ~/projects/personal) and gitnexusSetup bootstraps a missing index with `--index-only` in the background on every non-work-only host. Why: the refresh hooks only keep an existing index current, so without a bootstrap a fresh host repeats the #836 problem (MUST rules, no index). Work-only hosts get an empty list.
+- 2026-11-08: the `gitnexus setup` hook stripping in gnx_unhook stays as is.
 - 2026-11-08: olympus-sdk needs no change for #836: it is indexed and already has the husky refresh hooks and `gitnexus:index` / `gitnexus:refresh-docs`.
 
 ## Blocked-on
@@ -58,4 +64,4 @@ Run from `~/projects/personal`.
 
 ## Next
 
-1. nix-darwin-hm step 4 (hooks, recipes, --no-stats block, hygiene section) in this worktree.
+1. Commit step 4/5 in nix-darwin-hm (no-churn check in the worktree index), push, open PR, verifier, ready + automerge on all four PRs.

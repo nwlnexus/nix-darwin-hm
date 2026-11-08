@@ -300,33 +300,41 @@ For in-depth architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
 - Use relative paths from repo root when referencing files
 - Check `just` commands for project-specific tasks
 
+## GitNexus index hygiene
+
+The index (`.gitnexus/`, untracked) covers the TypeScript and shell tooling under `scripts/` and `home/`; Nix files are not parsed into symbols. It is refreshed automatically by the `.githooks/` `post-commit` / `post-merge` / `post-checkout` / `post-rewrite` hooks (`scripts/git-hooks/gitnexus-refresh.sh`): index-only, in the background, logged to `.gitnexus/refresh.log`. If it still reports itself behind, run `just gitnexus-index`.
+
+- Do NOT run a bare `gitnexus analyze` (or the managed section's `node .gitnexus/run.cjs analyze`): it rewrites `AGENTS.md` (and `CLAUDE.md`, a symlink to it) and installs `.claude/skills/gitnexus-*` that duplicate the user-level copies. Use `just gitnexus-index`.
+- Fresh clone (no `.gitnexus/` yet): the hooks need `core.hooksPath = .githooks`, which the home-manager activation sets for this repo (or run `git config core.hooksPath .githooks`); the same activation bootstraps the index in the background. By hand: `just gitnexus-index`. Ignore the bootstrap hint inside the managed section, which runs a bare `analyze`. If a bare run already rewrote the docs, `git restore AGENTS.md .claude/skills` and re-index with `just gitnexus-index`.
+- `just gitnexus-refresh-docs` regenerates the managed `gitnexus:start`…`gitnexus:end` section without volatile counts (`--no-stats`, `--skip-skills`); run it only after a gitnexus upgrade changes the template, and commit the result. Never hand-edit between the markers.
+
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **nix-darwin-hm**. Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **nix-darwin-hm**.
 
-> Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
+> Index stale? Run `node .gitnexus/run.cjs analyze --index-only` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? Bootstrap with `npx`, `bunx`, or `pnpm dlx` — e.g. `bunx gitnexus@latest analyze` (npm 11 npx crash; #1939).
 
 ## Always Do
 
-- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
-- **MUST run `detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows. For regression review, compare against the default branch: `detect_changes({scope: "compare", base_ref: "main"})`.
-- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
-- When exploring unfamiliar code, use `query({search_query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
-- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `context({name: "symbolName"})`.
+- **MUST run impact before editing.** Use `impact({target: "symbolName", direction: "upstream"})` or `node .gitnexus/run.cjs impact "symbolName" --direction upstream --repo .`; report callers, processes, and risk. Never substitute grep for graph analysis.
+- **MUST analyze graph changes before committing.** Use `detect_changes({scope: "all"})` (MCP) or `node .gitnexus/run.cjs detect-changes --scope all --repo .` (CLI fallback). `partial: true` or `truncated: true` is not a clean check — a zero means unseen, not unaffected; re-run it. For regression review: `detect_changes({scope: "compare", base_ref: "main"})` or `node .gitnexus/run.cjs detect-changes --scope compare --base-ref "main" --repo .`.
+- MUST warn on HIGH/CRITICAL `risk` pre-edit; never use `riskSharedAxes` to waive a HIGH/CRITICAL `risk` warning. Compare File/symbol: MCP File omits axes; Graph-RAG expands File.
+- **MUST treat `risk: UNKNOWN` as unresolved, not as low.** An empty caller set is not evidence the symbol is unused — it can also mean the callers are not resolvable by the index (plain-object property access, dynamic dispatch, cross-language calls). `impact` pairs `UNKNOWN` with a `riskNote` saying so. Confirm with a text search before treating the symbol as safe to change or delete; do not proceed on the strength of a zero.
+- **MUST use `query({search_query: "concept"})` for concepts/flows, `context({name: "symbolName"})` for a named symbol, or `impact` for blast radius, on read-only callers, dependencies, imports, or execution flow.** Graph first; text search only for empty/`UNKNOWN`/literals.
 - For security review, `explain({target: "fileOrSymbol"})` lists taint findings (source→sink flows; needs `analyze --pdg`).
 
 ## Never Do
 
-- NEVER edit a function, class, or method without first running `impact` on it.
-- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
+- NEVER edit a function, class, or method before MCP/CLI impact analysis.
+- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis, and never read `UNKNOWN` as an all-clear — it means the walk could not answer, which is the one verdict that requires confirming by other means.
 - NEVER rename symbols with find-and-replace — use `rename` which understands the call graph.
-- NEVER commit changes without running `detect_changes()` to check affected scope.
+- NEVER commit before MCP/CLI graph change analysis.
 
 ## Resources
 
 | Resource | Use for |
-|----------|---------|
+| --- | --- |
 | `gitnexus://repo/nix-darwin-hm/context` | Codebase overview, check index freshness |
 | `gitnexus://repo/nix-darwin-hm/clusters` | All functional areas |
 | `gitnexus://repo/nix-darwin-hm/processes` | All execution flows |
