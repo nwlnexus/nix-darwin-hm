@@ -21,7 +21,7 @@
 | 1 | `node scripts/test-lint.mjs` | exit 0, names the duplicate-title rule | PASS | b908cd3 |
 | 2 | `node --test scripts/compile/test/*.test.mjs` | exit 0, title-collision test passes | PASS (22/22) | b908cd3 |
 | 3 | `node scripts/lint-brain.mjs` | exit 0 | PASS | b908cd3 |
-| 4 | `systemctl --user start memory-compile; systemctl --user is-failed memory-compile` (after merge) | exit 0; `inactive` | not run | |
+| 4 | `systemctl --user start memory-compile; systemctl --user is-failed memory-compile` (after merge) | exit 0; `inactive` | PASS: `start-exit=0`, `inactive`, `Result=success` | second-brain 676cc32 |
 | 5 | userborn: nix-darwin-hm fix + eval test merged, or explanation comment on #860 | link | PR nix-darwin-hm#182 open; host switch is the owner's | nix-darwin-hm fix/860-userborn-wrappers-order |
 
 ## Plan
@@ -60,6 +60,7 @@ The 2026-11-08 run imported an untracked proposal from the /brain checkout, `raw
 | 18:31 | gitnexus `detect_changes` nix-darwin-hm unstaged | - | `changed_count 0, changed_files 2, risk_level low` (nix files carry no indexed symbols) | nix-darwin-hm#182 |
 | 18:52 | `systemctl --user start memory-compile` after second-brain#26 | 1 | `imported as "Auto-memory (feedback): feedback-automerge-all-repos (f61916bf)"` (fix works) but `duplicate title 'Compile draft 2026-11-08 Olympus SDK'` on the run's own drafts (rule 4b regression) | second-brain#26 |
 | 18:58 | second-brain#27: rule 4b only with a wiki page or ingested source in the group; draft titles carry the counter; `node --test …` 22/22, `test-lint` ✓ | 0 | `ℹ pass 22` `ℹ fail 0` | second-brain#27 |
+| 19:00 | `systemctl --user start memory-compile` after second-brain#27 | 0 | `start-exit=0` `inactive`; `accepted: …` ×13; published second-brain#28 (lint pass, merged by automerge); `systemctl --user is-system-running` → `running` | second-brain 676cc32 |
 
 ## Decisions
 
@@ -76,4 +77,4 @@ The 2026-11-08 run imported an untracked proposal from the /brain checkout, `raw
 
 ## Next
 
-1. Merge second-brain#27 after verifier PASS; re-run `systemctl --user start memory-compile`; merge nix-darwin-hm#182; owner runs the host switch.
+1. Done: second-brain#27 merged, compile green. Remaining: verifier, remove this file, merge nix-darwin-hm#182; then re-run `systemctl --user start memory-compile`; merge nix-darwin-hm#182; owner runs the host switch.
