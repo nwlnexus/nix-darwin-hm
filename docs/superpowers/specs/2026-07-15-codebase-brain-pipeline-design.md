@@ -1,5 +1,7 @@
 # Codebase Brain Pipeline — Design Spec
 
+> **Superseded (2026-11-08).** The codebase-brain pipeline is retired, and its `scripts/codebase-brain/` job has been removed from this repo. The code-derived knowledge work now follows the code knowledge layer spec in `nwlnexus/olympus-sdk`: `docs/superpowers/specs/2026-11-08-code-knowledge-layer-design.md` (decision D16). Kept for history only; do not implement from this document.
+
 **Date:** 2026-07-15  
 **Status:** Accepted direction (openwiki Layer 1 adopted 2026-07-17)  
 **Scope:** Project 2 of the repomix/brain work. Closes the brain *destination* seam deferred from

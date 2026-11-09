@@ -1,5 +1,7 @@
 # Codebase Brain — OpenWiki Spike Design
 
+> **Superseded (2026-11-08).** The codebase-brain pipeline is retired, and its `scripts/codebase-brain/` job has been removed from this repo. The code-derived knowledge work now follows the code knowledge layer spec in `nwlnexus/olympus-sdk`: `docs/superpowers/specs/2026-11-08-code-knowledge-layer-design.md` (decision D16). Kept for history only; do not implement from this document.
+
 **Date:** 2026-07-17  
 **Status:** Accepted — **Path O adopted** (see [results](2026-07-17-codebase-brain-openwiki-spike-results.md); parent updated)  
 **Parent:** [2026-07-15-codebase-brain-pipeline-design.md](2026-07-15-codebase-brain-pipeline-design.md)  

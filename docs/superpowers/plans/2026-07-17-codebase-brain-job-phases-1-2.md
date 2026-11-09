@@ -1,5 +1,7 @@
 # Codebase Brain Job (Phases 1–2) Implementation Plan
 
+> **Superseded (2026-11-08).** The codebase-brain pipeline is retired, and its `scripts/codebase-brain/` job has been removed from this repo. The code-derived knowledge work now follows the code knowledge layer spec in `nwlnexus/olympus-sdk`: `docs/superpowers/specs/2026-11-08-code-knowledge-layer-design.md` (decision D16). Kept for history only; do not implement from this document.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the on-prem Job application that, for one allowlisted repo at a pinned sha, runs pack + gitnexus + syft (+ facets), publishes graph refs/tarball to R2 (phase 1), then runs openwiki (Anthropic) + syft inventory + OKF/nwl normalize + brain PR (phase 2).
