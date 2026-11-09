@@ -50,9 +50,7 @@ def attr(key, value):
 
 def classifier(jev):
     if not isinstance(jev, dict):
-        # Decided by the router's own rules (side call, subagent, sticky tier, tag...), with no Jev call. Not "local":
-        # that name is the dispatch point's local classifier (olympus-sdk config/routing-policy.yaml).
-        return "rules"
+        return "local"  # decided by the router's rules (side call, subagent, sticky, tag...), no Jev call
     return "jev" if jev.get("ok") else "fallback"
 
 
