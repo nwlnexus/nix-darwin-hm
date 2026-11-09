@@ -1,5 +1,7 @@
 # Codebase Brain — olympus-gitops Argo Checklist
 
+> **Superseded (2026-11-08).** The codebase-brain pipeline is retired, and its `scripts/codebase-brain/` job has been removed from this repo. The code-derived knowledge work now follows the code knowledge layer spec in `nwlnexus/olympus-sdk`: `docs/superpowers/specs/2026-11-08-code-knowledge-layer-design.md` (decision D16). Kept for history only; do not implement from this document.
+
 > **Audience:** cluster operator applying resources in **olympus-gitops** (not this repo).  
 > **Job source:** [`scripts/codebase-brain/`](../../../scripts/codebase-brain/) in `nix-darwin-hm`.  
 > **Design spec:** [`docs/superpowers/specs/2026-07-15-codebase-brain-pipeline-design.md`](../specs/2026-07-15-codebase-brain-pipeline-design.md)  
