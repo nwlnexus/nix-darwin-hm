@@ -24,7 +24,6 @@ in
     ./memory-compile.nix
     ./memory-wiki-sync.nix
     ./agent-jobs.nix
-    ./jev-router.nix
   ];
 
   options.d.agentHost = {

@@ -51,23 +51,6 @@ check "missing issue: exit 2" [ "$?" = 2 ]
 AGENT_SESSION_DRY_RUN=1 as personal nope 1 >/dev/null 2>&1
 check "missing repo dir: exit 1" [ "$?" = 1 ]
 
-# 4b. jev-router (olympus-sdk#647): the routed account gets what jev-route-env prints (unsafe lines dropped); other
-# accounts, and empty output (not allowlisted or router down), leave the command as it was.
-route="$tmp/route-env"
-cat >"$route" <<'SH'
-#!/bin/sh
-[ -n "${ROUTE_OFF:-}" ] && exit 0
-printf 'ANTHROPIC_BASE_URL=http://127.0.0.1:4000\nCLAUDE_CODE_GATEWAY_HINT_HEADERS=1\nBAD=$(touch x)\nlower=1\n'
-SH
-chmod +x "$route"
-routed() { AGENT_SESSION_DRY_RUN=1 AGENT_SESSION_PER_ACCOUNT=1 AGENT_SESSION_ROUTE_ENV="$route" AGENT_SESSION_ROUTE_ACCOUNT=personal as "$@"; }
-out="$(routed personal olympus-sdk 558)"
-check "routed: env before claude" [ "$out" = "tmux new -d -s personal-olympus-sdk-558 -c $tmp/projects/personal/olympus-sdk CLAUDE_CONFIG_DIR=$home_dir/.claude-personal ANTHROPIC_BASE_URL=http://127.0.0.1:4000 CLAUDE_CODE_GATEWAY_HINT_HEADERS=1 claude --remote-control personal-olympus-sdk-558 --name personal-olympus-sdk-558" ]
-out="$(ROUTE_OFF=1 routed personal olympus-sdk 558)"
-check "routed: nothing printed, command unchanged" [ "${out#*ANTHROPIC_BASE_URL}" = "$out" ]
-out="$(routed work app 7)"
-check "routed: other account untouched" [ "${out#*ANTHROPIC_BASE_URL}" = "$out" ]
-
 # 5. live: a real tmux session with the right name running a harmless command
 fake="$tmp/fake-claude"
 cat >"$fake" <<'SH'

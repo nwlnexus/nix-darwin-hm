@@ -43,7 +43,7 @@ Nix flakes with nix-darwin (macOS), NixOS, home-manager and system-manager (Linu
 Not loaded every turn: open the matching guide before changing that area.
 
 - [docs/agents/common-tasks.md](docs/agents/common-tasks.md): adding packages (user/system, Homebrew tap trust, 1Password), adding a host, migrating a Mac, settings, terminal/tmux, mvmctl microVMs, Rust build hygiene, updating dependencies.
-- [docs/agents/agent-hosts.md](docs/agents/agent-hosts.md): `home/agent-host`, `hosts/linux`, Remote Control, agent sessions, Claude plugin/settings wiring, `d.workOnly`, personal-only hosts, jev-router (olympus-sdk#647).
+- [docs/agents/agent-hosts.md](docs/agents/agent-hosts.md): `home/agent-host`, `hosts/linux`, Remote Control, agent sessions, Claude plugin/settings wiring, `d.workOnly`, personal-only hosts.
 - [docs/agents/server-hosts.md](docs/agents/server-hosts.md): `d.server` headless Mac servers.
 
 ## Rules
