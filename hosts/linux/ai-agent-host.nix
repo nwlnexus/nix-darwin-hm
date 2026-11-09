@@ -43,22 +43,6 @@
         goalRunner.enable = true;
       };
 
-      # jev-router (olympus-sdk#647, home/agent-host/jev-router.nix): Jev picks a model tier per human turn for
-      # personal sessions in the allowlisted repos. Owner decision 2026-11-08: routed (not shadow), for the public
-      # repos and the private ones alike; the decision log is the evaluation.
-      d.agentHost.jevRouter = {
-        enable = true;
-        shadow = false;
-        allowedRemotes = [
-          "github.com/nwlnexus/agent-plugins"
-          "github.com/nwlnexus/nix-darwin-hm"
-          "github.com/nwlnexus/olympus-infra"
-          "github.com/nwlnexus/olympus-sdk"
-          "github.com/nwlnexus/olympus-gitops"
-          "github.com/nwlnexus/olympus-tailnet"
-        ];
-      };
-
       # Picks this host's entry of hostContainment in the autoMode source (home/cli/claude/harness.nix,
       # olympus-sdk#576 layer 2).
       d.claudeHarness.settings.autoModeHost = "ai-agent-host";

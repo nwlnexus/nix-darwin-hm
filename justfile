@@ -183,10 +183,6 @@ test-work-only-private-input:
 test-claude-agent-session:
     bash tests/claude-agent-session.sh
 
-# jev-router (olympus-sdk#647): route-env, recall canary, forced Jev timeout and the log shipper against local fakes (needs nix, python3, curl, git, jq; offline apart from the npm tarball fetch).
-test-jev-router:
-    bash tests/jev-router.sh
-
 # Dry walk of install.sh (macOS bootstrap) with stubbed curl/sudo/scutil; no nix needed.
 test-install-sh:
     bash tests/install-sh.sh
