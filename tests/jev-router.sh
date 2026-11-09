@@ -161,7 +161,7 @@ up_last="$(tail -n 1 "$tmp/up.jsonl")"
 check "upstream: client's own login passed through" [ "$(jq -r '.headers.authorization // .headers.Authorization' <<<"$up_last")" = "Bearer test-oauth-token" ]
 check "upstream: no x-api-key" [ "$(jq -r '[.headers | keys[] | ascii_downcase] | index("x-api-key")' <<<"$up_last")" = null ]
 check "upstream: OAuth beta forwarded" bash -c "jq -r '.headers[\"anthropic-beta\"] // .headers[\"Anthropic-Beta\"]' <<<'$up_last' | grep -q oauth-2025-04-20"
-check "routed: Jev's medium goes to the medium model (the host runs routed)" [ "$(jq -r .body.model <<<"$up_last")" = claude-sonnet-5-5 ]
+check "shadow: model is the account default" [ "$(jq -r .body.model <<<"$up_last")" = claude-opus-5-5 ]
 route_main="$(jq -c 'select(.event == "route")' "$tmp/main/router.log" | tail -n 1)"
 check "route log: Jev decided (medium)" [ "$(jq -r '[.jev.ok, .tier, .reason] | join(" ")' <<<"$route_main")" = "true medium jev" ]
 

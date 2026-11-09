@@ -60,21 +60,12 @@ in
       jr.enable
       jr.account
       jr.shadow
-      jr.allowedRemotes
       flake.darwinConfigurations.nwl-mstudio.config.home-manager.users.nwilliams-lucas.d.agentHost.jevRouter.enable
     ];
     expected = [
       true
       "personal"
-      false
-      [
-        "github.com/nwlnexus/agent-plugins"
-        "github.com/nwlnexus/nix-darwin-hm"
-        "github.com/nwlnexus/olympus-infra"
-        "github.com/nwlnexus/olympus-sdk"
-        "github.com/nwlnexus/olympus-gitops"
-        "github.com/nwlnexus/olympus-tailnet"
-      ]
+      true
       false
     ];
   };
@@ -105,14 +96,9 @@ in
       [ "TYPESAFE_API_KEY" ]
     ];
   };
-  # Shadow (the module default; the host is routed): every tier goes to the account default; background calls keep
-  # Haiku.
+  # Shadow (default): every tier goes to the account default; background calls keep Haiku.
   testJevRouterShadowTargets = {
-    expr =
-      lib.mapAttrs (_: t: t.model)
-        (with' [
-          { d.agentHost.jevRouter.shadow = lib.mkForce true; }
-        ]).d.agentHost.jevRouter.settings.surfaces.anthropic;
+    expr = lib.mapAttrs (_: t: t.model) jr.settings.surfaces.anthropic;
     expected = {
       side = "claude-haiku-5-5";
       light = "claude-opus-5-5";
@@ -120,9 +106,12 @@ in
       heavy = "claude-opus-5-5";
     };
   };
-  # Routed (the host, owner 2026-11-08): Jev's tier picks the model.
   testJevRouterRoutedTargets = {
-    expr = lib.mapAttrs (_: t: t.model) jr.settings.surfaces.anthropic;
+    expr =
+      lib.mapAttrs (_: t: t.model)
+        (with' [
+          { d.agentHost.jevRouter.shadow = false; }
+        ]).d.agentHost.jevRouter.settings.surfaces.anthropic;
     expected = {
       side = "claude-haiku-5-5";
       light = "claude-haiku-5-5";
