@@ -37,7 +37,9 @@ let
     "raptor-mimosa.ts.net"
     "ssh.nwlnexus.net"
     # No MCP entry (activation scripts write mcpServers) for the memory gateway or the MCP portal
-    # (olympus-sdk#924). A claude.ai connector comes from the claude.ai account, not from this config.
+    # (olympus-sdk#924). Forward tripwires: nothing in this config writes either host today, on any host
+    # (the control included), so they guard against a future regression only. A claude.ai connector comes
+    # from the claude.ai account, not from this config.
     "memory.nwlnexus.io"
     "mcp.nwlnexus.io"
     "projects/personal/.env"
