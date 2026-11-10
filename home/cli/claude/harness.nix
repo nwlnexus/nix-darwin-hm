@@ -71,7 +71,8 @@ let
       removeHookCommands = map (hookPath dir) legacyHooks;
     };
   pluginSpecJson = dir: pkgs.writeText "claude-plugins.json" (builtins.toJSON (pluginSpec dir));
-  # Tool names of the plugin's memory server (design P6/P7), allowed for headless sessions.
+  # Tool names of the plugin's memory server (design P6/P7), allowed for headless sessions. Memory tools reached
+  # through an MCP portal (`mcp__<portal>__memory_<tool>`) are deliberately not allowed here (olympus-sdk#924).
   privateAllow = lib.optionals (pcfg.private.dirs != [ ]) [
     "mcp__plugin_olympus-memory_memory__list_recent"
     "mcp__plugin_olympus-memory_memory__search"
