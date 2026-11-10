@@ -10,7 +10,7 @@ Arguments: `$ARGUMENTS`
 
 ## Routing
 
-- `ingest` (no path) → process every file with frontmatter `status: new` under `raw/_inbox/` (candidates written by the mnemosyne capture pipeline).
+- `ingest` (no path) → process every file with frontmatter `status: new` under `raw/_inbox/` (proposals from `memory-wiki-sync` and compile drafts from `scripts/compile/compile.mjs`).
 - `ingest <path>` → ingest just that file/URL (may be outside `_inbox`).
 - anything else → treat `$ARGUMENTS` as a QUERY; answer from `wiki/`; if the wiki is thin, say so and suggest a source to ingest rather than inventing an answer.
 
