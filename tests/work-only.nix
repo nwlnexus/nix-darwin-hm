@@ -42,6 +42,9 @@ let
     # from the claude.ai account, not from this config.
     "memory.nwlnexus.io"
     "mcp.nwlnexus.io"
+    # The hosts MCP portal (olympus-sdk#929, olympus-infra#140): the olympus-memory plugin's `tools` entry. The
+    # `mcp.nwlnexus.io` marker above is not a substring of this host name, so it is listed itself.
+    "mcp-hosts.nwlnexus.io"
     "projects/personal/.env"
     "projects/personal/.op-connect"
   ];
