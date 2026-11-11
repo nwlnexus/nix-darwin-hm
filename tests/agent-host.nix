@@ -454,4 +454,26 @@ in
       true
     ];
   };
+  # Read-only kubectl through the Tailscale operator's API-server proxy (olympus-sdk#935): context compute-hub,
+  # written only while ~/.kube/config holds no client key, no tailnet name in the store.
+  testAgentsViewKubeconfig =
+    let
+      d = hm.home.activation.agentHostKubeconfig.data;
+    in
+    {
+      expr = [
+        (lib.hasInfix "grep -q 'client-key-data' \"$KCFG\"" d)
+        (lib.hasInfix "set-cluster compute-hub --server=\"https://compute-hub-operator.$SUFFIX\"" d)
+        (lib.hasInfix "set-credentials compute-hub --token=unused" d)
+        (lib.hasInfix "use-context compute-hub" d)
+        (lib.hasInfix ".ts.net" d)
+      ];
+      expected = [
+        true
+        true
+        true
+        true
+        false
+      ];
+    };
 }
