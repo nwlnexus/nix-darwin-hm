@@ -4,6 +4,7 @@
 {
   config,
   lib,
+  pkgs,
   ...
 }:
 let
@@ -15,6 +16,10 @@ in
     enable = true;
     autosuggestion.enable = true;
   };
+
+  # home/shell.nix aliases grep to rg; the Macs get ripgrep from modules/profiles/base.nix,
+  # so standalone Linux hosts install it here (a Linuxbrew copy is not on every shell's PATH).
+  home.packages = [ pkgs.ripgrep ];
 
   programs.direnv = {
     enable = true;
