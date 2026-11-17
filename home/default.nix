@@ -255,6 +255,9 @@ in
         terraform = "1.16.4";
         terraform-ls = "0.39.0";
         packer = "1.16.1";
+        # A global default for the shellcheck shim: repos that install shellcheck through mise without pinning
+        # it left the shim with no version set, so every `shellcheck` run (validators, hooks) failed.
+        shellcheck = "0.11.0";
         # Exact versions, not "latest": "latest" makes mise re-resolve against the npm registry, and
         # with auto_install that re-resolution ran from every new shell (an install storm). Bump by hand.
         "npm:repomix" = "1.18.1";
