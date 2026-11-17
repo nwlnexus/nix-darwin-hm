@@ -24,6 +24,7 @@ in
     ./memory-compile.nix
     ./memory-wiki-sync.nix
     ./agent-jobs.nix
+    ./kubeconfig.nix
   ];
 
   options.d.agentHost = {

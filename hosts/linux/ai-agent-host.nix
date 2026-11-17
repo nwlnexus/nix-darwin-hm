@@ -43,6 +43,11 @@
         goalRunner.enable = true;
       };
 
+      # Read-only kubectl through the Tailscale operator's API-server proxy (olympus-sdk#935): context
+      # compute-hub, group olympus:agents-view, no credential on the host. Written only once the admin
+      # kubeconfig is gone (home/agent-host/kubeconfig.nix).
+      d.agentHost.kubeconfig.enable = true;
+
       # Picks this host's entry of hostContainment in the autoMode source (home/cli/claude/harness.nix,
       # olympus-sdk#576 layer 2).
       d.claudeHarness.settings.autoModeHost = "ai-agent-host";
